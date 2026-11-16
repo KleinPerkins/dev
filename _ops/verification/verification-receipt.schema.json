@@ -1,0 +1,1062 @@
+{
+  "$defs": {
+    "aggregateExecution": {
+      "additionalProperties": false,
+      "properties": {
+        "command_digest": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "diagnostic_code": {
+          "$ref": "#/$defs/token"
+        },
+        "duration_ms": {
+          "$ref": "#/$defs/nullableNonnegativeInteger"
+        },
+        "execution_disposition": {
+          "$ref": "#/$defs/disposition"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/token"
+        },
+        "exit_code": {
+          "$ref": "#/$defs/nullableInt64"
+        },
+        "outcome": {
+          "$ref": "#/$defs/nullableOutcome"
+        },
+        "selection_causes": {
+          "$ref": "#/$defs/causeSet"
+        }
+      },
+      "required": [
+        "executor_id",
+        "execution_disposition",
+        "selection_causes",
+        "outcome",
+        "command_digest",
+        "exit_code",
+        "duration_ms",
+        "diagnostic_code"
+      ],
+      "type": "object"
+    },
+    "authoritativeAggregate": {
+      "additionalProperties": false,
+      "properties": {
+        "command_digest": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "diagnostic_code": {
+          "const": "full.authoritative"
+        },
+        "duration_ms": {
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "execution_disposition": {
+          "const": "run"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/token"
+        },
+        "exit_code": {
+          "$ref": "#/$defs/nullableInt64"
+        },
+        "outcome": {
+          "enum": [
+            "cleanup_failed",
+            "failed",
+            "passed",
+            "timed_out"
+          ]
+        },
+        "selection_causes": {
+          "const": [
+            "full_mode"
+          ]
+        }
+      },
+      "required": [
+        "executor_id",
+        "execution_disposition",
+        "selection_causes",
+        "outcome",
+        "command_digest",
+        "exit_code",
+        "duration_ms",
+        "diagnostic_code"
+      ],
+      "type": "object"
+    },
+    "causeSet": {
+      "items": {
+        "enum": [
+          "deep_mode",
+          "dependency",
+          "direct",
+          "fallback",
+          "full_mode",
+          "inert",
+          "not_applicable",
+          "reverse_impact",
+          "self_protection",
+          "universal"
+        ]
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "change": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "add"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "new_blob_sha256": {
+                "$ref": "#/$defs/sha256Id"
+              },
+              "new_mode": {
+                "$ref": "#/$defs/modeString"
+              },
+              "new_path": {
+                "$ref": "#/$defs/pathValue"
+              },
+              "old_blob_sha256": {
+                "type": "null"
+              },
+              "old_mode": {
+                "type": "null"
+              },
+              "old_path": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "delete"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "new_blob_sha256": {
+                "type": "null"
+              },
+              "new_mode": {
+                "type": "null"
+              },
+              "new_path": {
+                "type": "null"
+              },
+              "old_blob_sha256": {
+                "$ref": "#/$defs/sha256Id"
+              },
+              "old_mode": {
+                "$ref": "#/$defs/modeString"
+              },
+              "old_path": {
+                "$ref": "#/$defs/pathValue"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "modify",
+                  "type_change"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "new_blob_sha256": {
+                "$ref": "#/$defs/sha256Id"
+              },
+              "new_mode": {
+                "$ref": "#/$defs/modeString"
+              },
+              "new_path": {
+                "$ref": "#/$defs/pathValue"
+              },
+              "old_blob_sha256": {
+                "$ref": "#/$defs/sha256Id"
+              },
+              "old_mode": {
+                "$ref": "#/$defs/modeString"
+              },
+              "old_path": {
+                "$ref": "#/$defs/pathValue"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "new_blob_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "new_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/modeString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "new_path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pathValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "old_blob_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "old_mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/modeString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "old_path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pathValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "add",
+            "delete",
+            "modify",
+            "type_change"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "old_path",
+        "new_path",
+        "old_mode",
+        "new_mode",
+        "old_blob_sha256",
+        "new_blob_sha256"
+      ],
+      "type": "object"
+    },
+    "cleanup": {
+      "additionalProperties": false,
+      "properties": {
+        "bytecode_absent": {
+          "type": "boolean"
+        },
+        "children_reaped": {
+          "type": "boolean"
+        },
+        "diagnostic_code": {
+          "$ref": "#/$defs/token"
+        },
+        "index_removed": {
+          "type": "boolean"
+        },
+        "objects_unchanged": {
+          "type": "boolean"
+        },
+        "temp_removed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "children_reaped",
+        "temp_removed",
+        "index_removed",
+        "objects_unchanged",
+        "bytecode_absent",
+        "diagnostic_code"
+      ],
+      "type": "object"
+    },
+    "commitSha": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "disposition": {
+      "enum": [
+        "blocked",
+        "not_applicable",
+        "run",
+        "skip"
+      ]
+    },
+    "manifestMode": {
+      "enum": [
+        "deep_periodic",
+        "focused_local",
+        "focused_pr",
+        "full",
+        "full_release",
+        "pre_commit"
+      ]
+    },
+    "int64": {
+      "maximum": 9223372036854775807,
+      "minimum": -9223372036854775808,
+      "type": "integer"
+    },
+    "modeString": {
+      "pattern": "^[0-9]{6}$",
+      "type": "string"
+    },
+    "nullableCommitSha": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/commitSha"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableInt64": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/int64"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableNonnegativeInteger": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/nonnegativeInteger"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nonnegativeInteger": {
+      "maximum": 9223372036854775807,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "nullableOutcome": {
+      "enum": [
+        "cleanup_failed",
+        "failed",
+        "not_observed",
+        "passed",
+        "timed_out",
+        null
+      ]
+    },
+    "paddedBase64": {
+      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+      "type": "string"
+    },
+    "pathValue": {
+      "additionalProperties": false,
+      "properties": {
+        "path_b64": {
+          "$ref": "#/$defs/paddedBase64"
+        },
+        "path_utf8": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path_b64"
+      ],
+      "type": "object"
+    },
+    "receiptRow": {
+      "additionalProperties": false,
+      "properties": {
+        "command_digest": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "diagnostic_code": {
+          "$ref": "#/$defs/token"
+        },
+        "duration_ms": {
+          "$ref": "#/$defs/nullableNonnegativeInteger"
+        },
+        "execution_disposition": {
+          "$ref": "#/$defs/disposition"
+        },
+        "exit_code": {
+          "$ref": "#/$defs/nullableInt64"
+        },
+        "focused_disposition": {
+          "$ref": "#/$defs/disposition"
+        },
+        "obligation_id": {
+          "$ref": "#/$defs/token"
+        },
+        "outcome": {
+          "$ref": "#/$defs/nullableOutcome"
+        },
+        "selection_causes": {
+          "$ref": "#/$defs/causeSet"
+        }
+      },
+      "required": [
+        "obligation_id",
+        "focused_disposition",
+        "execution_disposition",
+        "selection_causes",
+        "outcome",
+        "command_digest",
+        "exit_code",
+        "duration_ms",
+        "diagnostic_code"
+      ],
+      "type": "object"
+    },
+    "rfc3339Utc": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "type": "string"
+    },
+    "sha256Id": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "shadowRow": {
+      "additionalProperties": false,
+      "properties": {
+        "command_digest": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "diagnostic_code": {
+          "const": "shadow.unobserved"
+        },
+        "duration_ms": {
+          "type": "null"
+        },
+        "execution_disposition": {
+          "const": "not_applicable"
+        },
+        "exit_code": {
+          "type": "null"
+        },
+        "focused_disposition": {
+          "$ref": "#/$defs/disposition"
+        },
+        "obligation_id": {
+          "$ref": "#/$defs/token"
+        },
+        "outcome": {
+          "const": "not_observed"
+        },
+        "selection_causes": {
+          "$ref": "#/$defs/causeSet"
+        }
+      },
+      "required": [
+        "obligation_id",
+        "focused_disposition",
+        "execution_disposition",
+        "selection_causes",
+        "outcome",
+        "command_digest",
+        "exit_code",
+        "duration_ms",
+        "diagnostic_code"
+      ],
+      "type": "object"
+    },
+    "sourceBinding": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source_kind": {
+                "const": "staged_index"
+              }
+            },
+            "required": [
+              "source_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "commit_sha": {
+                "type": "null"
+              },
+              "head_commit_sha": {
+                "type": "null"
+              },
+              "index_tree_sha": {
+                "$ref": "#/$defs/commitSha"
+              },
+              "merge_base_sha": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source_kind": {
+                "const": "pull_request"
+              }
+            },
+            "required": [
+              "source_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "base_commit_sha": {
+                "$ref": "#/$defs/commitSha"
+              },
+              "commit_sha": {
+                "type": "null"
+              },
+              "head_commit_sha": {
+                "$ref": "#/$defs/commitSha"
+              },
+              "index_tree_sha": {
+                "type": "null"
+              },
+              "merge_base_sha": {
+                "$ref": "#/$defs/commitSha"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source_kind": {
+                "const": "commit"
+              }
+            },
+            "required": [
+              "source_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "base_commit_sha": {
+                "type": "null"
+              },
+              "commit_sha": {
+                "$ref": "#/$defs/commitSha"
+              },
+              "head_commit_sha": {
+                "type": "null"
+              },
+              "index_tree_sha": {
+                "type": "null"
+              },
+              "merge_base_sha": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "base_commit_sha": {
+          "$ref": "#/$defs/nullableCommitSha"
+        },
+        "candidate_tree_sha256": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "commit_sha": {
+          "$ref": "#/$defs/nullableCommitSha"
+        },
+        "head_commit_sha": {
+          "$ref": "#/$defs/nullableCommitSha"
+        },
+        "index_tree_sha": {
+          "$ref": "#/$defs/nullableCommitSha"
+        },
+        "manifest_id": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "merge_base_sha": {
+          "$ref": "#/$defs/nullableCommitSha"
+        },
+        "repository_id": {
+          "const": "KleinPerkins/dev"
+        },
+        "selector_version": {
+          "const": "1"
+        },
+        "source_kind": {
+          "enum": [
+            "commit",
+            "pull_request",
+            "staged_index"
+          ]
+        }
+      },
+      "required": [
+        "repository_id",
+        "source_kind",
+        "candidate_tree_sha256",
+        "manifest_id",
+        "selector_version",
+        "base_commit_sha",
+        "head_commit_sha",
+        "merge_base_sha",
+        "index_tree_sha",
+        "commit_sha"
+      ],
+      "type": "object"
+    },
+    "timing": {
+      "additionalProperties": false,
+      "properties": {
+        "cleanup_ms": {
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "execution_ms": {
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "selection_ms": {
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "snapshot_ms": {
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total_ms": {
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "snapshot_ms",
+        "selection_ms",
+        "execution_ms",
+        "cleanup_ms",
+        "total_ms"
+      ],
+      "type": "object"
+    },
+    "token": {
+      "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "shadow"
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "then": {
+        "oneOf": [
+          {
+            "properties": {
+              "lane": {
+                "const": "pre_commit"
+              },
+              "requested_mode": {
+                "const": "pre_commit"
+              }
+            }
+          },
+          {
+            "properties": {
+              "lane": {
+                "const": "focused_local"
+              },
+              "requested_mode": {
+                "const": "focused_local"
+              }
+            }
+          },
+          {
+            "properties": {
+              "lane": {
+                "const": "runnerless_pr"
+              },
+              "requested_mode": {
+                "const": "focused_pr"
+              }
+            }
+          }
+        ],
+        "properties": {
+          "aggregate_execution": {
+            "$ref": "#/$defs/authoritativeAggregate"
+          },
+          "authoritative_receipt_id": {
+            "$ref": "#/$defs/sha256Id"
+          },
+          "effective_mode": {
+            "const": "full"
+          },
+          "requested_mode": {
+            "enum": [
+              "focused_local",
+              "focused_pr",
+              "pre_commit"
+            ]
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/$defs/shadowRow"
+            },
+            "type": "array"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "full"
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "aggregate_execution": {
+            "properties": {
+              "selection_causes": {
+                "const": [
+                  "full_mode"
+                ]
+              }
+            }
+          },
+          "authoritative_receipt_id": {
+            "type": "null"
+          },
+          "effective_mode": {
+            "const": "full"
+          },
+          "requested_mode": {
+            "const": "full"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "full_release"
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "aggregate_execution": {
+            "properties": {
+              "selection_causes": {
+                "const": [
+                  "full_mode"
+                ]
+              }
+            }
+          },
+          "authoritative_receipt_id": {
+            "type": "null"
+          },
+          "effective_mode": {
+            "const": "full_release"
+          },
+          "requested_mode": {
+            "const": "full_release"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "deep_periodic"
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "aggregate_execution": {
+            "properties": {
+              "selection_causes": {
+                "const": [
+                  "deep_mode"
+                ]
+              }
+            }
+          },
+          "authoritative_receipt_id": {
+            "type": "null"
+          },
+          "effective_mode": {
+            "const": "deep_periodic"
+          },
+          "requested_mode": {
+            "const": "deep_periodic"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "enforce"
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "then": {
+        "oneOf": [
+          {
+            "properties": {
+              "effective_mode": {
+                "const": "pre_commit"
+              },
+              "lane": {
+                "const": "pre_commit"
+              },
+              "requested_mode": {
+                "const": "pre_commit"
+              }
+            }
+          },
+          {
+            "properties": {
+              "effective_mode": {
+                "enum": [
+                  "focused_local",
+                  "full"
+                ]
+              },
+              "lane": {
+                "const": "focused_local"
+              },
+              "requested_mode": {
+                "const": "focused_local"
+              }
+            }
+          },
+          {
+            "properties": {
+              "effective_mode": {
+                "enum": [
+                  "focused_pr",
+                  "full"
+                ]
+              },
+              "lane": {
+                "const": "runnerless_pr"
+              },
+              "requested_mode": {
+                "const": "focused_pr"
+              }
+            }
+          }
+        ],
+        "properties": {
+          "authoritative_receipt_id": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "activation_generation": {
+      "maximum": 9223372036854775807,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "aggregate_execution": {
+      "$ref": "#/$defs/aggregateExecution"
+    },
+    "authoritative_receipt_id": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/sha256Id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "changes": {
+      "items": {
+        "$ref": "#/$defs/change"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "cleanup": {
+      "$ref": "#/$defs/cleanup"
+    },
+    "created_at": {
+      "$ref": "#/$defs/rfc3339Utc"
+    },
+    "effective_mode": {
+      "$ref": "#/$defs/manifestMode"
+    },
+    "lane": {
+      "enum": [
+        "focused_local",
+        "local_full",
+        "periodic",
+        "pre_commit",
+        "release",
+        "runnerless_pr"
+      ]
+    },
+    "manifest_id": {
+      "$ref": "#/$defs/sha256Id"
+    },
+    "mode": {
+      "enum": [
+        "deep_periodic",
+        "enforce",
+        "full",
+        "full_release",
+        "shadow"
+      ]
+    },
+    "receipt_id": {
+      "$ref": "#/$defs/sha256Id"
+    },
+    "repository_id": {
+      "const": "KleinPerkins/dev"
+    },
+    "requested_mode": {
+      "$ref": "#/$defs/manifestMode"
+    },
+    "rows": {
+      "items": {
+        "$ref": "#/$defs/receiptRow"
+      },
+      "type": "array"
+    },
+    "schema": {
+      "const": "dev-verification-receipt"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "selector_version": {
+      "const": "1"
+    },
+    "source": {
+      "$ref": "#/$defs/sourceBinding"
+    },
+    "timing": {
+      "$ref": "#/$defs/timing"
+    }
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "receipt_id",
+    "created_at",
+    "repository_id",
+    "selector_version",
+    "manifest_id",
+    "lane",
+    "mode",
+    "requested_mode",
+    "effective_mode",
+    "activation_generation",
+    "source",
+    "changes",
+    "rows",
+    "authoritative_receipt_id",
+    "aggregate_execution",
+    "timing",
+    "cleanup"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# Self-contained commit-time writer guard; copied into eligible repositories.
+# Commands: check, status, acquire, release, steal. This is mistake prevention,
+# not a same-user security boundary or AWA registration/protection.
+# Explicit unequal DEV_SESSION_ID tokens never share ownership through ancestry.
+# Fallback token: controlling tty, then long-lived ancestor PID; used only when
+# explicit identity is absent. Existing dead-PID / TTL recovery remains supported.
+# Read/decide/write is serialized per Git directory with a kernel-released flock;
+# complete 0600 records replace cursor-session.lock atomically. Internal errors
+# remain fail-open with a visible warning, as required by this guard's contract.
+set -uo pipefail
+CMD="${1:-status}"
+case "$CMD" in
+  check|status|acquire|release|steal) ;;
+  -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+  *) printf 'session-lock: unknown command (check|status|acquire|release|steal)\n' >&2; exit 2 ;;
+esac
+case "${DEV_SESSION_LOCK:-1}" in 0|no|off|false) [ "$CMD" = check ] && exit 0 ;; esac
+GITDIR="$(git rev-parse --git-dir 2>/dev/null)" || { printf 'session-lock: not a git repo\n' >&2; exit 0; }
+case "$GITDIR" in /*) : ;; *) GITDIR="$PWD/$GITDIR" ;; esac
+_ppid_of() { ps -o ppid= -p "$1" 2>/dev/null | tr -d ' '; }
+_cur_tty="$(ps -o tty= -p "$$" 2>/dev/null | tr -d ' ')"
+_cur_root="$$"
+_ancestors="$$"
+_p="$$"
+while :; do
+  _up="$(_ppid_of "$_p")"
+  case "$_up" in ''|*[!0-9]*) break ;; esac
+  [ "$_up" -le 1 ] && break
+  _ancestors="$_ancestors,$_up"; _cur_root="$_up"; _p="$_up"
+done
+if [ -n "${DEV_SESSION_ID:-}" ]; then
+  ME="env:$DEV_SESSION_ID"
+else
+  case "$_cur_tty" in ''|'??'|'?'|'-') ME="pid:$_cur_root" ;; *) ME="tty:$_cur_tty" ;; esac
+fi
+command -v python3 >/dev/null 2>&1 || { printf 'session-lock: Python unavailable; ownership unverified (fail-open).\n' >&2; exit 0; }
+python3 - "$CMD" "$GITDIR" "$ME" "$_cur_root" "$_cur_tty" "$_ancestors" <<'PY'
+import fcntl
+import os
+from pathlib import Path
+import signal
+import socket
+import sys
+import tempfile
+import time
+
+cmd, directory, me, root_pid, tty, ancestors = sys.argv[1:]
+lock = Path(directory) / 'cursor-session.lock'
+ancestors = set(ancestors.split(','))
+now = int(time.time())
+
+
+def read():
+    try:
+        # Existing copied guards and cleanup tools retain the same record format.
+        return dict(line.split('=', 1) for line in lock.read_text().splitlines() if '=' in line)
+    except FileNotFoundError:
+        return None
+
+
+def mine(row):
+    token = row.get('token', '')
+    if token and token == me:
+        return True
+    if token.startswith('env:') and me.startswith('env:'):
+        return False
+    return row.get('pid') in ancestors
+
+
+def stale(row):
+    try:
+        pid = int(row.get('pid', '0'))
+        if pid <= 0:
+            return True
+        os.kill(pid, 0)
+    except (ValueError, ProcessLookupError):
+        return True
+    except PermissionError:
+        pass  # Lack of permission is not proof of death.
+    timestamp = row.get('ts')
+    ttl = int(os.environ.get('DEV_SESSION_LOCK_TTL_SECS', '28800'))
+    return bool(timestamp and now - int(timestamp) >= ttl)
+
+
+def write():
+    fields = dict(token=me, pid=root_pid, tty=tty or '?', ts=str(now),
+                  host=socket.gethostname(), tool=os.environ.get('DEV_SESSION_TOOL', ''))
+    if any('\n' in value or '\r' in value for value in fields.values()):
+        raise ValueError('invalid record value')
+    fd, temporary = tempfile.mkstemp(prefix='.session-lock-', dir=directory)
+    try:
+        with os.fdopen(fd, 'w') as output:
+            for key, value in fields.items():
+                output.write(f'{key}={value}\n')
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, lock)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def run():
+    row = read()
+    if cmd == 'status':
+        if row is None:
+            print('session-lock: no active lock (tree is free).')
+        else:
+            state = 'STALE' if stale(row) else 'held'
+            if mine(row):
+                state += ' · MINE'
+            print(f"session-lock: token={row.get('token', '?')} pid={row.get('pid', '?')} -> {state}")
+        return 0
+    if cmd == 'release':
+        if row is None:
+            print('session-lock: nothing to release.')
+            return 0
+        if mine(row):
+            lock.unlink()
+            print('session-lock: released your lock.')
+            return 0
+    elif cmd == 'steal' or row is None or mine(row) or stale(row):
+        write()
+        if cmd != 'check':
+            print(f'session-lock: acquired/refreshed for {me}.')
+        return 0
+    print('session-lock: BLOCKED — another live session owns this working tree. '
+          'Use a separate worktree; inspect status before an explicitly authorized recovery.', file=sys.stderr)
+    return 73  # Distinct from interpreter/startup failure.
+
+
+def interrupted(signum, frame):
+    raise SystemExit(128 + signum)
+
+
+signal.signal(signal.SIGTERM, interrupted)
+signal.signal(signal.SIGINT, interrupted)
+try:
+    if cmd == 'status':
+        result = run()  # Read-only: atomic replacement prevents a partial record.
+    else:
+        # Persistent mutex inode is intentional: unlinking it can split lock holders.
+        fd = os.open(str(lock) + '.guard', os.O_RDWR | os.O_CREAT, 0o600)
+        with os.fdopen(fd, 'r+') as guard:
+            deadline = time.monotonic() + 1.0
+            while True:
+                try:
+                    fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('mutex unavailable')
+                    time.sleep(0.01)
+            result = run()
+    sys.exit(result)
+except Exception:
+    # No raw exception/config/environment leakage. Historical fail-open behavior.
+    print('session-lock: internal error; ownership unverified (fail-open).', file=sys.stderr)
+    sys.exit(0)
+PY
+runtime_status=$?
+case "$runtime_status" in
+  0) exit 0 ;;
+  73) exit 1 ;; # Only the intentional ownership-conflict result blocks.
+  *) printf 'session-lock: runtime failure; ownership unverified (fail-open).\n' >&2; exit 0 ;;
+esac

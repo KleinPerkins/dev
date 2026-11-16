@@ -1,0 +1,267 @@
+{
+  "accepted_plan_sha256": "be6fd4f89d0c132f1a277c84065a7f316cc7c2706dc5b6ad2b9db333ea4eb39a",
+  "excluded_paused_work": [
+    "awa",
+    "doc-warden-v2-unfinished",
+    "intent-router",
+    "pr-automation-controller",
+    "scheduler"
+  ],
+  "github_repository_id": 1459458379,
+  "historical_provenance": [
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0001-doc-warden-owning-subsystem.md",
+      "sha256": "47db4505ef12233b711f088f37f1af5f54e168c2022dc52e26dc8142e24d89c4"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0002-doc-warden-reconciliation-doctrine.md",
+      "sha256": "c556201f6e308282c1b51eb0e744291c61ed5c451e15c3e5e6f607a7e65efff7"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0003-doc-warden-local-only-no-cpp.md",
+      "sha256": "ad38c07a8f963eec3fa59d6ebd7a8dc5fab3941e88901affeb3c45eb89fdac48"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0004-optimize-context-projections-without-moving-authority.md",
+      "sha256": "77ddcd3b5e480b77cf283afd8e5593b08022483920ff55451bf5d79fcfc51060"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0005-harden-context-measurement-before-e09.md",
+      "sha256": "65892b7bca6b3a80eed17e1da6ba7f79d5c96fb7e9d4108a749c3703f65b1abb"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0008-chaos-scheduler-doc-warden-docs-governance.md",
+      "sha256": "3c3f7b476495c06f54f00c4ca57a13e14e15a2e1ddd22c717b43f6f2ee34db6a"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0009-doc-warden-v2-gsd-aligned-governance.md",
+      "sha256": "35eeeaeb4861bd3a9e32a781a9aea23a112a3b3d25d8913ed572d6c1db3d3acd"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0010-agentic-execution-safety-layer-deferred.md",
+      "sha256": "7a599ae8b58b263b9cd3961c443d96f76e8653a60189e608c34e25f389d9737b"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0011-manifest-driven-verification-selector.md",
+      "sha256": "76d6039acb5eb604de010a090f2e5128e19874296bf838423237ddf835c08883"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0012-source-owned-cursor-codex-interoperability.md",
+      "sha256": "61fb64d013d247e1135de53f8712ca76390e3c7f9671217a48097a7ecf356b86"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0013-coordinated-maintenance-for-source-owned-mcp-migration.md",
+      "sha256": "a82bfb2c751c606be419ac1bba81d963cfad61b64db9668c57f3fcca9159ebb1"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0014-shadowsync-native-github-delivery-exception.md",
+      "sha256": "2ff1db11d67ec9b084b523d5ba9c17aef681ff11382e0f57db3d16778b95a858"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0015-dev-owned-shadowsync-host-policy-projection-and-atomic-binding.md",
+      "sha256": "9f9bd34440381b7b71ffd03a75f7970cd3af01fff1e0ac9a8730180f6b92fb3e"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0016-canonical-typed-plan-authority-and-acceptance.md",
+      "sha256": "55775136ab3286f62b35e3b6c771c80bd7f0d1711cf9fd2a084c934aa842bbcc"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0017-machine-monitor-native-delivery-and-mandatory-new-repository-test-sharding.md",
+      "sha256": "494edd63de1f9b147a58e3396a0d47a047e2aa8895d54328b1ca4238d5b7632a"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/adr/0018-independent-repository-visibility-and-distribution.md",
+      "sha256": "bfb830912437cdd81a802c39529654eadb39aab2e8c3c69a7e56b3e2459540a4"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/agent-worktree-automation-end-state-v3.md",
+      "sha256": "bceada3112ff33e3c0290e05b1d1421c3b882d59ea2f731b24298148b1f3ee60"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/agentic-execution-safety-layer-deferred-v1.md",
+      "sha256": "86f345157e40fada2c73faf6416f457bce8cb4549c704a573d9e0ce6a36e6f12"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/agentic-plan-template-upgrade-v1.md",
+      "sha256": "763087d1ef84ed80593aa6b528b94f279ad64424ffd3b50821b0406471b4ccc1"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/archive/agent-worktree-automation-end-state-v1.md",
+      "sha256": "7c647c2aba52dc53ef05e4d7ab84e528544aa0e87be653df9f4f243656d72692"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/archive/agent-worktree-automation-end-state-v2.md",
+      "sha256": "cb75213d6d961f815379d4f05b7c543955338224ed9dfd917a3a39ace0ef135b"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/capability-local-opt-out-v1.md",
+      "sha256": "f954e36f27544a9ecb0404d44c5097e129017ac72f6de6554006577833c0a1ae"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/capability-local-opt-out-v2.md",
+      "sha256": "f6104b543d193927b88867d98f67a4bfd3be25c33abf48b1a23d5eadcfd03a32"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/context-efficiency-d01-capability-discovery-inventory-v1.md",
+      "sha256": "c78eb3ad43b1e0caabffe75f2b913eb5bfec3684f7a5bf66a40ed2c9dd0890e4"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/context-efficiency-e06-dev-host-overlay-v1.md",
+      "sha256": "29ad664e66b3e3b5c977f09066c5cd832e4a22ed2ad19fa66327ccd5136c50a1"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/context-efficiency-e06-dev-host-overlay-v2.md",
+      "sha256": "332bc98a05632d8d89d0f6e0e25125bbc97c1cfc923f33b9a9ed6e0d8d5c19fe"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/context-efficiency-e06-dev-host-overlay-v3.md",
+      "sha256": "3c310374b843a0ffcb3b52efd19ae351a14ea3d6496ee8c8e40c5f34757e3367"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/context-efficiency-program-v1.md",
+      "sha256": "327a87b930a9d26a62388005db39c2b097660e0ebfd95aa01d80b17819c17cc4"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/context-efficiency-program-v2.md",
+      "sha256": "447dbc08695a68b18d1c11fa82d1363b69a1f96cd9b25cda349cfaeb586cf2d6"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/context-efficiency-release2-closure-v1.md",
+      "sha256": "a4ef4f274daa1f61c8d642e6ad4305f2da6e73fce97ba1676786d2d7fcba979c"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/context-efficiency-s01-dev-static-reduction-v1.md",
+      "sha256": "426c0bb05f76f936cd7e1ce6a790676243077dd8019d47b3bd081225332a042d"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/doc-warden-execution-plan-v1.md",
+      "sha256": "fce433dcbcddd07423d485f67006a54976c02a3b09712b2826b4895f8d59b118"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/doc-warden-execution-plan-v2.md",
+      "sha256": "ce2320ef5d53023bc4b401f0090c247c86d9cbc1d6ced82e819396e265dd8eef"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/kp-context-measurement-v1-tooling-v1.md",
+      "sha256": "892f0c02eb5fd3c0daa0cc6aed8bc9c863dec1af82266f1ac24a71d874264392"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/local-ci-migration-v2.md",
+      "sha256": "56a0af0ed71fe311204c01307f4d1ec1600506de31d7cbaf21e660c830d38037"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/manifest-driven-verification-execution-v1.md",
+      "sha256": "8454a1bbfe2c59cb9b5f59dda836514c315cf92154034f25f70f46082a602850"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/manifest-driven-verification-target-design-v1.md",
+      "sha256": "cc3e3470fe759729716969da3690d95179b643c611f43051a5f9e7e85debf2ed"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/operator-voice-toolkit-build-plan-v4.md",
+      "sha256": "410d88ad7a21295e5e65cfdcac5e992545e07998170c467c976016a4fd73f8c0"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/operator-voice-toolkit-build-plan-v5.md",
+      "sha256": "43690c4b31a6971435733a4bf78fee1e1f0ff0a934038dea54697662fea062dc"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/plans/operator-voice-toolkit-forensic-audit-v1.md",
+      "sha256": "0f158a004dab8e97c3f5fb7ad98df591a248009fe76726c4ea877e3578d180ca"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/verification/verification-rollout-ledger.json",
+      "sha256": "5a72bfb320fe6eb71f0d0b9b5088e7745abce4f65c20190c0a64af768798240f"
+    }
+  ],
+  "name_phases": {
+    "final": "KleinPerkins/dev",
+    "preparation": "KleinPerkins/dev-temp"
+  },
+  "predecessor_private_evidence": {
+    "reference": "private-predecessor-current-source-assessment-v1",
+    "sha256": "b08786ecab5baee0b177a424957f9c8f5cc3360eca9dcaa2b785246914b6b364"
+  },
+  "repository_key": "47f7e608-ce5f-50ae-be86-10d7e95265f9",
+  "retained_policy": [
+    {
+      "git_mode": "100644",
+      "path": ".doc-warden.yml",
+      "sha256": "0b33686bd0683f0003bee44b72c55f8e500c774dc97bb7e0e33de380949f9854"
+    },
+    {
+      "git_mode": "100644",
+      "path": ".planning/doc-warden.json",
+      "sha256": "10e8a93f0ec8b2607b7a1f411ea6d9addc2a61d4d57ce8d2327d7cf79817c20c"
+    },
+    {
+      "git_mode": "100644",
+      "path": "OPERATING-MANUAL.md",
+      "sha256": "ad9182a4c514e3c6366b8a0eb356195fb2cef3acac4bf7a5fb6798830c66511f"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/POLICY.md",
+      "sha256": "7439b66bde5e9a2142a38148fc5cab8d52b627b4b19563ff744cb3d4fb2d1371"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/doc-warden/POLICY.md",
+      "sha256": "8167358de878bbce675e0cc679f05056c544c2d4be2bdf86208d0f9bc8527082"
+    },
+    {
+      "git_mode": "100644",
+      "path": "_ops/rules/agent-context.md",
+      "sha256": "1ffb2cb643478e958560c2673fe405dcac65702871296d12f53532c00c5d45be"
+    }
+  ],
+  "runtime_authority": false,
+  "schema": "dev-successor-adoption/v1",
+  "semantic_adoption_scope": [
+    "current-source-operating-baseline",
+    "source-only-document-artifact-transactions"
+  ],
+  "source_admission": "pending-independent-bootstrap-review-and-exact-administrative-release",
+  "source_identity_semantics": "fresh-history-new-immutable-id-no-predecessor-approval-replay"
+}

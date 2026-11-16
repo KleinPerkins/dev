@@ -1,0 +1,44 @@
+{
+  "schema": "interoperability/theme-factory-source-notes/v1",
+  "scope": "Entirely fictional Seed Library fixture; these choices are synthetic test inputs, not consent for a real user artifact or native publication.",
+  "selected": {
+    "theme": "Botanical Garden",
+    "showcase_presented_to_fictional_owner": true,
+    "explicit_fixture_choice": "Botanical Garden",
+    "title": "Seed Library",
+    "body": "Save a seed, share a season.",
+    "items": [
+      "Tomato",
+      "Basil",
+      "Marigold"
+    ],
+    "required_css_roles": {
+      "background": "#f5f3ed",
+      "text": "#b7472a",
+      "heading": "#4a7c59",
+      "accent": "#f9a620"
+    },
+    "header_font": "DejaVu Serif Bold",
+    "body_font": "DejaVu Sans"
+  },
+  "unselected": {
+    "request": "Style another seed handout; no theme has been selected.",
+    "required_behavior": "Offer the unchanged canonical theme-showcase.pdf, ask which of the ten themes to use, and wait. Produce only the request Markdown; do not create or apply a second artifact."
+  },
+  "custom": {
+    "request": "Propose a custom Seed Workshop theme in blue and cream.",
+    "review_received": false,
+    "required_behavior": "Create a named color/font proposal for review; mark applied:false and review_required:true. Keep the selected Botanical Garden artifact unchanged."
+  },
+  "outputs": [
+    "botanical.html",
+    "awaiting-selection.md",
+    "custom-theme.json",
+    "worker-notes.md"
+  ],
+  "font_assets": {
+    "DejaVuSerif-Bold.ttf": "c47b5527bcdc8dcf9ea8c77054454c5a884beaca2f44851a2a823ee639cbf07f",
+    "DejaVuSans.ttf": "7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954",
+    "LICENSE": "7b3fed10089170d8e68811e59458d421e11d287c988a2bb58aac9cedf488dbbc"
+  }
+}

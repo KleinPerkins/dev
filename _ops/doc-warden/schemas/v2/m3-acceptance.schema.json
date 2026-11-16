@@ -1,0 +1,1025 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema",
+    "milestone",
+    "task",
+    "title",
+    "status",
+    "recorded_at",
+    "repository",
+    "source_revision",
+    "source_tree",
+    "authority_sha256",
+    "digest_basis",
+    "evidence_limitations",
+    "source_sha256",
+    "criteria_disposition",
+    "criteria_evidence",
+    "deliveries",
+    "live_acceptance",
+    "machine_uat",
+    "operator_uat"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "doc-warden/m3-acceptance/v1"
+    },
+    "milestone": {
+      "const": "M3"
+    },
+    "task": {
+      "const": "M3-T02"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "const": "accepted"
+    },
+    "recorded_at": {
+      "const": "2026-09-06T02:16:15Z"
+    },
+    "repository": {
+      "const": "KleinPerkins/dev"
+    },
+    "source_revision": {
+      "const": "014df1971f7260898485b02e1712714113f429b2"
+    },
+    "source_tree": {
+      "const": "00b55f5412147e0a14e2b02693d821d676935677"
+    },
+    "authority_sha256": {
+      "type": "object",
+      "required": [
+        "_ops/adr/0009-doc-warden-v2-gsd-aligned-governance.md",
+        "_ops/plans/doc-warden-execution-plan-v2.md"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "_ops/adr/0009-doc-warden-v2-gsd-aligned-governance.md": {
+          "const": "35eeeaeb4861bd3a9e32a781a9aea23a112a3b3d25d8913ed572d6c1db3d3acd"
+        },
+        "_ops/plans/doc-warden-execution-plan-v2.md": {
+          "const": "ce2320ef5d53023bc4b401f0090c247c86d9cbc1d6ced82e819396e265dd8eef"
+        }
+      }
+    },
+    "digest_basis": {
+      "type": "object",
+      "required": [
+        "event_records",
+        "files",
+        "normalized_canvas"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "event_records": {
+          "const": "sha256_exact_jsonl_record"
+        },
+        "files": {
+          "const": "sha256_file_bytes"
+        },
+        "normalized_canvas": {
+          "const": "sha256_utf8_first_generated_at_value_replaced_with_placeholder"
+        }
+      }
+    },
+    "source_sha256": {
+      "type": "object",
+      "required": [
+        "_ops/bin/install-doc-warden-hooks.sh",
+        "_ops/bin/install-skills.sh",
+        "_ops/cursor-hooks/doc-warden-observe.sh",
+        "_ops/cursor-hooks/doc-warden-session.sh",
+        "_ops/dashboards/doc-warden-roadmap.canvas.tsx",
+        "_ops/doc-warden/POLICY.md",
+        "_ops/doc-warden/schemas/v2/intent.schema.json",
+        "_ops/doc-warden/schemas/v2/trigger.schema.json",
+        "_ops/doc-warden/triggers.v2.json",
+        "_ops/doc-warden/v2/doc_warden/cli.py",
+        "_ops/doc-warden/v2/doc_warden/dashboard.py",
+        "_ops/doc-warden/v2/doc_warden/intents.py",
+        "_ops/doc-warden/v2/doc_warden/triggers.py",
+        "_ops/doc-warden/v2/tests/test_activation.py",
+        "_ops/doc-warden/v2/tests/test_dashboard.py",
+        "_ops/doc-warden/v2/tests/test_hook_contract.py",
+        "_ops/doc-warden/v2/tests/test_intents.py",
+        "_ops/doc-warden/v2/tests/test_triggers.py",
+        "_ops/skills/doc-warden/SKILL.md"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "_ops/bin/install-doc-warden-hooks.sh": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/bin/install-skills.sh": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/cursor-hooks/doc-warden-observe.sh": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/cursor-hooks/doc-warden-session.sh": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/dashboards/doc-warden-roadmap.canvas.tsx": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/doc-warden/POLICY.md": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/doc-warden/schemas/v2/intent.schema.json": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/doc-warden/schemas/v2/trigger.schema.json": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/doc-warden/triggers.v2.json": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/doc-warden/v2/doc_warden/cli.py": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/doc-warden/v2/doc_warden/dashboard.py": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/doc-warden/v2/doc_warden/intents.py": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/doc-warden/v2/doc_warden/triggers.py": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/doc-warden/v2/tests/test_activation.py": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/doc-warden/v2/tests/test_dashboard.py": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/doc-warden/v2/tests/test_hook_contract.py": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/doc-warden/v2/tests/test_intents.py": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/doc-warden/v2/tests/test_triggers.py": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "_ops/skills/doc-warden/SKILL.md": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "criteria_disposition": {
+      "type": "object",
+      "required": [
+        "accepted_for_m3_scope",
+        "prior_acceptance_extended",
+        "blockers",
+        "later_milestones_started"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "accepted_for_m3_scope": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "AC-040",
+              "AC-055"
+            ]
+          }
+        },
+        "prior_acceptance_extended": {
+          "type": "object",
+          "required": [
+            "criterion",
+            "prior_milestone",
+            "prior_receipt",
+            "prior_receipt_sha256",
+            "extended_for_m3_scope",
+            "counted_again"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "criterion": {
+              "const": "AC-046"
+            },
+            "prior_milestone": {
+              "const": "M1"
+            },
+            "prior_receipt": {
+              "const": "_ops/doc-warden/state/v2/acceptance/m1-canary.json"
+            },
+            "prior_receipt_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "extended_for_m3_scope": {
+              "const": true
+            },
+            "counted_again": {
+              "const": false
+            }
+          }
+        },
+        "blockers": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "later_milestones_started": {
+          "const": false
+        }
+      }
+    },
+    "criteria_evidence": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": [
+          "criterion",
+          "proof",
+          "test_selectors"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "criterion": {
+            "type": "string",
+            "enum": [
+              "AC-040",
+              "AC-055"
+            ]
+          },
+          "proof": {
+            "type": "string",
+            "minLength": 1
+          },
+          "test_selectors": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "deliveries": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": [
+          "scope",
+          "base_revision",
+          "candidate_revision",
+          "candidate_tree",
+          "merged_revision",
+          "merged_tree",
+          "pull_request",
+          "checks"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "operator_ux_source",
+              "fleet_canvas_type_fix",
+              "fleet_canvas_truthfulness_fix",
+              "governance_target_label_fix",
+              "governance_legend_fix"
+            ]
+          },
+          "base_revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "candidate_revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "candidate_tree": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "merged_revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "merged_tree": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$"
+          },
+          "pull_request": {
+            "type": "object",
+            "required": [
+              "number",
+              "url",
+              "state",
+              "opened_as_draft",
+              "feature_branch_deleted",
+              "auto_merge_request",
+              "auto_merge_arm_action_taken",
+              "merge_method",
+              "merged_at",
+              "merged_by"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "number": {
+                "type": "integer"
+              },
+              "state": {
+                "const": "MERGED"
+              },
+              "opened_as_draft": {
+                "const": true
+              },
+              "feature_branch_deleted": {
+                "const": true
+              },
+              "auto_merge_request": {
+                "const": false
+              },
+              "auto_merge_arm_action_taken": {
+                "const": false
+              },
+              "merge_method": {
+                "const": "squash"
+              },
+              "merged_at": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+              },
+              "merged_by": {
+                "type": "string",
+                "minLength": 1
+              },
+              "url": {
+                "type": "string",
+                "pattern": "^https://github.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+$"
+              }
+            }
+          },
+          "checks": {
+            "type": "array",
+            "minItems": 5,
+            "maxItems": 5,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "run_id",
+                "status",
+                "conclusion",
+                "completed_at"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "enum": [
+                    "pr-automation / contract",
+                    "pr-automation / job:repo.dev.m3-verify",
+                    "pr-automation / source",
+                    "pr-automation / tests",
+                    "pr-automation / verify"
+                  ]
+                },
+                "run_id": {
+                  "type": "integer"
+                },
+                "status": {
+                  "const": "completed"
+                },
+                "conclusion": {
+                  "const": "success"
+                },
+                "completed_at": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "live_acceptance": {
+      "type": "object",
+      "required": [
+        "source_revision",
+        "source_tree",
+        "historical_evidence_events",
+        "hooks",
+        "skills",
+        "maintenance_job",
+        "rollback",
+        "canvas"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source_revision": {
+          "const": "014df1971f7260898485b02e1712714113f429b2"
+        },
+        "source_tree": {
+          "const": "00b55f5412147e0a14e2b02693d821d676935677"
+        },
+        "hooks": {
+          "type": "object",
+          "required": [
+            "observed_at",
+            "runtime_source_revision",
+            "runtime_source_bytes_match_final",
+            "owned_entries",
+            "events",
+            "all_explicit_fail_closed_false",
+            "canonical_source",
+            "live_config_sha256",
+            "preimage_sha256",
+            "preimage_manifest_sha256",
+            "preimage_manifest_matches",
+            "unrelated_entries_preserved",
+            "smoke_status"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "owned_entries": {
+              "const": 3
+            },
+            "events": {
+              "const": [
+                "afterFileEdit",
+                "sessionStart",
+                "stop"
+              ]
+            },
+            "all_explicit_fail_closed_false": {
+              "const": true
+            },
+            "canonical_source": {
+              "const": true
+            },
+            "live_config_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "preimage_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "preimage_manifest_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "preimage_manifest_matches": {
+              "const": true
+            },
+            "unrelated_entries_preserved": {
+              "const": 18
+            },
+            "smoke_status": {
+              "const": "passed"
+            },
+            "observed_at": {
+              "const": "2026-09-06T02:16:15Z"
+            },
+            "runtime_source_revision": {
+              "const": "968d9aa988b207444c136e2a046cb5775569106b"
+            },
+            "runtime_source_bytes_match_final": {
+              "const": true
+            }
+          }
+        },
+        "skills": {
+          "type": "object",
+          "required": [
+            "observed_at",
+            "runtime_source_revision",
+            "runtime_source_bytes_match_final",
+            "clients",
+            "binding",
+            "valid_links"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "clients": {
+              "const": [
+                "claude",
+                "codex",
+                "cursor"
+              ]
+            },
+            "binding": {
+              "const": "canonical_symlink"
+            },
+            "valid_links": {
+              "const": 3
+            },
+            "observed_at": {
+              "const": "2026-09-06T02:16:15Z"
+            },
+            "runtime_source_revision": {
+              "const": "968d9aa988b207444c136e2a046cb5775569106b"
+            },
+            "runtime_source_bytes_match_final": {
+              "const": true
+            }
+          }
+        },
+        "maintenance_job": {
+          "type": "object",
+          "required": [
+            "observed_at",
+            "job_id",
+            "enabled",
+            "launchd_loaded",
+            "interval_seconds",
+            "command_route",
+            "read_only",
+            "serialized",
+            "serialization",
+            "repository_writes",
+            "last_success_at",
+            "doctor_status",
+            "unrelated_warnings_present"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "job_id": {
+              "const": "doc-warden-maintenance"
+            },
+            "enabled": {
+              "const": true
+            },
+            "launchd_loaded": {
+              "const": true
+            },
+            "interval_seconds": {
+              "const": 21600
+            },
+            "command_route": {
+              "const": "doctor fleet --refresh-projections"
+            },
+            "read_only": {
+              "const": true
+            },
+            "serialized": {
+              "const": true
+            },
+            "serialization": {
+              "const": "per_job_dispatcher_lock"
+            },
+            "repository_writes": {
+              "type": "array",
+              "maxItems": 0
+            },
+            "last_success_at": {
+              "const": "2026-09-05T23:12:15+00:00"
+            },
+            "doctor_status": {
+              "const": "passed"
+            },
+            "observed_at": {
+              "const": "2026-09-06T02:12:16Z"
+            },
+            "unrelated_warnings_present": {
+              "const": true
+            }
+          }
+        },
+        "rollback": {
+          "type": "object",
+          "required": [
+            "uninstall_restore_proven",
+            "hook_preimage_restored_exact",
+            "job_delete_readd_proven",
+            "rollback_artifact_intact",
+            "destructive_replay_performed_for_receipt"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "uninstall_restore_proven": {
+              "const": true
+            },
+            "hook_preimage_restored_exact": {
+              "const": true
+            },
+            "job_delete_readd_proven": {
+              "const": true
+            },
+            "rollback_artifact_intact": {
+              "const": true
+            },
+            "destructive_replay_performed_for_receipt": {
+              "const": false
+            }
+          }
+        },
+        "canvas": {
+          "type": "object",
+          "required": [
+            "copies",
+            "active_normalized_content_sha256",
+            "normalization",
+            "normalized_content_equal",
+            "generated_timestamp_only_difference",
+            "source_revision",
+            "source_tree",
+            "source_tree_binding",
+            "source_observed_at",
+            "generated_at",
+            "mode",
+            "read_only",
+            "repository_writes",
+            "rows",
+            "targets",
+            "exclusions",
+            "classification_counts",
+            "legend_terms",
+            "classification_mapping_excludes_observe_only",
+            "session_label_disambiguates_observe_only",
+            "typescript_exit",
+            "ts2322_errors",
+            "truthful_copy",
+            "fleet_refresh_route",
+            "repository_view_route",
+            "manage_mutates_authority"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "copies": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "uniqueItems": true,
+              "items": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "sha256"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "active_workspace",
+                      "canonical"
+                    ]
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  }
+                }
+              }
+            },
+            "active_normalized_content_sha256": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "normalization": {
+              "const": "first_generated_at_value_replaced_with_placeholder"
+            },
+            "normalized_content_equal": {
+              "const": false
+            },
+            "generated_timestamp_only_difference": {
+              "const": false
+            },
+            "source_revision": {
+              "const": "014df1971f7260898485b02e1712714113f429b2"
+            },
+            "source_tree": {
+              "const": "00b55f5412147e0a14e2b02693d821d676935677"
+            },
+            "source_tree_binding": {
+              "const": "receipt_git_tree"
+            },
+            "source_observed_at": {
+              "const": "2026-09-05T14:38:26-07:00"
+            },
+            "generated_at": {
+              "const": "2026-09-05T21:41:39.440542Z"
+            },
+            "mode": {
+              "const": "fleet"
+            },
+            "read_only": {
+              "const": true
+            },
+            "repository_writes": {
+              "type": "array",
+              "maxItems": 0
+            },
+            "rows": {
+              "const": 23
+            },
+            "targets": {
+              "const": 18
+            },
+            "exclusions": {
+              "const": 5
+            },
+            "classification_counts": {
+              "type": "object",
+              "required": [
+                "documentation_only",
+                "explicit_exclusion",
+                "governance_target"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "documentation_only": {
+                  "const": 1
+                },
+                "explicit_exclusion": {
+                  "const": 4
+                },
+                "governance_target": {
+                  "const": 18
+                }
+              }
+            },
+            "legend_terms": {
+              "const": [
+                "Governance target",
+                "Documentation only",
+                "Explicit exclusion"
+              ]
+            },
+            "classification_mapping_excludes_observe_only": {
+              "const": true
+            },
+            "session_label_disambiguates_observe_only": {
+              "const": true
+            },
+            "typescript_exit": {
+              "const": 0
+            },
+            "ts2322_errors": {
+              "const": 0
+            },
+            "truthful_copy": {
+              "const": true
+            },
+            "fleet_refresh_route": {
+              "const": "view fleet"
+            },
+            "repository_view_route": {
+              "const": "view repo"
+            },
+            "manage_mutates_authority": {
+              "const": false
+            }
+          }
+        },
+        "historical_evidence_events": {
+          "type": "object",
+          "required": [
+            "initial_install_and_rollback",
+            "nullable_canvas_revalidation",
+            "truthful_canvas_acceptance_before_label_corrections"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "initial_install_and_rollback": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "nullable_canvas_revalidation": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "truthful_canvas_acceptance_before_label_corrections": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          }
+        }
+      }
+    },
+    "machine_uat": {
+      "type": "object",
+      "required": [
+        "completed_at",
+        "source_revision",
+        "source_tree",
+        "matrix_schema",
+        "matrix_sha256",
+        "routes",
+        "trigger_parity",
+        "relevant_tests",
+        "test_breakdown",
+        "proposal_only",
+        "authorized",
+        "repository_writes",
+        "evidence_basis",
+        "orchestration_event_recorded"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "completed_at": {
+          "const": "2026-09-06T01:20:42Z"
+        },
+        "source_revision": {
+          "const": "014df1971f7260898485b02e1712714113f429b2"
+        },
+        "source_tree": {
+          "const": "00b55f5412147e0a14e2b02693d821d676935677"
+        },
+        "matrix_schema": {
+          "const": "doc-warden/uat-matrix/v1"
+        },
+        "matrix_sha256": {
+          "const": "sha256:3caa8787faad865f55536dcd45e9be084f2a50981b052a0c3b99f56b2a2a0e6c"
+        },
+        "routes": {
+          "type": "object",
+          "required": [
+            "passed",
+            "total"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "passed": {
+              "const": 13
+            },
+            "total": {
+              "const": 13
+            }
+          }
+        },
+        "trigger_parity": {
+          "type": "object",
+          "required": [
+            "passed",
+            "total"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "passed": {
+              "const": 11
+            },
+            "total": {
+              "const": 11
+            }
+          }
+        },
+        "relevant_tests": {
+          "type": "object",
+          "required": [
+            "passed",
+            "total"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "passed": {
+              "const": 94
+            },
+            "total": {
+              "const": 94
+            }
+          }
+        },
+        "test_breakdown": {
+          "type": "object",
+          "required": [
+            "dashboard",
+            "hooks",
+            "intents",
+            "triggers"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "dashboard": {
+              "const": 26
+            },
+            "hooks": {
+              "const": 45
+            },
+            "intents": {
+              "const": 13
+            },
+            "triggers": {
+              "const": 10
+            }
+          }
+        },
+        "proposal_only": {
+          "const": true
+        },
+        "authorized": {
+          "const": false
+        },
+        "repository_writes": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "evidence_basis": {
+          "const": "rerun_on_exact_source_before_receipt_mutation"
+        },
+        "orchestration_event_recorded": {
+          "const": false
+        }
+      }
+    },
+    "operator_uat": {
+      "type": "object",
+      "required": [
+        "completed_at",
+        "timestamp_precision",
+        "source_revision",
+        "source_tree",
+        "scope",
+        "artifact_sha256",
+        "verdict",
+        "canvas_content_truthful",
+        "canvas_renders_cleanly",
+        "canvas_buttons_route_safely",
+        "orchestration_event_recorded"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "completed_at": {
+          "const": "2026-09-06T02:04:00Z"
+        },
+        "timestamp_precision": {
+          "const": "minute"
+        },
+        "source_revision": {
+          "const": "014df1971f7260898485b02e1712714113f429b2"
+        },
+        "source_tree": {
+          "const": "00b55f5412147e0a14e2b02693d821d676935677"
+        },
+        "scope": {
+          "const": "regenerated_read_only_fleet_canvas"
+        },
+        "artifact_sha256": {
+          "const": "sha256:d56f86ad07373f4a26d41e449bc08f1629d6a2f21a4da59f73ca740d32265a79"
+        },
+        "verdict": {
+          "const": "accepted"
+        },
+        "canvas_content_truthful": {
+          "const": true
+        },
+        "canvas_renders_cleanly": {
+          "const": true
+        },
+        "canvas_buttons_route_safely": {
+          "const": true
+        },
+        "orchestration_event_recorded": {
+          "const": false
+        }
+      }
+    },
+    "evidence_limitations": {
+      "const": [
+        "Operator approval is minute-precision and applies only to the reviewed regenerated fleet Canvas.",
+        "The machine-local orchestration ledger was intentionally not mutated by this receipt task.",
+        "Installed hooks and skill links resolve to the canonical primary checkout at revision 968d9aa988b207444c136e2a046cb5775569106b; the relevant source bytes match the final revision.",
+        "The generated Canvas embeds source_revision but not source_tree; source_tree is bound by this receipt.",
+        "The generated Canvas is machine-local; its exact reviewed bytes are bound by SHA-256 but are not committed."
+      ],
+      "type": "array"
+    }
+  }
+}

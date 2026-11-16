@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "active_plan": {"type": ["string", "null"]},
+    "active_versions": {"additionalProperties": {"type": "integer"}, "type": "object"},
+    "blockers": {"items": {"type": "string"}, "type": "array"},
+    "completion_evidence": {"items": {"type": "string"}, "type": "array"},
+    "dependencies": {"additionalProperties": false, "properties": {"observed": {"items": {"type": "string"}, "type": "array"}, "planned": {"items": {"type": "string"}, "type": "array"}}, "required": ["planned", "observed"], "type": "object"},
+    "freshness": {"additionalProperties": false, "properties": {"observed_at": {"type": "string"}, "source_revision": {"pattern": "^(no-head|[0-9a-f]{40})$", "type": "string"}}, "required": ["source_revision", "observed_at"], "type": "object"},
+    "id": {"minLength": 1, "type": "string"},
+    "kind": {"enum": ["product", "defect", "maintenance"]},
+    "next_action": {"minLength": 1, "type": "string"},
+    "outcome": {"minLength": 1, "type": "string"},
+    "priority": {"enum": ["P0", "P1", "P2", "P3"]},
+    "required_artifacts": {"items": {"type": "string"}, "type": "array"},
+    "schema": {"const": "doc-warden/roadmap-item/v2"},
+    "sequence": {"type": "integer"},
+    "status": {"enum": ["idea", "backlog", "ready", "active", "verifying", "complete", "blocked", "deferred", "cancelled", "superseded"]},
+    "wave": {"type": ["string", "null"]}
+  },
+  "required": ["schema", "id", "kind", "outcome", "priority", "sequence", "wave", "status", "dependencies", "required_artifacts", "active_versions", "active_plan", "blockers", "next_action", "completion_evidence", "freshness"],
+  "type": "object"
+}

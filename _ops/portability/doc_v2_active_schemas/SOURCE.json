@@ -1,0 +1,121 @@
+{
+  "schema": "personal-portability/active-v2-schema-source/v1",
+  "owner_ref": "8603bc7c697077a87fbfa24796b77a4424e8d995",
+  "files": [
+    {
+      "name": "artifact.schema.json",
+      "sha256": "b31cecb88bc19cd39163516977c3093023248e278f0275ae4edee7ebb25e1ff8",
+      "git_blob": "0fb17c32cca5a690c6b847eccd9f8776540f9dc7"
+    },
+    {
+      "name": "authoring-state.schema.json",
+      "sha256": "7f90266c4a1bad9fe49397c6f0c9fe119367b99efc2815b51d07878af9d26690",
+      "git_blob": "11a2e95b9b834404532a5ddc0a0f680d5644a2cb"
+    },
+    {
+      "name": "consent-envelope.schema.json",
+      "sha256": "5a19c5bc7347b82eb7195267112e414e17d1948fd044b1ab8afe2c949b15526a",
+      "git_blob": "e3c04d3b0ffe3a2bc088f651b36ec599fd8c3b9d"
+    },
+    {
+      "name": "defect.schema.json",
+      "sha256": "eac27a3f6bd17d7e905a51bfae8cb5a14e97dba6b46c70f769a646edbd8cb703",
+      "git_blob": "ae767edc6aa3b80c3aafbf6bc521f499f4d288f9"
+    },
+    {
+      "name": "design-contract.schema.json",
+      "sha256": "b8bad4d4906a9bf0f7969d9466a86728146db47ea8c29b70690727ca3cba90a4",
+      "git_blob": "bb4d23a9d58d2bf4b67e1eb52336ef5d779248a5"
+    },
+    {
+      "name": "doc-warden-config.schema.json",
+      "sha256": "bc022e54f239454d910f32d2720d6cc93871c5c596ea94a62400899151df2703",
+      "git_blob": "6c7d0ffce636bb69ad1fc95af25dfb49ea7b0d8b"
+    },
+    {
+      "name": "egress.schema.json",
+      "sha256": "e0e852862860c207d7d7024962e49ddd56ad7c87dd55e666ee236d2351d7a645",
+      "git_blob": "14787fd4be16154bbaa346e219b110bc035ac702"
+    },
+    {
+      "name": "external-asset-observation.schema.json",
+      "sha256": "abc3f603dd18295b47cf5f8167a84dd057d0c06cd602257a71b196934aea69db",
+      "git_blob": "e7d85143306bc4fc43b9e7d309e2fd093c57af8b"
+    },
+    {
+      "name": "external-asset.schema.json",
+      "sha256": "49ae04f4166661bc75b7ba828e9f98875b34c8e88fcf4b36cd00731e06743778",
+      "git_blob": "25f272b12410f9edacc2585e3bac251c04a79b3b"
+    },
+    {
+      "name": "fleet-rollup.schema.json",
+      "sha256": "0348c85033bf5b59c663f1f7cb6dd46ce6640ad1182cd1650073bbaca3ec9f9b",
+      "git_blob": "69eebd41bec8658ccf04fdd9ab965779fce0e708"
+    },
+    {
+      "name": "intent.schema.json",
+      "sha256": "475acdbc83d7f45d2b5439e6045392cb72ab008a9259ea49339a0063be3400a0",
+      "git_blob": "f0944408a3b7d06adeacc7db0c4b9c6205b7bda9"
+    },
+    {
+      "name": "live-doctor-observation.schema.json",
+      "sha256": "5bff94ac80764ffd5fcf24d1d106ec5a2eb0af3b5498e7a9b48eee4045330af0",
+      "git_blob": "5ba04c023f5a6d37abea1717afea4896f8564e3d"
+    },
+    {
+      "name": "m1-acceptance.schema.json",
+      "sha256": "8488cff119093b30b4f8011d32d7954217c30936394977e44bc609b90de23772",
+      "git_blob": "0d9338103332232893a853206dd04e97abd15b86"
+    },
+    {
+      "name": "m2-acceptance.schema.json",
+      "sha256": "3ab742a2cbedc212dd7511cd2e5e7171c7d6c8b75900268d2ed80cca1fbd750a",
+      "git_blob": "24fe543f86d6bc51f6b532a3035ee053555cf4e1"
+    },
+    {
+      "name": "m3-acceptance.schema.json",
+      "sha256": "4bcff324cedead2c72bdbf0c9446d0467eada9427c815e7ec145713ddf008020",
+      "git_blob": "6eab58e41b0e9866355f697ab571d715f36950ff"
+    },
+    {
+      "name": "migration.schema.json",
+      "sha256": "1e6c5914759ace12b52cd7bde3c51d4c99b4e904c440d399eb6a4d0552ad6f48",
+      "git_blob": "b491ff72d789525882369dbb3955d2cae26eecb5"
+    },
+    {
+      "name": "operation-event.schema.json",
+      "sha256": "f9230bd12804a2ec621e5308d4c74d9e50e5e041df045566a5578e184e98b0d2",
+      "git_blob": "fd93e58b09ce45261aad986d43356cff8453b496"
+    },
+    {
+      "name": "plan-governance-sidecar.schema.json",
+      "sha256": "34c1693406aac96860b2964bc09c3f8a413df8f0c2893946a613048c1e43ce06",
+      "git_blob": "03be7ba2d4e68ebae646567423ccd8413cb56e0e"
+    },
+    {
+      "name": "receipt.schema.json",
+      "sha256": "93b9c4a0b239d542d5f46c96041c6ffc2d5bf1f5af0f792f909a46f6924d1113",
+      "git_blob": "377979fc65b11b4256c28cc016111f0b5265466c"
+    },
+    {
+      "name": "reconciliation.schema.json",
+      "sha256": "42123deb46a58925e012fabc12e600ed4bd7f15145185974d323314b12917c98",
+      "git_blob": "86ade951e185bc5cb57fb09a891f881de6b1b186"
+    },
+    {
+      "name": "relation.schema.json",
+      "sha256": "e697403efcbe5ce266b98d918c3084165013168b14552161dffaec55ef6a8c84",
+      "git_blob": "8f9ada6c538fa75538a8be403d061e46002e8757"
+    },
+    {
+      "name": "roadmap.schema.json",
+      "sha256": "f0bb57fa539185e3e0762055a8770dbb789eb9eac8b3ac96965289b1c11dcd4f",
+      "git_blob": "39a60d5dfb9b3e8c168579f9f2fd368c305bd816"
+    },
+    {
+      "name": "trigger.schema.json",
+      "sha256": "f5705d929dfa9bfb861fd619ad9c29a1a0620cede65f6d5ab556053a89aea2b4",
+      "git_blob": "494c7bcbddb1831680385d642168d0097329939b"
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "enum": [
+        "compare_external_revision",
+        "doctor_refresh_projections",
+        "mark_projection_stale",
+        "observe_repository_dependency",
+        "prepare_authoring_import",
+        "preview_artifact_transition",
+        "preview_completion",
+        "preview_defect_transition",
+        "reconcile",
+        "report_session_context",
+        "validate_authoring_result"
+      ]
+    },
+    "capability": {"enum": ["read_only", "preview", "apply"]},
+    "detector": {
+      "enum": [
+        "detect_artifact_completion",
+        "detect_artifact_transition",
+        "detect_authoring_pre_import",
+        "detect_authoring_result_import",
+        "detect_defect_transition",
+        "detect_external_design_refresh",
+        "detect_reconciliation_preview",
+        "detect_repository_dependency_change",
+        "detect_routine_maintenance",
+        "detect_session_start",
+        "detect_significant_file_edit"
+      ]
+    },
+    "event": {
+      "enum": [
+        "artifact_completion",
+        "artifact_transition",
+        "authoring_pre_import",
+        "authoring_result_import",
+        "defect_transition",
+        "external_design_refresh",
+        "reconciliation_preview",
+        "repository_dependency_change",
+        "routine_maintenance",
+        "session_start",
+        "significant_file_edit"
+      ]
+    },
+    "id": {
+      "enum": [
+        "artifact-transition",
+        "authoring-result-import",
+        "completion",
+        "defect-transition",
+        "external-design-refresh",
+        "pre-import",
+        "reconciliation-preview",
+        "repository-dependency-observation",
+        "routine-maintenance",
+        "session-start",
+        "significant-file-edit"
+      ]
+    },
+    "schema": {"const": "doc-warden/trigger/v2"},
+    "semantic_mutation": {"const": false},
+    "template": {
+      "enum": [
+        "artifact",
+        "authoring_import",
+        "authoring_result",
+        "canvas",
+        "completion",
+        "defect",
+        "none",
+        "reconciliation"
+      ]
+    },
+    "verifier": {
+      "enum": [
+        "verify_artifact",
+        "verify_authoring_result",
+        "verify_completion_evidence",
+        "verify_defect",
+        "verify_external_revision",
+        "verify_freshness_marker",
+        "verify_hook_report",
+        "verify_job_report",
+        "verify_reconciliation",
+        "verify_repository_dependency",
+        "verify_runtime_binding"
+      ]
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "event",
+    "detector",
+    "action",
+    "template",
+    "verifier",
+    "capability",
+    "semantic_mutation"
+  ],
+  "type": "object"
+}

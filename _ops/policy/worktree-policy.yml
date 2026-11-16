@@ -1,0 +1,72 @@
+# Agent worktree policy for ~/dev.
+#
+# This file is intentionally small and operator-readable.  The implementation in
+# _ops/bin/dev-worktree.sh also carries conservative built-in defaults so a syntax
+# mistake here cannot make the primary checkout less safe.
+version: 1
+
+# Roots where worktree automation is allowed to make decisions.
+governed_roots:
+  - ~/dev
+
+# The default location mirrors Cursor's managed worktree root so Cursor can discover
+# and clean up completed worktrees.  Long-lived or custom-base work can override this
+# through dev-worktree flags.
+managed_location: ~/.cursor/worktrees
+
+# Tool-owned per-repo MODE file (schema awa-modes/v1), resolved RELATIVE to THIS policy file's
+# directory (-> _ops/policy/worktree-modes.yml). It records explicit per-repo modes (on|off) and the
+# default_mode for eligible repos. Edited ONLY via `dev-worktree.sh mode ...` / the AWA MCP mode tools
+# — never by hand. ONE fail-safe rule: only `off` disables; any other value (typos, legacy `ask_on`)
+# resolves to on/include. ASK_ON was removed 2026-07-07.
+# ON = protected: a mutating command on an included PRIMARY checkout returns an enforced hook `deny`
+# (the linked worktree is the safe place to work). OFF = no blocking. Migration: pre-mode hosts had
+# NO modes file; absence => the product default_mode (on), i.e. today's protected behavior. This host
+# pins default_mode: on explicitly.
+modes_file: worktree-modes.yml
+
+# Pre-access exclusions: lexical roots only; never probe these targets to qualify policy.
+# Generic matching semantics are owned by AWA ADR 0027 and release v1.8.2.
+hard_no_touch_paths:
+  exact_roots:
+    - ~/dev/personal/chaos-scheduler
+    - ~/dev/personal/chaos-scheduler-mcp-resource-foundation
+  managed_namespace_prefixes:
+    - ~/.cursor/worktrees/chaos-scheduler
+    - ~/.local/share/awa/worktrees/chaos-scheduler
+
+# Include eligible repos under governed roots unless an exclusion matches.
+default: include
+
+include:
+  - personal/*
+  - capabilities/*
+  - affirm/src/*
+
+exclude:
+  # cpp has its own governed _ops model and bootstrap requirements.
+  - affirm/src/card-platform-product
+  # vendor/reference clones are read-only by policy.
+  - affirm/vendor/*
+  # The ~/dev repository is an umbrella; its worktree does not contain nested repos.
+  - .
+
+detectors:
+  governed_markers:
+    - _ops/POLICY.md
+    - _ops/ci/cpp-integrity-engine
+  artifact_paths:
+    - personal/awa-finish-desktop-uat-20260715T212709Z-9173806d
+    - personal/awa-trial-0c150c8d2098e659
+    - personal/awa-trial-target
+    - _ops/doc-warden/fixtures/poc3c
+  foreign_hook_frameworks:
+    - husky
+    - lefthook
+    - pre-commit
+  read_only_paths:
+    - affirm/vendor/*
+
+overrides:
+  include: []
+  exclude: []

@@ -1,0 +1,72 @@
+---
+description: Safety and quality guardrails for JIRA MCP operations — enforces cloudId discovery, explicit confirmation before mutating tools, and graceful degradation. Apply when JIRA MCP is connected or the user is working with Atlassian/JIRA issues, projects, worklogs, or transitions.
+globs: 
+alwaysApply: false
+# To have this rule always apply instead of letting the agent decide, change to:
+# alwaysApply: true
+---
+
+# JIRA MCP Safety & Quality
+
+**This rule applies when JIRA MCP is connected and the user is working with Atlassian / JIRA issues, projects, worklogs, or transitions.**
+
+## MCP & Data Safety
+
+- Assume the workflow is executed via JIRA MCP (`user-jira`) and ensure the MCP is connected before running operations.
+- Before referencing a project or issue, discover context first: call `getAccessibleAtlassianResources` to obtain the active `cloudId`, and `getVisibleJiraProjects` to enumerate available project keys. Do not assume cloudId or project keys.
+- Use read-only tools freely to gather context; mutating tools require explicit user confirmation of the payload before invocation.
+- Never create duplicate issues, worklogs, or issue links without first searching for an existing match via `searchJiraIssuesUsingJql` or `search`.
+
+## Tool Surface
+
+**Read-only tools (`posture: fail-open`)** — safe to invoke without confirmation:
+
+| Tool | Purpose |
+|---|---|
+| `atlassianUserInfo` | Current user identity |
+| `getAccessibleAtlassianResources` | List accessible cloud sites (cloudId discovery) |
+| `getVisibleJiraProjects` | Enumerate projects the authenticated user can see |
+| `getJiraProjectIssueTypesMetadata` | List issue types + required fields for a project |
+| `getJiraIssueTypeMetaWithFields` | Field metadata for a specific project + issue type |
+| `getJiraIssue` | Fetch a single issue |
+| `getJiraIssueRemoteIssueLinks` | List remote issue links |
+| `getIssueLinkTypes` | Enumerate link types (Blocks, Relates, Duplicates, etc.) |
+| `getTransitionsForJiraIssue` | List valid workflow transitions for an issue |
+| `lookupJiraAccountId` | Resolve a user's display name / email to accountId |
+| `search` | Generic Atlassian search (issues, docs, spaces) |
+| `searchJiraIssuesUsingJql` | JQL-based issue search |
+| `fetch` | Fetch a resource by URL |
+
+**Mutating tools (`posture: fail-closed`)** — require explicit user confirmation of payload before invocation:
+
+| Tool | Mutation | Confirmation payload MUST include |
+|---|---|---|
+| `createJiraIssue` | Creates a new issue | projectKey, issueTypeName, summary, description, assignee (if set), parent (if subtask) |
+| `editJiraIssue` | Updates an existing issue | issueIdOrKey, every field being changed (show before / after) |
+| `addCommentToJiraIssue` | Adds a comment | issueIdOrKey, full comment body |
+| `addWorklogToJiraIssue` | Logs work time | issueIdOrKey, timeSpent, started timestamp |
+| `createIssueLink` | Links two issues | source issue, target issue, linkType (exact name from `getIssueLinkTypes`) |
+| `transitionJiraIssue` | Workflow state change | issueIdOrKey, transition ID (from `getTransitionsForJiraIssue`), any required resolution fields |
+
+A mutating call executed without the user's prior review of the payload is a safety violation. On ambiguity, pause and ask rather than guess.
+
+## Usage Guidance
+
+- **Prefer JQL search over repeated `getJiraIssue` calls** when gathering several issues — one JQL query is cheaper than N fetches.
+- **Respect workflow transitions.** Always call `getTransitionsForJiraIssue` before `transitionJiraIssue` — valid transitions depend on the current status and the project's workflow configuration. Do not hardcode transition IDs.
+- **Assignee resolution.** JIRA assigns by `accountId`, not by display name or email. Call `lookupJiraAccountId` first to resolve the human-readable identifier.
+- **Content format.** Prefer `contentFormat: "markdown"` for human-authored issue descriptions and comments unless the user specifically requests ADF (Atlassian Document Format) for rich content like mentions, panels, or Smart Links.
+- **Custom fields.** Use the `additional_fields` parameter on `createJiraIssue` / `editJiraIssue` for priority, labels, or `customfield_*` keys. Do NOT invent custom field IDs; retrieve them via `getJiraIssueTypeMetaWithFields` first.
+
+## Graceful Degradation
+
+When a JIRA tool is unavailable (network, auth, rate limit, permission denied):
+
+- **Read-only tool failure** (`fail-open`): log the failure, surface the error to the user, continue the session with the already-known context. Do not block the user's task.
+- **Mutating tool failure** (`fail-closed`): abort the containing turn. Do NOT retry automatically; surface the error and ask the user how to proceed. A failed mutation must never silently be re-attempted with the same payload.
+- **`403 Forbidden` or `401 Unauthorized`** on a mutating tool: report to the user that the authenticated account lacks permission; do not escalate by retrying with a different cloudId.
+- **Rate limit (`429`)**: respect the `Retry-After` header; do not aggressively retry.
+
+## Boundary
+
+This rule governs JIRA MCP only. Confluence, Bitbucket, and other Atlassian products have distinct tool surfaces and require their own safety rules if and when they are consumed.

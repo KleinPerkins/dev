@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# managed-by: KleinPerkins/dev identity-guard (chained pre-commit dispatcher)
+# Installed by KleinPerkins/dev _ops/bin/install-identity-guard.sh — idempotent; do not hand-edit.
+# Runs the session-lock (concurrency, fail-closed), then identity-guard (fail-closed), then
+# data-guard (secrets/PII/oversized, fail-closed), then the registration-guard (ADVISORY, always
+# exits 0 — regenerates a capability repo's .eco-registry.lock; self-disables elsewhere), then chains
+# any preserved prior hook.
+set -uo pipefail
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -x "$HOOK_DIR/session-lock" ]; then
+  "$HOOK_DIR/session-lock" check || exit $?
+fi
+if [ -x "$HOOK_DIR/identity-guard" ]; then
+  "$HOOK_DIR/identity-guard" || exit $?
+fi
+if [ -x "$HOOK_DIR/data-guard" ]; then
+  "$HOOK_DIR/data-guard" || exit $?
+fi
+if [ -x "$HOOK_DIR/registration-guard" ]; then
+  "$HOOK_DIR/registration-guard" || true
+fi
+if [ -x "$HOOK_DIR/pre-commit.local" ]; then
+  exec "$HOOK_DIR/pre-commit.local"
+fi
+exit 0

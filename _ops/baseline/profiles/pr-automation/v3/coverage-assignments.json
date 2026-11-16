@@ -1,0 +1,180 @@
+{
+  "assignments": [
+    {
+      "catalog_repository_id": "ai-analytics-context",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:946983795f5ad679b6831316c21bcf4d8970e165690b172a10b2726e5b31a9e5",
+        "id": "stdlib-shell.v1"
+      },
+      "repo": "KleinPerkins/ai-analytics-context"
+    },
+    {
+      "catalog_repository_id": "awa",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:85b7430a0b7974b007448e4f8d9449b140b39aefe2a234c265395372193626e5",
+        "id": "awa-authoritative-verify.v1"
+      },
+      "required_checks": {
+        "job_id": "repo.awa.engine-tests",
+        "schema": "pr-automation-required-checks/v1"
+      },
+      "repo": "KleinPerkins/awa"
+    },
+    {
+      "catalog_repository_id": "chaos-labs",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:946983795f5ad679b6831316c21bcf4d8970e165690b172a10b2726e5b31a9e5",
+        "id": "stdlib-shell.v1"
+      },
+      "repo": "KleinPerkins/chaos-labs"
+    },
+    {
+      "catalog_repository_id": "dev",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:946983795f5ad679b6831316c21bcf4d8970e165690b172a10b2726e5b31a9e5",
+        "id": "stdlib-shell.v1"
+      },
+      "repo": "KleinPerkins/dev",
+      "required_checks": {
+        "job_id": "repo.dev.m3-verify",
+        "schema": "pr-automation-required-checks/v1"
+      }
+    },
+    {
+      "catalog_repository_id": "ecosystem-orchestrator",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:946983795f5ad679b6831316c21bcf4d8970e165690b172a10b2726e5b31a9e5",
+        "id": "stdlib-shell.v1"
+      },
+      "repo": "KleinPerkins/ecosystem-orchestrator",
+      "required_checks": {
+        "job_id": "repo.ecosystem-orchestrator.m3-verify",
+        "schema": "pr-automation-required-checks/v1"
+      }
+    },
+    {
+      "catalog_repository_id": "intent-router",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:946983795f5ad679b6831316c21bcf4d8970e165690b172a10b2726e5b31a9e5",
+        "id": "stdlib-shell.v1"
+      },
+      "repo": "KleinPerkins/intent-router",
+      "required_checks": {
+        "job_id": "repo.intent-router.m3-verify",
+        "schema": "pr-automation-required-checks/v1"
+      }
+    },
+    {
+      "catalog_repository_id": "kp-mcp",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:946983795f5ad679b6831316c21bcf4d8970e165690b172a10b2726e5b31a9e5",
+        "id": "stdlib-shell.v1"
+      },
+      "repo": "KleinPerkins/kp-mcp",
+      "required_checks": {
+        "job_id": "repo.kp-mcp.m3-verify",
+        "schema": "pr-automation-required-checks/v1"
+      }
+    },
+    {
+      "catalog_repository_id": "kp-pr-bot-canary",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:946983795f5ad679b6831316c21bcf4d8970e165690b172a10b2726e5b31a9e5",
+        "id": "stdlib-shell.v1"
+      },
+      "repo": "KleinPerkins/kp-pr-bot-canary",
+      "required_checks": {
+        "job_id": "repo.kp-pr-bot-canary.m3-verify",
+        "schema": "pr-automation-required-checks/v1"
+      }
+    },
+    {
+      "catalog_repository_id": "local-jobs",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:946983795f5ad679b6831316c21bcf4d8970e165690b172a10b2726e5b31a9e5",
+        "id": "stdlib-shell.v1"
+      },
+      "repo": "KleinPerkins/local-jobs",
+      "required_checks": {
+        "job_id": "repo.local-jobs.m3-verify",
+        "schema": "pr-automation-required-checks/v1"
+      }
+    },
+    {
+      "catalog_repository_id": "operator-voice",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:946983795f5ad679b6831316c21bcf4d8970e165690b172a10b2726e5b31a9e5",
+        "id": "stdlib-shell.v1"
+      },
+      "repo": "KleinPerkins/operator-voice",
+      "required_checks": {
+        "job_id": "repo.operator-voice.m3-verify",
+        "schema": "pr-automation-required-checks/v1"
+      }
+    },
+    {
+      "catalog_repository_id": "operator-voice-profile",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:946983795f5ad679b6831316c21bcf4d8970e165690b172a10b2726e5b31a9e5",
+        "id": "stdlib-shell.v1"
+      },
+      "repo": "KleinPerkins/operator-voice-profile"
+    },
+    {
+      "catalog_repository_id": "pr-automation-controller",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:946983795f5ad679b6831316c21bcf4d8970e165690b172a10b2726e5b31a9e5",
+        "id": "stdlib-shell.v1"
+      },
+      "repo": "KleinPerkins/pr-automation-controller",
+      "required_checks": {
+        "job_id": "repo.pr-automation-controller.m3-verify",
+        "schema": "pr-automation-required-checks/v1"
+      }
+    },
+    {
+      "catalog_repository_id": "server-guard",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:946983795f5ad679b6831316c21bcf4d8970e165690b172a10b2726e5b31a9e5",
+        "id": "stdlib-shell.v1"
+      },
+      "repo": "KleinPerkins/server-guard"
+    },
+    {
+      "catalog_repository_id": "skills",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:946983795f5ad679b6831316c21bcf4d8970e165690b172a10b2726e5b31a9e5",
+        "id": "stdlib-shell.v1"
+      },
+      "repo": "KleinPerkins/skills",
+      "required_checks": {
+        "job_id": "repo.skills.m3-verify",
+        "schema": "pr-automation-required-checks/v1"
+      }
+    },
+    {
+      "catalog_repository_id": "sterling",
+      "coverage_mode": "local",
+      "profile_ref": {
+        "digest": "sha256:946983795f5ad679b6831316c21bcf4d8970e165690b172a10b2726e5b31a9e5",
+        "id": "stdlib-shell.v1"
+      },
+      "repo": "KleinPerkins/sterling"
+    }
+  ],
+  "schema": "pr-automation-coverage-assignments/v2"
+}

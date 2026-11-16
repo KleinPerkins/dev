@@ -1,0 +1,39 @@
+{
+  "schema": "interoperability/plan-refine-workload/v1",
+  "required_skills": [
+    "plan-refine"
+  ],
+  "parent_protocol": {
+    "native_tool": "collaboration.spawn_agent",
+    "worker_count": 1,
+    "requested_model": "gpt-6.1-sol",
+    "reasoning_effort": "high",
+    "fork_turns": "none",
+    "immediate_first_wait_ms": 60000,
+    "interrupt_if_unfinished_after_first_wait": true,
+    "strict_actual_worker_deadline_ms": 120000,
+    "rollback_after_every_outcome": true,
+    "retained_installation_authorized": false
+  },
+  "outputs": [
+    "project/docs/plans/seed-counter.md",
+    "project/docs/plans/README.md"
+  ],
+  "case": "draft-harden",
+  "parent_only_outputs": [
+    "fixture-owner.json",
+    "worker-report.md"
+  ],
+  "charter": "Read the exact native plan-refine skill in full, then the entire target plan, actual main baseline and project conventions. Mode A / Standalone is expected for this single local subsystem and at most two planned surfaces with one specialist domain. Explicit hardening authority permits only the governed draft plan and its version/index update. Follow all four tests in order and the materiality bar; do not implement anything. No commits, Git mutation, extra files, services, network, nested workers, protected components or other roots. Finish with the six ordered canonical report sections in chat. Cite the exact main revision. Report remaining uncertainty honestly. The parent must first record the fresh native catalog gate; it captures that chat outside the project; the worker must not write a report file.",
+  "qualification_limits": "The checker checks owned artifact shape and preservation only. Actual source reads, chosen mode, four-test reasoning, materiality, bounded terminal state and parent semantic review must be observed separately. No ready native action is issued before current host/model/tool qualification, accepted source and exact fresh owner publication/one-worker approval.",
+  "parent_native_catalog_gate": {
+    "before_worker": true,
+    "extra_roots": false,
+    "new_threads_or_token_refresh": false,
+    "enabled_entries": 1,
+    "required_skill": "plan-refine",
+    "owned_home_link_or_exact_canonical_same_file": true,
+    "personal_account_binding": true,
+    "failure_requires_no_dispatch_and_exact_rollback": true
+  }
+}

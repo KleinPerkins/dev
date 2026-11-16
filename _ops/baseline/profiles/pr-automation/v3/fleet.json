@@ -1,0 +1,153 @@
+{
+  "schema": "pr-automation-fleet/v3",
+  "owner": "KleinPerkins",
+  "future_repo_policy": {
+    "eligible_private_source_repos_default": "stage-runnerless-v3",
+    "opt_out_flag": "--no-pr-automation",
+    "remote_activation": "explicit-after-canary"
+  },
+  "targets": [
+    {
+      "repo": "KleinPerkins/kp-pr-bot-canary",
+      "repository_id": 1297059298,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 18816827,
+      "cohort": "validation",
+      "status": "qualified-generation-2"
+    },
+    {
+      "repo": "KleinPerkins/sterling",
+      "repository_id": 1276598286,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 18817257,
+      "cohort": "leaves",
+      "status": "qualified"
+    },
+    {
+      "repo": "KleinPerkins/kp-mcp",
+      "repository_id": 1271164179,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 18817488,
+      "cohort": "providers",
+      "status": "qualified"
+    },
+    {
+      "repo": "KleinPerkins/intent-router",
+      "repository_id": 1294651532,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 18819087,
+      "cohort": "providers",
+      "status": "qualified-generation-2-preserved-tag-ruleset"
+    },
+    {
+      "repo": "KleinPerkins/awa",
+      "repository_id": 1289571438,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 18819090,
+      "cohort": "providers",
+      "status": "qualified-generation-2-preserved-tag-ruleset"
+    },
+    {
+      "repo": "KleinPerkins/local-jobs",
+      "repository_id": 1284625858,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 18817491,
+      "cohort": "providers",
+      "status": "qualified"
+    },
+    {
+      "repo": "KleinPerkins/ecosystem-orchestrator",
+      "repository_id": 1281300995,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 18817493,
+      "cohort": "providers",
+      "status": "qualified"
+    },
+    {
+      "repo": "KleinPerkins/skills",
+      "repository_id": 1275604090,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 18818208,
+      "cohort": "custom",
+      "status": "qualified-after-interval-worker"
+    },
+    {
+      "repo": "KleinPerkins/chaos-labs",
+      "repository_id": 1202219494,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 18817495,
+      "cohort": "custom",
+      "status": "qualified"
+    },
+    {
+      "repo": "KleinPerkins/pr-automation-controller",
+      "repository_id": 1297666445,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 18817498,
+      "cohort": "self",
+      "status": "qualified-self-hosting"
+    },
+    {
+      "repo": "KleinPerkins/ai-analytics-context",
+      "repository_id": 1301629826,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 20041850,
+      "cohort": "leaves",
+      "status": "qualified"
+    },
+    {
+      "repo": "KleinPerkins/server-guard",
+      "repository_id": 1302096938,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 20041991,
+      "cohort": "leaves",
+      "status": "qualified"
+    },
+    {
+      "repo": "KleinPerkins/dev",
+      "repository_id": 1278387789,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 18817500,
+      "cohort": "final",
+      "status": "qualified-final"
+    },
+    {
+      "repo": "KleinPerkins/operator-voice",
+      "repository_id": 1317232260,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 20106673,
+      "cohort": "leaves",
+      "status": "qualified"
+    },
+    {
+      "repo": "KleinPerkins/operator-voice-profile",
+      "repository_id": 1317206810,
+      "default_branch": "main",
+      "merge_safety_ruleset_id": 20106676,
+      "cohort": "leaves",
+      "status": "qualified"
+    }
+  ],
+  "excluded": [
+    {
+      "repo": "KleinPerkins/chaos-scheduler",
+      "reason": "hard no-touch; independently governed automation"
+    },
+    {
+      "repo": "KleinPerkins/cpp",
+      "reason": "functional archive/reference"
+    },
+    {
+      "repo": "KleinPerkins/duggan-bach",
+      "reason": "generated Pages output"
+    },
+    {
+      "repo": "KleinPerkins/snowflake-permission-specs",
+      "reason": "fork/reference"
+    },
+    {
+      "repo": "KleinPerkins/archive-repos",
+      "reason": "cold-storage monorepo for retired personal projects"
+    }
+  ]
+}

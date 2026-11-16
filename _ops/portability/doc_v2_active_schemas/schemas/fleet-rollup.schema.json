@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "generated_at": {"type": "string"},
+    "rows": {"items": {"additionalProperties": false, "properties": {"freshness": {"enum": ["current", "stale", "unavailable", "excluded"]}, "reason": {"type": ["string", "null"]}, "repository_key": {"pattern": "^[0-9a-f-]{36}$", "type": "string"}, "roadmap": {"items": {"type": "object"}, "type": "array"}, "source_revision": {"pattern": "^(no-head|[0-9a-f]{40}|unavailable)$", "type": "string"}}, "required": ["repository_key", "source_revision", "freshness", "reason", "roadmap"], "type": "object"}, "type": "array"},
+    "schema": {"const": "doc-warden/fleet-rollup/v2"},
+    "source_catalog_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}
+  },
+  "required": ["schema", "generated_at", "source_catalog_digest", "rows"],
+  "type": "object"
+}

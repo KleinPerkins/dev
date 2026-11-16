@@ -1,0 +1,38 @@
+{
+  "schema": "personal-portability/gsd-codex-private-bundle-contract/v1",
+  "source_observer_sha256": "42ef7e3bcdc30e4e60f5cfcf189401cd2810aa1f1042da7585e0be5e6ca1a9cb",
+  "emitter_sha256": "f0fda8ed0618e856936f780b4f9dc3e24af2ba775c9551185d13c42483340e42",
+  "network_profile_sha256": "5c358b8d847211333e7ba22df82d84f796b5f30a41a2682209a949d783adbd08",
+  "node_sha256": "ab0fc8db86abad289091b6bad2d60b2d64f0e6900bfbbf9f7dc195d1ecbfb28e",
+  "owner_lock_sha256": "8a451d875ddd9156254cf592fc6a1df9be353d99450648292dd062cf6544b7bf",
+  "owner_role_policy_sha256": "705a1cbaf5a9f65c1bc5ebe621a9798364f7a2e8a8eb1e87707b05e7b1825fd8",
+  "package_entries": 943,
+  "bundle_entries": 979,
+  "runtime_entries": 556,
+  "rewritten_runtime_markdown_entries": 221,
+  "emitter_modules": 66,
+  "role_entries": 34,
+  "selected_skills": [
+    "gsd-new-project",
+    "gsd-discuss-phase",
+    "gsd-plan-phase",
+    "gsd-validate-phase"
+  ],
+  "allowed_authoring_roles": [
+    "gsd-advisor-researcher",
+    "gsd-nyquist-auditor",
+    "gsd-pattern-mapper",
+    "gsd-phase-researcher",
+    "gsd-plan-checker",
+    "gsd-planner",
+    "gsd-project-researcher",
+    "gsd-research-synthesizer",
+    "gsd-roadmapper"
+  ],
+  "project_configuration": {
+    "runtime": "codex",
+    "model_profile": "inherit"
+  },
+  "global_defaults": {},
+  "native_publication_authorized": false
+}

@@ -1,0 +1,5 @@
+# Successor current ADRs have independent identity and receipts.
+# Retained _ops/adr records are immutable predecessor provenance only.
+# Generic plan tooling retains its existing location.
+plans_dir: _ops/plans
+adr_dir: docs/adr

@@ -1,0 +1,251 @@
+{
+  "version": 1,
+  "high_risk": [
+    {
+      "kind": "exact",
+      "path": ".gitignore"
+    },
+    {
+      "kind": "exact",
+      "path": "AGENTS.md"
+    },
+    {
+      "kind": "exact",
+      "path": "OPERATING-MANUAL.md"
+    },
+    {
+      "kind": "exact",
+      "path": "_ops/POLICY.md"
+    },
+    {
+      "kind": "exact",
+      "path": "_ops/adr/0011-manifest-driven-verification-selector.md"
+    },
+    {
+      "kind": "exact",
+      "path": "_ops/plans/manifest-driven-verification-execution-v1.md"
+    },
+    {
+      "kind": "exact",
+      "path": "_ops/plans/manifest-driven-verification-target-design-v1.md"
+    },
+    {
+      "kind": "exact",
+      "path": "bootstrap.sh"
+    },
+    {
+      "kind": "prefix",
+      "path": ".cursor/"
+    },
+    {
+      "kind": "prefix",
+      "path": ".github/"
+    },
+    {
+      "kind": "prefix",
+      "path": "_ops/bin/"
+    },
+    {
+      "kind": "prefix",
+      "path": "_ops/eco/"
+    },
+    {
+      "kind": "prefix",
+      "path": "_ops/policy/"
+    },
+    {
+      "kind": "prefix",
+      "path": "_ops/rules/"
+    },
+    {
+      "kind": "prefix",
+      "path": "_ops/tests/"
+    }
+  ],
+  "areas": [
+    {
+      "id": "context-measurement",
+      "coverage": "Context-measurement unit and closure tests.",
+      "rationale": "Changes are isolated to the context-measurement implementation.",
+      "paths": [
+        {
+          "kind": "prefix",
+          "path": "_ops/context-measurement/"
+        }
+      ],
+      "checks": [
+        {
+          "id": "context.measurement",
+          "argv": [
+            "python3",
+            "-m",
+            "unittest",
+            "test_kp_context_measure.py",
+            "test_correction_dogfood.py",
+            "test_capability_discovery_inventory.py",
+            "test_validate_static_context_manifest.py",
+            "test_release2_closure.py"
+          ],
+          "cwd": "_ops/context-measurement"
+        }
+      ]
+    },
+    {
+      "id": "doc-warden",
+      "coverage": "Doc-warden structure, fixtures, validators, and deterministic output.",
+      "rationale": "Changes are isolated to the doc-warden subsystem.",
+      "paths": [
+        {
+          "kind": "exact",
+          "path": ".doc-warden.yml"
+        },
+        {
+          "kind": "prefix",
+          "path": "_ops/doc-warden/"
+        }
+      ],
+      "checks": [
+        {
+          "id": "doc-warden.full-compat",
+          "argv": [
+            "bash",
+            "_ops/checks/doc-warden-verify.sh"
+          ],
+          "cwd": "."
+        }
+      ]
+    },
+    {
+      "id": "documentation",
+      "coverage": "Documentation governance and generated-artifact consistency.",
+      "rationale": "Low-risk documentation paths are explicitly allow-listed.",
+      "paths": [
+        {
+          "kind": "exact",
+          "path": "README.md"
+        },
+        {
+          "kind": "exact",
+          "path": "_ops/README.md"
+        },
+        {
+          "kind": "exact",
+          "path": "chaos-labs-migration-runbook.md"
+        },
+        {
+          "kind": "exact",
+          "path": "git-hygiene-audit.md"
+        },
+        {
+          "kind": "prefix",
+          "path": "_ops/adr/"
+        },
+        {
+          "kind": "prefix",
+          "path": "_ops/plans/"
+        },
+        {
+          "kind": "prefix",
+          "path": "_ops/runbooks/"
+        },
+        {
+          "kind": "prefix",
+          "path": "docs/"
+        }
+      ],
+      "checks": [
+        {
+          "id": "doc-warden.full-compat",
+          "argv": [
+            "bash",
+            "_ops/checks/doc-warden-verify.sh"
+          ],
+          "cwd": "."
+        }
+      ]
+    },
+    {
+      "id": "pr-automation",
+      "coverage": "Legacy and runnerless-v3 PR-automation contracts.",
+      "rationale": "Changes are isolated to the PR-automation profile.",
+      "paths": [
+        {
+          "kind": "prefix",
+          "path": "_ops/baseline/profiles/pr-automation/"
+        }
+      ],
+      "checks": [
+        {
+          "id": "pr-automation.legacy",
+          "argv": [
+            "bash",
+            "_ops/baseline/profiles/pr-automation/test.sh"
+          ],
+          "cwd": "."
+        },
+        {
+          "id": "pr-automation.v3",
+          "argv": [
+            "bash",
+            "_ops/baseline/profiles/pr-automation/v3/test.sh"
+          ],
+          "cwd": "."
+        }
+      ]
+    },
+    {
+      "id": "snow-kit-host",
+      "coverage": "Pinned Snow-kit host bootstrap lifecycle.",
+      "rationale": "Changes are isolated to Snow-kit host bootstrap inputs.",
+      "paths": [
+        {
+          "kind": "exact",
+          "path": "capabilities/mcp-bootstrap.sh"
+        },
+        {
+          "kind": "exact",
+          "path": "capabilities/mcp-pins.env"
+        }
+      ],
+      "checks": [
+        {
+          "id": "snowkit.host-lifecycle",
+          "argv": [
+            "bash",
+            "_ops/tests/snow-kit-host-bootstrap.sh"
+          ],
+          "cwd": "."
+        }
+      ]
+    },
+    {
+      "id": "worktree-awa",
+      "coverage": "AWA host and worktree policy/tooling compatibility.",
+      "rationale": "Changes are isolated to AWA/worktree host surfaces.",
+      "paths": [
+        {
+          "kind": "prefix",
+          "path": "_ops/awa/"
+        },
+        {
+          "kind": "prefix",
+          "path": "_ops/cursor-hooks/"
+        },
+        {
+          "kind": "prefix",
+          "path": "_ops/local-jobs/"
+        }
+      ],
+      "checks": [
+        {
+          "id": "awa.worktree",
+          "argv": [
+            "bash",
+            "_ops/checks/worktree-verify.sh"
+          ],
+          "cwd": "."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# identity-guard — per-repo commit-time identity check (the M2 guard).
+#
+# Source of truth: KleinPerkins/dev _ops/hooks/identity-guard. The installer
+# (_ops/bin/install-identity-guard.sh) COPIES this file into <repo>/.git/hooks/identity-guard
+# (it must be self-contained — sibling repos can't source the dev repo's lib.sh) and wires a
+# small chained dispatcher at <repo>/.git/hooks/pre-commit that runs this first.
+#
+# Behavior (reliable, NO false positives):
+#   • In scope ONLY when origin's owner is `KleinPerkins`. Work (Affirm/*), reference vendor,
+#     and third-party run-in-place tools (e.g. Vrun-design/openflowkit) are NEVER blocked.
+#   • In scope: if the effective commit email is not the canonical personal noreply, BLOCK the
+#     commit with a clear, copy-pasteable fix. Otherwise allow.
+#   • Fails OPEN on anything ambiguous (no origin, unparseable URL) — it never blocks work.
+#
+# This is the local analog of cpp's commit-email-compliance; it is deliberately tiny.
+set -uo pipefail
+
+CANON='49759187+KleinPerkins@users.noreply.github.com'   # keep in sync with lib.sh OM_NOREPLY
+
+origin="$(git config --get remote.origin.url 2>/dev/null || true)"
+
+# Parse owner = first path segment after github.com[:/]; empty if not a github origin.
+owner=""
+case "$origin" in
+  *github.com[:/]*)
+    rest="${origin#*github.com}"; rest="${rest#[:/]}"
+    owner="${rest%%/*}"
+    ;;
+esac
+owner_lc="$(printf '%s' "$owner" | tr '[:upper:]' '[:lower:]')"
+
+# Only guard KleinPerkins-owned repos. Everything else: not our business — allow.
+[ "$owner_lc" = "kleinperkins" ] || exit 0
+
+email="$(git config user.email 2>/dev/null || true)"
+[ "$email" = "$CANON" ] && exit 0
+
+repo="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
+cat >&2 <<EOF
+
+  ✖ identity-guard: commit BLOCKED — this is a KleinPerkins repo, but your commit
+    identity is not the canonical personal noreply.
+
+      repo:       $repo
+      origin:     ${origin:-<none>}
+      your email: ${email:-<unset>}
+      required:   $CANON
+
+  Fix (LOCAL to this repo only — never --global):
+      git -C "$repo" config --local user.email "$CANON"
+      git -C "$repo" config --local user.name  "KleinPerkins"
+  then re-commit.
+
+  Why: keeps laurence.duggan@affirm.com out of personal commit history and avoids
+  GH007 email-privacy push rejections.
+
+  Emergency bypass (discouraged): git commit --no-verify
+EOF
+exit 1

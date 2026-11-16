@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KleinPerkins/dev/pr-automation/evidence/v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "owner_repo",
+    "generation",
+    "canary_branch",
+    "canary_sha",
+    "destination_branch",
+    "controller_digests",
+    "policy_digest",
+    "ruleset_template_digests",
+    "ruleset_ids",
+    "ruleset_fingerprints",
+    "required_check",
+    "observed_at",
+    "scenarios"
+  ],
+  "properties": {
+    "schema": {"const": "pr-automation-evidence/v2"},
+    "owner_repo": {"type": "string", "pattern": "^KleinPerkins/[A-Za-z0-9._-]+$"},
+    "generation": {"type": "integer", "minimum": 2},
+    "canary_branch": {"type": "string", "minLength": 1},
+    "canary_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "destination_branch": {"type": "string", "minLength": 1},
+    "controller_digests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canary", "production"],
+      "properties": {
+        "canary": {"$ref": "#/$defs/digest"},
+        "production": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "policy_digest": {"$ref": "#/$defs/digest"},
+    "ruleset_template_digests": {"$ref": "#/$defs/pairDigests"},
+    "ruleset_ids": {"$ref": "#/$defs/pairIds"},
+    "ruleset_fingerprints": {"$ref": "#/$defs/pairDigests"},
+    "required_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "context", "integration_id", "workflow_path", "workflow_run_id",
+        "check_suite_id", "check_run_id", "head_sha"
+      ],
+      "properties": {
+        "context": {"const": "required / ci"},
+        "integration_id": {"const": 15368},
+        "workflow_path": {"type": "string", "pattern": "^\\.github/workflows/.+\\.ya?ml$"},
+        "workflow_run_id": {"type": "integer", "minimum": 1},
+        "check_suite_id": {"type": "integer", "minimum": 1},
+        "check_run_id": {"type": "integer", "minimum": 1},
+        "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "observed_at": {"type": "string", "format": "date-time"},
+    "scenarios": {
+      "type": "array",
+      "minItems": 24,
+      "maxItems": 24,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "mode", "outcome", "evidence"],
+        "properties": {
+          "id": {"enum": [
+            "disabled_bootstrap", "suite_spoof", "duplicate_check", "missing_check",
+            "skipped_check", "neutral_check", "red_check", "exact_bot_identity",
+            "protected_add", "protected_delete", "protected_rename", "file_count_refusal",
+            "head_race_h1", "head_race_h2", "base_race", "stale_approval",
+            "native_arm", "idempotent_rerun", "direct_fallback", "break_glass",
+            "workflow_disable_drain", "pair_rollback_recreate", "draft_conflict_untrusted",
+            "final_zero_residual"
+          ]},
+          "mode": {"enum": ["live", "mocked"]},
+          "outcome": {"const": "pass"},
+          "evidence": {"type": "string", "minLength": 1, "maxLength": 500}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "pairDigests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["merge_safety", "review_gate"],
+      "properties": {
+        "merge_safety": {"$ref": "#/$defs/digest"},
+        "review_gate": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "pairIds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["merge_safety", "review_gate"],
+      "properties": {
+        "merge_safety": {"type": "integer", "minimum": 1},
+        "review_gate": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

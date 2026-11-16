@@ -1,0 +1,10 @@
+# Successor source and policy ownership; same-origin independent review remains required.
+/.github/** @KleinPerkins
+/scripts/** @KleinPerkins
+/tests/** @KleinPerkins
+/_ops/** @KleinPerkins
+/docs/** @KleinPerkins
+/AGENTS.md @KleinPerkins
+/README.md @KleinPerkins
+/OPERATING-MANUAL.md @KleinPerkins
+/Makefile @KleinPerkins

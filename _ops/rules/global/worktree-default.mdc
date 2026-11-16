@@ -1,0 +1,22 @@
+---
+description: Default eligible agent mutation work into isolated git worktrees under the ~/dev operating model.
+alwaysApply: true
+---
+
+# Worktree-by-default mutation discipline
+
+Before local mutation in a governed `~/dev` git repo, start the agent from the Cursor **Agents Window** with the **Worktree** environment selected.
+
+In an already-open session, `_ops/bin/dev-worktree.sh ensure` may create or select a helper worktree. Its printed path is a handoff target, not proof that Cursor moved this agent; continue only in an Agents Window Worktree session rooted at that path.
+
+## Required behavior
+
+- If already in a linked worktree, continue there.
+- If policy excludes the repo (`cpp`, `affirm/vendor/*`, the `~/dev` umbrella repo, or a foreign hook framework), stay put and respect the reason.
+- If the primary tree is dirty, do not relocate, reset, or clean it silently; resolve the existing work first.
+- Commit and push meaningful work from the worktree before yielding so cleanup cannot strand work on one machine.
+- Use `_ops/bin/dev-worktree.sh status|doctor|list|clean` for diagnosis and cleanup.
+
+The helper cannot move the current Cursor agent. Never report a move unless the active workspace root actually changed.
+
+Cursor hooks are only a backstop. The rule above remains mandatory even when hooks are absent, fail open, or cannot classify the repo.

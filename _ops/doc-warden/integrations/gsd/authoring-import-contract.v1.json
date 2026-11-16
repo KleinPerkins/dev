@@ -1,0 +1,25 @@
+{
+  "schema": "doc-warden/gsd-authoring-import/v1",
+  "required_bindings": [
+    "canonical_root",
+    "operation_id",
+    "source_revision",
+    "pin_digest",
+    "interface_digest",
+    "input_digests",
+    "frozen_digests",
+    "preview_digest"
+  ],
+  "allowed_outputs": [
+    ".planning/PROJECT.md",
+    ".planning/config.json",
+    ".planning/REQUIREMENTS.md",
+    ".planning/ROADMAP.md",
+    ".planning/STATE.md",
+    ".planning/phases/*/*-CONTEXT.md",
+    ".planning/phases/*/*-PLAN.md",
+    ".planning/phases/*/*-VALIDATION.md"
+  ],
+  "post_validator": "doc-warden validate-authoring",
+  "execution": "operator_invoke_required"
+}

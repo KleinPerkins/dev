@@ -1,0 +1,512 @@
+{
+  "schema": "dev-ci-contract/v1",
+  "repository_id": 1459458379,
+  "repository_names": [
+    "KleinPerkins/dev-temp",
+    "KleinPerkins/dev"
+  ],
+  "workflow": ".github/workflows/ci.yml",
+  "workflow_name": "CI",
+  "required_check": "ci-required",
+  "actions_app_id": 15368,
+  "reviewer_app_id": 4217367,
+  "shards": [
+    "owner-contracts",
+    "doc-warden",
+    "baseline-scaffold",
+    "host-overlay-lifecycle",
+    "interop-portability",
+    "context-measurement",
+    "review-admission",
+    "ci-negative"
+  ],
+  "commands": {
+    "owner-contracts": [
+      {
+        "id": "owner-source",
+        "argv": [
+          "bash",
+          "_ops/checks/verify-operating-model.sh",
+          "--source-contracts"
+        ]
+      }
+    ],
+    "doc-warden": [
+      {
+        "id": "doc-warden-full",
+        "argv": [
+          "bash",
+          "_ops/checks/doc-warden-verify.sh"
+        ]
+      },
+      {
+        "id": "doc-warden-sandbox",
+        "argv": [
+          "bash",
+          "_ops/checks/doc-warden-verify.sh",
+          "--sandbox"
+        ]
+      }
+    ],
+    "baseline-scaffold": [
+      {
+        "id": "legacy-profile",
+        "argv": [
+          "bash",
+          "_ops/baseline/profiles/pr-automation/test.sh"
+        ]
+      },
+      {
+        "id": "v3-profile",
+        "argv": [
+          "bash",
+          "_ops/baseline/profiles/pr-automation/v3/test.sh"
+        ]
+      }
+    ],
+    "host-overlay-lifecycle": [
+      {
+        "id": "worktree",
+        "argv": [
+          "bash",
+          "_ops/checks/worktree-verify.sh",
+          "--source-only"
+        ]
+      },
+      {
+        "id": "snowkit",
+        "argv": [
+          "bash",
+          "_ops/tests/snow-kit-host-bootstrap.sh"
+        ]
+      },
+      {
+        "id": "removal",
+        "argv": [
+          "bash",
+          "_ops/tests/dev-remove-repo.sh"
+        ]
+      },
+      {
+        "id": "kernel-git-path",
+        "argv": [
+          "bash",
+          "_ops/tests/kernel-guarantee-git-exec-path.sh"
+        ]
+      }
+    ],
+    "interop-portability": [],
+    "context-measurement": [],
+    "review-admission": [],
+    "ci-negative": []
+  },
+  "baseline_tests": [
+    {
+      "path": "_ops/baseline/profiles/pr-automation/test_fleet.py",
+      "owner_shard": "baseline-scaffold"
+    },
+    {
+      "path": "_ops/baseline/profiles/pr-automation/test_profile.py",
+      "owner_shard": "baseline-scaffold"
+    },
+    {
+      "path": "_ops/baseline/profiles/pr-automation/v3/test_prepare_candidate_tuple.py",
+      "owner_shard": "baseline-scaffold"
+    },
+    {
+      "path": "_ops/baseline/profiles/pr-automation/v3/test_profile.py",
+      "owner_shard": "baseline-scaffold"
+    },
+    {
+      "path": "_ops/context-measurement/test_capability_discovery_inventory.py",
+      "owner_shard": "context-measurement"
+    },
+    {
+      "path": "_ops/context-measurement/test_correction_dogfood.py",
+      "owner_shard": "context-measurement"
+    },
+    {
+      "path": "_ops/context-measurement/test_kp_context_measure.py",
+      "owner_shard": "context-measurement"
+    },
+    {
+      "path": "_ops/context-measurement/test_release2_closure.py",
+      "owner_shard": "context-measurement"
+    },
+    {
+      "path": "_ops/context-measurement/test_validate_static_context_manifest.py",
+      "owner_shard": "context-measurement"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_activation.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_adr_legacy_basename.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_adrs.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_artifacts.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_authoring_binding.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_bootstrap.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_canonical.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_cli.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_config_schema.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_cross_repo_dependencies.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_dashboard.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_defect_authority.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_defect_promotion.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_defects.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_delivery_contract.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_dependencies.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_dependency_property_cases.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_external_assets.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_gsd_adapter.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_hook_contract.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_intents.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_inventory.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_live_install.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_migrate.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_native_delivery.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_new_repo.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_new_repo_e2e.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_plan_invalidation.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_product_lifecycle.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_receipts.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_reconcile.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_rigor.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_roadmap.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_runtime_qualification.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_save_game_adapter.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_scm.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_test_sharding.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_transactions.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_triggers.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_ui_contract.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/doc-warden/v2/tests/test_validators.py",
+      "owner_shard": "doc-warden"
+    },
+    {
+      "path": "_ops/interoperability/test_canvas_design_canary.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_codex_work_rules.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_contracts.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_imported_skill_isolation.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_internal_comms_canary.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_isokit_migration.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_isokit_retained.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_mcp_maintenance.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_mcp_maintenance_owner_api.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_mcp_migration.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_mcp_registrar_slice.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_native_rules.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_plan_refine_canary.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_plan_refine_fixture.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_rule_preparation.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_selected_skill_canary.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_session_lock.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_skill_migration.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_theme_factory_canary.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/interoperability/test_theme_factory_retained.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_device_attestation.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_engine.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_package.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_baseline.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_controls.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_doc_v2_read.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_doctor.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_documentation.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_git.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_gsd_codex_bundle.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_gsd_codex_source.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_linked_diagnostics.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_linked_registry.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_linked_worktree.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_native_imports.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_native_skill_creator.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_profile.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_remote.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_scope.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/portability/test_personal_worktree.py",
+      "owner_shard": "interop-portability"
+    },
+    {
+      "path": "_ops/tests/test_awa_evidence_binding.py",
+      "owner_shard": "host-overlay-lifecycle"
+    },
+    {
+      "path": "_ops/tests/test_identity_dispatcher.py",
+      "owner_shard": "host-overlay-lifecycle"
+    },
+    {
+      "path": "_ops/tests/test_shadow_sync_host_policy.py",
+      "owner_shard": "host-overlay-lifecycle"
+    },
+    {
+      "path": "_ops/verification/test_contracts.py",
+      "owner_shard": "owner-contracts"
+    },
+    {
+      "path": "_ops/verification/test_path_gate.py",
+      "owner_shard": "owner-contracts"
+    },
+    {
+      "path": "_ops/verification/test_runner.py",
+      "owner_shard": "owner-contracts"
+    },
+    {
+      "path": "_ops/verification/test_selector.py",
+      "owner_shard": "owner-contracts"
+    }
+  ],
+  "host_only": [
+    "installed rules/config/guards",
+    "multi-repository ecosystem checks",
+    "dependency runtime installation"
+  ],
+  "allowed_skip_reasons": [
+    "explicit source-qualified owner package required",
+    "explicit retained D1 wheel and owner Git source required",
+    "actionlint unavailable",
+    "relative-link fixture requires Git >=2.48; no older/native equivalence is asserted",
+    "relative-link synthetic fixture needs Git >=2.48",
+    "object-freshening red control is bound to qualified Mac Git; no older equivalence asserted",
+    "exact owner wheel/Git integration requires explicit retained binding paths"
+  ],
+  "nonpassing_runtime_cases": [
+    "test_cli.CliTests.test_runtime_install_requires_digest_bound_generic_apply",
+    "test_live_install.LiveInstallTests.test_live_install_then_uninstall_is_idempotent_back_to_real_home_sentinels",
+    "test_live_install.LiveInstallTests.test_live_doctor_cli_surfaces_stale_status_and_require_current"
+  ]
+}

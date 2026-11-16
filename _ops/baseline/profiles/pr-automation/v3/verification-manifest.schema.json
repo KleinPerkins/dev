@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "DiscoveryKind": {"enum": ["literal_stdout"], "type": "string"},
+    "Job": {
+      "additionalProperties": false,
+      "properties": {
+        "argv": {
+          "items": {"maxLength": 4096, "minLength": 1, "type": "string"},
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "discovery": {"$ref": "#/$defs/PositiveDiscovery"},
+        "environment": {
+          "additionalProperties": {"type": "string"},
+          "maxProperties": 32,
+          "propertyNames": {
+            "allOf": [
+              {"pattern": "^[A-Z_][A-Z0-9_]{0,63}$"},
+              {"not": {"pattern": "(TOKEN|SECRET|PASSWORD|KEY|CREDENTIAL|AUTH)"}}
+            ]
+          },
+          "type": "object"
+        },
+        "id": {"type": "string"},
+        "image": {"pattern": "^[^\\s]+@sha256:[0-9A-Fa-f]{64}$", "type": "string"},
+        "limits": {"$ref": "#/$defs/ResourceLimits"},
+        "network": {"$ref": "#/$defs/NetworkMode"}
+      },
+      "required": ["id", "image", "argv", "environment", "network", "discovery", "limits"],
+      "type": "object"
+    },
+    "NetworkMode": {"enum": ["none"], "type": "string"},
+    "PositiveDiscovery": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"$ref": "#/$defs/DiscoveryKind"},
+        "literal": {"maxLength": 256, "minLength": 1, "type": "string"}
+      },
+      "required": ["kind", "literal"],
+      "type": "object"
+    },
+    "ResourceLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "cpus_millis": {"format": "uint32", "maximum": 16000, "minimum": 10, "type": "integer"},
+        "disk_mib": {"format": "uint32", "maximum": 32768, "minimum": 1, "type": "integer"},
+        "inodes": {"format": "uint32", "maximum": 1000000, "minimum": 16, "type": "integer"},
+        "memory_mib": {"format": "uint32", "maximum": 32768, "minimum": 16, "type": "integer"},
+        "output_bytes": {"format": "uint32", "maximum": 16777216, "minimum": 1, "type": "integer"},
+        "pids": {"format": "uint32", "maximum": 1024, "minimum": 1, "type": "integer"},
+        "timeout_seconds": {"format": "uint32", "maximum": 3600, "minimum": 1, "type": "integer"}
+      },
+      "required": [
+        "timeout_seconds",
+        "cpus_millis",
+        "memory_mib",
+        "pids",
+        "disk_mib",
+        "inodes",
+        "output_bytes"
+      ],
+      "type": "object"
+    },
+    "SecondarySource": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {"pattern": "^sha256:[0-9A-Fa-f]{64}$", "type": "string"},
+        "kind": {"$ref": "#/$defs/SourceKind"},
+        "uri": {"pattern": "^(https|oci)://", "type": "string"}
+      },
+      "required": ["kind", "uri", "digest"],
+      "type": "object"
+    },
+    "SourceKind": {"enum": ["oci_artifact", "git_bundle"], "type": "string"}
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "jobs": {
+      "items": {"$ref": "#/$defs/Job"},
+      "maxItems": 16,
+      "minItems": 1,
+      "type": "array"
+    },
+    "secondary_sources": {
+      "items": {"$ref": "#/$defs/SecondarySource"},
+      "maxItems": 16,
+      "type": "array"
+    },
+    "version": {"const": "pr-automation-verification/v1", "type": "string"}
+  },
+  "required": ["version", "jobs", "secondary_sources"],
+  "title": "VerificationManifest",
+  "type": "object"
+}

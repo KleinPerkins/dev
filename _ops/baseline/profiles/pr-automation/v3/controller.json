@@ -1,0 +1,132 @@
+{
+  "schema": "pr-automation-controller-binding/v3",
+  "check_name": "pr-automation / verify",
+  "verifier": {
+    "app_id": 4274739,
+    "integration_id": 4274739,
+    "slug": "kleinperkins-verify-bot",
+    "installation_id": 145944952
+  },
+  "reviewer": {
+    "app_id": 4269364,
+    "integration_id": 4269364,
+    "slug": "kleinperkins-review-bot",
+    "installation_id": 145790860
+  },
+  "release": {
+    "version": "v0.13.0",
+    "commit": "9be8235a76ae241a925b1273c9688ccdadfc8548",
+    "digest": "sha256:3d0b6b34d29b6d0c9ae94daa8dd4cd1182ae3bb9375944322c58febc52fec07c",
+    "lock_compiler_digest": "sha256:41eae41a36bed2945be2cd3f3c380a9e1d5d89ef73f61e0669f010468dae90a6",
+    "activation_generation": 3,
+    "lock_contract_version": 1
+  },
+  "runtime": {
+    "poll_timeout_seconds": 8100,
+    "systemd": {
+      "timeout_start_seconds": 8400,
+      "timeout_stop_seconds": 180,
+      "kill_mode": "control-group"
+    }
+  },
+  "images": {
+    "fetch": "alpine/git@sha256:c0280cf9572316299b08544065d3bf35db65043d5e3963982ec50647d2746e26",
+    "execution": "buildpack-deps@sha256:877e9e4d949edfbcbedabc3a2d7ab593955fee5d6d0777adf3a991eb30c750d8",
+    "profile_overrides": {
+      "awa-authoritative-verify.v1": "ghcr.io/kleinperkins/awa-authoritative-verify@sha256:b703c579ac68cfedf72f76f9272bae5f6fd7379a9afec40b79ff40b9fc9d90ce"
+    }
+  },
+  "ruleset_fingerprints": {
+    "runtime_app_visible": [
+      "sha256:903f1f66c4f3519378395d2c04cc31465fcc0188e07028cd8b3f9d8ad1f1e28f"
+    ],
+    "operator_full": [
+      "sha256:4ff6db9657ebf30b8ce45d2b43060cb4c34e139df1fe277bce486146d810974e"
+    ],
+    "repository_overrides": {
+      "1271164179": {
+        "operator_full": [
+          "sha256:e1454004b8dea2dd071ae4a6417acfaa5de1fd05f9e9212680921ca395b033bf"
+        ],
+        "runtime_app_visible": [
+          "sha256:a2c29466611d4f73471e7cc437f7eef8be0ec6d79126f6bfa9903e87c4235ee1"
+        ]
+      },
+      "1275604090": {
+        "operator_full": [
+          "sha256:0edbcbac4b41827dc87b007b8e27c1ea6455a361d9820591eaeda934620658d5"
+        ],
+        "runtime_app_visible": [
+          "sha256:1ed526a60d5b67008c5d532a78b8374991a50108ad37c7d7556e6e4a9a1800fa"
+        ]
+      },
+      "1278387789": {
+        "operator_full": [
+          "sha256:1e2bc2245d980fdd4b2cc6a393dfed2f2f35f914c7d089f87104f154dcb85216"
+        ],
+        "runtime_app_visible": [
+          "sha256:9d576bc9683055249964b3d3a48a2bd3dd5c4768b1f63059c8324ea2c3eac2b4"
+        ]
+      },
+      "1281300995": {
+        "operator_full": [
+          "sha256:b1b7a3d69f8c88f09d85f771beb0a857799de8cba7829b75f898d09b99346be1"
+        ],
+        "runtime_app_visible": [
+          "sha256:c8fde1f50a0a277c838f172edfc47297a2bd15d7fc3ded7458aef346f26ea1e8"
+        ]
+      },
+      "1284625858": {
+        "operator_full": [
+          "sha256:a2065286a4e489b7b0eca276957c49c486d5d275ed97c3a0ee2f8c4745c36c85"
+        ],
+        "runtime_app_visible": [
+          "sha256:d122ca2f135b072192a9f9f67928569c94fd93ab095dd720490738998de2aa07"
+        ]
+      },
+      "1289571438": {
+        "operator_full": [
+          "sha256:536bca2e9fa1f6beb2afef4bf55e5ee2705cc5c595587a80cf4c2c8ed3b9abb5"
+        ],
+        "runtime_app_visible": [
+          "sha256:9c7331fbd34c4d2631258d8c1217e65024c0b4e1d43e3946f6a25193199050ee"
+        ]
+      },
+      "1294651532": {
+        "operator_full": [
+          "sha256:67398c3db5ccac5aefef58bf4a2aafcad41896a0d17f9e07b15a7a901c77515a"
+        ],
+        "runtime_app_visible": [
+          "sha256:18d01ea71496cc25315073a85f5e221c7b36b8d88e8d26439cf039cb6c1395fd"
+        ]
+      },
+      "1297059298": {
+        "operator_full": [
+          "sha256:1d7edf56d65cee0fb9fea5876f43b3927a66c5e2b20a4c39ee31212a258fc77d"
+        ],
+        "runtime_app_visible": [
+          "sha256:d934ec23260a9e4c6e6ab80d9a3a4ce8700c082b0931d9b35aba50059e44d80a"
+        ]
+      },
+      "1297666445": {
+        "operator_full": [
+          "sha256:2374e55ef18a65b111630251717c10a05eb8ed353c292fb6ffda59b456deb318"
+        ],
+        "runtime_app_visible": [
+          "sha256:59bab03df9a20422fe8a29b13c3c2a4655003ede4c681e4a17853428a2df7517"
+        ]
+      },
+      "1317232260": {
+        "operator_full": [
+          "sha256:72c5277681b5f2296f8210f5ac29010df95fe0607215b64a41d0f0836ffad5b3"
+        ],
+        "runtime_app_visible": [
+          "sha256:f5e80627ca1c737f333837dc68059dc758201e98a9bea2f2b8e00e72dcbffc50"
+        ]
+      }
+    },
+    "visibility_note": "Two fingerprints, one ruleset, two viewers. runtime_app_visible (903f…) is what the verifier/reviewer GitHub Apps compute over kleinperkins-merge-safety, because GitHub App installation tokens REDACT bypass_actors — the Apps literally cannot see the admin bypass, so their view (and the fingerprint the controller pins for them) is bypass-free and UNCHANGED by the D3 (2026-07-30) admin-bypass bake-in. operator_full (4ff6…) is the owner/admin view, which DOES include bypass_actors and is what merge-safety.ruleset.json.tmpl now renders + `verify-control-plane` recomputes and asserts. The owner attests the operator_full layer separately since app tokens cannot see it.",
+    "home_merge_safety_bypass_note": "D3 (2026-07-30) — PERMANENT FLEET-WIDE ADMIN BYPASS (reverses the prior zero-bypass invariant). Every pr-controlled target's kleinperkins-merge-safety ruleset now grants RepositoryRole admin (actor_id 5) a bypass_mode:pull_request bypass (baked into merge-safety.ruleset.json.tmpl, so newly-activated repos inherit it and the reconcile verb self-heals it), giving current_user_can_bypass=pull_requests_only for the repo owner. Rationale: a governed PR touching protected paths (.github/CODEOWNERS/_ops) is BLOCKED whenever the local controller is paused/offline and cannot post the required `pr-automation / verify` Check; the admin pull_request bypass is the break-glass path (`gh pr merge --squash --admin`) so the solo owner is never permanently locked out — the exact analog of the history-integrity ruleset's admin bypass (§6, _ops/baseline/README.md). Controller-safe: GitHub App installation tokens REDACT bypass_actors, so the verifier/reviewer Apps never observe this bypass and the app-visible ruleset fingerprint they enforce/attest (runtime_app_visible, 903f…) is unchanged — only the owner-visible operator_full layer changes. Proven safe in production: KleinPerkins/pr-automation-controller (the controller's own home repo, merge-safety id 18817498) has run with exactly this bypass live for a while with no App-side impact. It never weakens any real protection: deletion, non_fast_forward, linear history, resolved-conversation, squash-only, and the required Check rules are all untouched."
+  },
+  "hard_exclusions": ["KleinPerkins/chaos-scheduler"]
+}

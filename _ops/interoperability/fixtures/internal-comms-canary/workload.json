@@ -1,0 +1,40 @@
+{
+  "schema": "interoperability/internal-comms-workload/v1",
+  "required_skills": [
+    "internal-comms"
+  ],
+  "scope": "One entirely fictional Canopy Tools personal migration fixture; no real company or service access.",
+  "outputs": [
+    "3p-update.md",
+    "newsletter.md",
+    "faq.md",
+    "announcement.md",
+    "clarification.md",
+    "worker-notes.md"
+  ],
+  "request": "Use the actual native Internal Comms skill and all four guideline files to draft the six named outputs from the supplied source-notes.json only.",
+  "steps": [
+    "Read the actual native catalog-selected internal-comms/SKILL.md and all four examples guidelines. These source reads must appear in the tool trace; matching names or declaring that you read them is insufficient.",
+    "Treat all source notes and example.invalid links as supplied synthetic authoritative material. Do not open any URL, connector, account, email, calendar, Slack, Drive or other service. The links are citation data only. Do not invent facts, figures, dates or human confirmations.",
+    "Write 3p-update.md in exactly four nonempty lines: one emoji, Canopy Tools and the reporting period in parentheses; then Progress:, Plans:, Problems: with 1-3 concise sentences each. Use the supplied Seed Hub launch metrics, next-week plans and translation blocker.",
+    "Write newsletter.md for the whole fictional company with at least three topical sections and exactly20 top-level bullets, one for each supplied newsletter fact. Use one corresponding source link per bullet, 1-2 sentences each, and collective we voice in at least12 items. Avoid duplicate facts or team-only detail.",
+    "Write faq.md answering the four exact supplied questions in order. Use alternating - *Question*: and - *Answer*: lines, one question sentence and1-2 answer sentences each, with a supplied official source link. The offline release answer must explicitly say unconfirmed and refer the decision to the owner; do not make up a date.",
+    "Write announcement.md for the supplied audience, purpose, tone and format. Lead with Seed Hub maintenance, include November4 at09:00 UTC for2 minutes and the action save your drafts. The four general-guideline context fields are already supplied for this scenario.",
+    "For the separate incomplete general request, write clarification.md asking about audience, purpose, tone and format, in at most70 words. Do not invent or apply answers or write another announcement.",
+    "Write worker-notes.md in at most200 words identifying the four actual guideline filenames and the supplied-context or clarification decision. Do not claim serving-model identity, full migration acceptance or retained installation.",
+    "Write only the six named Markdown files within the supplied fixture root, with private file modes. Preserve fixture-owner.json and source-notes.json. Do not edit source, home configuration, links, operation records, other clients, services, actual repositories or any other path.",
+    "No network, downloads, external assets, nested workers, browser or app launches, work/Affirm or protected-component access. The parent checks outputs and semantic fidelity after exact rollback."
+  ],
+  "parent_protocol": {
+    "native_tool": "collaboration.spawn_agent",
+    "worker_count": 1,
+    "requested_model": "gpt-6.1-sol",
+    "reasoning_effort": "high",
+    "fork_turns": "none",
+    "immediate_first_wait_ms": 60000,
+    "interrupt_if_unfinished_after_first_wait": true,
+    "strict_actual_worker_deadline_ms": 120000,
+    "rollback_after_every_outcome": true,
+    "retained_installation_authorized": false
+  }
+}

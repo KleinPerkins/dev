@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# data-guard — commit-time scan for likely secrets / PII / oversized-data files (T5 / analytics D1).
+#
+# Source of truth: KleinPerkins/dev _ops/hooks/data-guard. SELF-CONTAINED so the installer
+# (_ops/bin/install-identity-guard.sh) can COPY it into a sibling repo's active hooks dir; the
+# dev repo's own pre-commit also calls it. Runs over the STAGED files only (fast, targeted).
+#
+# WHY THIS EXISTS: nothing stopped a PM from committing a Snowflake-pulled PII CSV, a large data
+# dump, or a `.env`/credential file — a privacy + secret-leak + repo-bloat hazard. This turns that
+# into a teachable block with a clear, copy-pasteable override for the rare intentional case.
+#
+# SEVERITY (designed to MINIMIZE false positives):
+#   BLOCK (exit 1):
+#     • credential/secret FILENAMES (.env, *.pem/*.key/*.p12/*.pfx/*.jks, id_rsa*, .netrc, .pgpass,
+#       credentials*, *.kdbx, service-account*.json)
+#     • high-confidence secret CONTENT (private-key headers, AWS AKIA…, GitHub/Slack tokens)
+#     • oversized files (> DATA_GUARD_MAX_BYTES, default 10 MiB) — likely a data/binary dump
+#     • data files (*.csv/*.tsv/*.parquet/*.xlsx/*.pkl/*.sqlite …) that are oversized OR carry a
+#       PII-looking header (email/ssn/phone/dob/first_name/last_name/address …)
+#   WARN (does not block): small data files outside the cases above (FYI only).
+#
+# OVERRIDE (intentional cases): re-run with  DATA_GUARD_ALLOW=1 git commit …
+#   (or set DATA_GUARD_ALLOW=1 for the session). Document WHY in your commit message.
+# Disable entirely (e.g. CI):  export DATA_GUARD=0
+#
+# Fails OPEN on any internal error — a bug here must never wedge a legitimate commit.
+set -uo pipefail
+
+case "${DATA_GUARD:-1}" in 0|no|off|false) exit 0 ;; esac
+
+git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+MAX_BYTES="${DATA_GUARD_MAX_BYTES:-10485760}"   # 10 MiB
+
+# Staged, added/copied/modified files (NUL-safe; bash 3.2-compatible read loop).
+STAGED=()
+while IFS= read -r -d '' f; do STAGED+=("$f"); done \
+  < <(git diff --cached --name-only --diff-filter=ACM -z 2>/dev/null)
+[ "${#STAGED[@]}" -gt 0 ] || exit 0
+
+blocks=()   # "path :: reason"
+warns=()
+
+_blob_size() {  # staged blob size in bytes (falls back to worktree size)
+  local p="$1" sz
+  sz="$(git cat-file -s ":$p" 2>/dev/null)" || sz=""
+  if [ -z "$sz" ] && [ -f "$p" ]; then sz="$(wc -c < "$p" 2>/dev/null | tr -d ' ')"; fi
+  printf '%s' "${sz:-0}"
+}
+
+for f in "${STAGED[@]}"; do
+  [ -n "$f" ] || continue
+  base="$(basename "$f")"
+  lower="$(printf '%s' "$f" | tr '[:upper:]' '[:lower:]')"
+  size="$(_blob_size "$f")"
+
+  # 1) credential / secret FILENAMES (high confidence) -----------------------
+  case "$base" in
+    .env|.env.*)
+      case "$base" in .env.example|.env.sample|.env.template|.env.dist) : ;; *) blocks+=("$f :: looks like an environment/secret file (.env)") ; continue ;; esac ;;
+  esac
+  case "$lower" in
+    *.pem|*.key|*.p12|*.pfx|*.jks|*.keystore|*.kdbx) blocks+=("$f :: key/credential file extension"); continue ;;
+    *id_rsa|*id_dsa|*id_ecdsa|*id_ed25519) blocks+=("$f :: private SSH key"); continue ;;
+    *.pub) : ;;  # public keys are fine
+  esac
+  case "$base" in
+    credentials|credentials.*|.netrc|.pgpass) blocks+=("$f :: credentials file"); continue ;;
+    service-account*.json|*-service-account.json) blocks+=("$f :: service-account key file"); continue ;;
+  esac
+
+  # 2) oversized any file ----------------------------------------------------
+  if [ "$size" -gt "$MAX_BYTES" ] 2>/dev/null; then
+    blocks+=("$f :: file is $((size/1024/1024)) MiB (> $((MAX_BYTES/1024/1024)) MiB cap) — likely a data/binary dump"); continue
+  fi
+
+  # 3) data files: block if oversized (handled above) or PII-looking header --
+  case "$lower" in
+    *.csv|*.tsv|*.parquet|*.xlsx|*.xls|*.feather|*.pkl|*.pickle|*.h5|*.hdf5|*.sqlite|*.sqlite3|*.db|*.dta|*.sav)
+      # PII heuristic only for delimited text we can read (csv/tsv); binaries → WARN by size only.
+      case "$lower" in
+        *.csv|*.tsv)
+          hdr="$(git show ":$f" 2>/dev/null | LC_ALL=C head -1 | tr '[:upper:]' '[:lower:]')"
+          if printf '%s' "$hdr" | grep -Eq '(^|[,;	"])(email|e-mail|ssn|social_security|phone|mobile|dob|date_of_birth|first_name|last_name|full_name|address|zip(code)?|account_number|card_number|customer_id|user_id)([,;	"]|$)'; then
+            blocks+=("$f :: CSV/TSV header looks like PII (email/ssn/phone/name/address/…)"); continue
+          fi
+          ;;
+      esac
+      warns+=("$f :: data file ($((size/1024)) KiB) — confirm it carries no PII before committing")
+      continue ;;
+  esac
+
+  # 4) high-confidence secret CONTENT in text files --------------------------
+  if [ "$size" -le 524288 ] 2>/dev/null; then   # only scan small text blobs (<=512 KiB)
+    content="$(git show ":$f" 2>/dev/null | LC_ALL=C head -c 524288)"
+    if printf '%s' "$content" | grep -Eq -- '-----BEGIN ([A-Z ]+ )?PRIVATE KEY-----'; then blocks+=("$f :: embedded PRIVATE KEY block"); continue; fi
+    if printf '%s' "$content" | grep -Eq 'AKIA[0-9A-Z]{16}'; then blocks+=("$f :: embedded AWS access key id (AKIA…)"); continue; fi
+    if printf '%s' "$content" | grep -Eq 'ghp_[0-9A-Za-z]{36}|github_pat_[0-9A-Za-z_]{50,}'; then blocks+=("$f :: embedded GitHub token"); continue; fi
+    if printf '%s' "$content" | grep -Eq 'xox[baprs]-[0-9A-Za-z-]{10,}'; then blocks+=("$f :: embedded Slack token"); continue; fi
+    if printf '%s' "$content" | grep -Eiq 'aws_secret_access_key[[:space:]]*=[[:space:]]*[0-9A-Za-z/+]{40}'; then blocks+=("$f :: embedded AWS secret access key"); continue; fi
+  fi
+done
+
+# WARN lines are informational (never block).
+if [ "${#warns[@]}" -gt 0 ]; then
+  printf '  ⚠ data-guard (advisory): %s\n' "${warns[@]}" >&2
+fi
+
+[ "${#blocks[@]}" -eq 0 ] && exit 0
+
+# Override hatch (intentional cases).
+if [ "${DATA_GUARD_ALLOW:-0}" = "1" ]; then
+  printf '  data-guard: OVERRIDDEN by DATA_GUARD_ALLOW=1 — committing flagged file(s):\n' >&2
+  printf '    • %s\n' "${blocks[@]}" >&2
+  exit 0
+fi
+
+repo="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
+cat >&2 <<EOF
+
+  ✖ data-guard: commit BLOCKED — staged file(s) look like secrets / PII / oversized data.
+
+      repo: $repo
+EOF
+printf '      • %s\n' "${blocks[@]}" >&2
+cat >&2 <<EOF
+
+  WHY: PII, credentials, and large data dumps must never enter git history — they leak privately
+  sensitive data, expose secrets, and permanently bloat the repo (history can't be un-committed easily).
+
+  WHAT TO DO:
+    • A secret/credential? Move it OUT of the repo (keep it at \$HOME or in a secret manager) and
+      unstage it:   git restore --staged <file>
+    • Data/PII you pulled (e.g. a Snowflake CSV)? Keep it in a gitignored data dir; don't commit it.
+    • Genuinely intentional + safe (e.g. a tiny non-PII sample / a fixture)? Override explicitly:
+          DATA_GUARD_ALLOW=1 git commit …
+      and say WHY in the commit message.
+
+  (Emergency bypass, discouraged: git commit --no-verify.)
+EOF
+exit 1

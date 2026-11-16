@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KleinPerkins/dev/pr-automation/v2",
+  "title": "KleinPerkins PR automation Phase B policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "profile",
+    "controller",
+    "required_workflow",
+    "rulesets",
+    "settings",
+    "protected_paths",
+    "self_enrollment",
+    "hard_exclusions"
+  ],
+  "properties": {
+    "schema": {"const": "pr-automation/v2"},
+    "profile": {"const": "pr-automation"},
+    "controller": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workflow_name",
+        "workflow_path",
+        "activation_variable",
+        "app_id_variable",
+        "app_id",
+        "private_key_secret",
+        "app_slug",
+        "bot_login",
+        "author_allowlist"
+      ],
+      "properties": {
+        "workflow_name": {"const": "controller"},
+        "workflow_path": {"const": ".github/workflows/controller.yml"},
+        "activation_variable": {"const": "AUTOMERGE_ENABLED"},
+        "app_id_variable": {"const": "AUTOMERGE_APP_ID"},
+        "app_id": {"const": 4269364},
+        "private_key_secret": {"const": "AUTOMERGE_APP_PRIVATE_KEY"},
+        "app_slug": {"const": "kleinperkins-review-bot"},
+        "bot_login": {"const": "kleinperkins-review-bot[bot]"},
+        "author_allowlist": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "required_workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "path", "context", "integration_id"],
+      "properties": {
+        "name": {"const": "required"},
+        "path": {"const": ".github/workflows/required.yml"},
+        "context": {"const": "required / ci"},
+        "integration_id": {"const": 15368}
+      }
+    },
+    "rulesets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["merge_safety", "review_gate"],
+      "properties": {
+        "merge_safety": {"const": "kleinperkins-merge-safety"},
+        "review_gate": {"const": "kleinperkins-review-gate"}
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allow_auto_merge",
+        "delete_branch_on_merge",
+        "allow_update_branch",
+        "allow_squash_merge",
+        "allow_merge_commit",
+        "allow_rebase_merge"
+      ],
+      "properties": {
+        "allow_auto_merge": {"const": true},
+        "delete_branch_on_merge": {"const": true},
+        "allow_update_branch": {"const": false},
+        "allow_squash_merge": {"const": true},
+        "allow_merge_commit": {"const": false},
+        "allow_rebase_merge": {"const": false}
+      }
+    },
+    "protected_paths": {
+      "type": "array",
+      "minItems": 6,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "self_enrollment": {
+      "type": "array",
+      "contains": {"const": "KleinPerkins/dev"},
+      "uniqueItems": true
+    },
+    "hard_exclusions": {
+      "type": "array",
+      "contains": {"const": "KleinPerkins/chaos-scheduler"},
+      "uniqueItems": true
+    }
+  }
+}

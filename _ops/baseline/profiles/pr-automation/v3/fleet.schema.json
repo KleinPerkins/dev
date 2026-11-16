@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "owner", "future_repo_policy", "targets", "excluded"],
+  "properties": {
+    "schema": {"const": "pr-automation-fleet/v3"},
+    "owner": {"const": "KleinPerkins"},
+    "future_repo_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eligible_private_source_repos_default", "opt_out_flag", "remote_activation"],
+      "properties": {
+        "eligible_private_source_repos_default": {"const": "stage-runnerless-v3"},
+        "opt_out_flag": {"const": "--no-pr-automation"},
+        "remote_activation": {"const": "explicit-after-canary"}
+      }
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 14,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "repo",
+          "repository_id",
+          "default_branch",
+          "merge_safety_ruleset_id",
+          "cohort",
+          "status"
+        ],
+        "properties": {
+          "repo": {"type": "string", "pattern": "^KleinPerkins/[A-Za-z0-9._-]+$"},
+          "repository_id": {"type": "integer", "minimum": 1},
+          "default_branch": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "merge_safety_ruleset_id": {
+            "type": ["integer", "null"],
+            "minimum": 1
+          },
+          "cohort": {"enum": ["validation", "pilot", "leaves", "providers", "custom", "self", "final"]},
+          "status": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "excluded": {
+      "type": "array",
+      "contains": {
+        "type": "object",
+        "required": ["repo"],
+        "properties": {"repo": {"const": "KleinPerkins/chaos-scheduler"}}
+      },
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["repo", "reason"],
+        "properties": {
+          "repo": {"type": "string", "pattern": "^KleinPerkins/[A-Za-z0-9._-]+$"},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

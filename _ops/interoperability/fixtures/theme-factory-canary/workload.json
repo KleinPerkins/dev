@@ -1,0 +1,37 @@
+{
+  "schema": "interoperability/theme-factory-workload/v1",
+  "required_skills": [
+    "theme-factory"
+  ],
+  "scope": "One fictional, local, offline Seed Library qualification; no real artifact selection or owner consent is inferred from fixture data.",
+  "outputs": [
+    "botanical.html",
+    "awaiting-selection.md",
+    "custom-theme.json",
+    "worker-notes.md"
+  ],
+  "request": "Use the actual native Theme Factory skill and its Botanical Garden definition for the three synthetic selection states in source-notes.json.",
+  "steps": [
+    "Read the actual native catalog-selected theme-factory/SKILL.md and themes/botanical-garden.md. Both reads must appear in the actual tool trace. Preserve the original theme-showcase.pdf and all source bytes.",
+    "Read source-notes.json. Its selected case explicitly supplies the fictional owner's prior showcase presentation and Botanical Garden choice. This does not authorize native exposure, retention or modification of any real user's artifact.",
+    "Write botanical.html as one compact, self-contained Seed Library handout. Include the exact supplied heading, tagline and three seed names. Use all four Botanical Garden colors as swatches, --background, --text, --heading and --accent variables exactly as supplied, and readable body text; the orange accent is not body text. Set body background/color from those variables and use a heading at least24px. No JavaScript, images, network or external resources.",
+    "Use @font-face with ThemeHeaders mapped to fonts/DejaVuSerif-Bold.ttf and ThemeBody mapped to fonts/DejaVuSans.ttf. Use ThemeHeaders for headings and ThemeBody for body text. These private inputs and their full bundled license are seeded by the parent; do not download, edit or install any font.",
+    "For the separate unselected request, write awaiting-selection.md in at most90 words. Offer a Markdown file link to the unchanged actual canonical theme-showcase.pdf, ask which theme to use, and explicitly wait for selection. Create no unselected.html or other artifact.",
+    "For the unreviewed custom request, write custom-theme.json with exactly name, colors, fonts, applied and review_required. Use name Seed Workshop, colors with background/text/accent hex strings, and fonts with headers/body strings. Choose blue/cream roles with normal-text contrast at least4.5:1; set applied:false and review_required:true. Propose for review only; do not apply it to botanical.html.",
+    "Write worker-notes.md in at most160 words identifying the two actual source reads and the distinct selected/unselected/custom-review decisions. Do not claim serving-model identity, full native acceptance, retention or migration completion.",
+    "Write only the four output files in the supplied private fixture root, each mode0600. Preserve fixture-owner.json, source-notes.json and fonts/. Do not modify operation records, source/config/links, other clients, actual repositories or other roots.",
+    "No nested workers, browser/app launches, network, downloads, connectors, services, work/Affirm or protected-component access. The parent must roll back the exact temporary link after every outcome before checking the saved artifact locally."
+  ],
+  "parent_protocol": {
+    "native_tool": "collaboration.spawn_agent",
+    "worker_count": 1,
+    "requested_model": "gpt-6.1-sol",
+    "reasoning_effort": "high",
+    "fork_turns": "none",
+    "immediate_first_wait_ms": 60000,
+    "interrupt_if_unfinished_after_first_wait": true,
+    "strict_actual_worker_deadline_ms": 120000,
+    "rollback_after_every_outcome": true,
+    "retained_installation_authorized": false
+  }
+}

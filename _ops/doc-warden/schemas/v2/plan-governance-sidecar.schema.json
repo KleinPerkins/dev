@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "accepted": {"type": "boolean"},
+    "artifact_id": {"pattern": "^PLAN-[0-9a-f-]{36}-[0-9a-f-]{36}$", "type": "string"},
+    "artifact_version": {"minimum": 1, "type": "integer"},
+    "assumptions": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {"anyOf": [{"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}, {"type": "null"}]},
+          "id": {"minLength": 1, "type": "string"},
+          "kind": {"enum": ["requirement", "design", "adr", "dependency", "code", "schema"]},
+          "path": {"type": ["string", "null"]},
+          "provider_revision": {"type": ["string", "null"]},
+          "relation": {"anyOf": [{"enum": ["contains", "derives_from", "satisfies", "implements", "verifies", "depends_on_planned", "depends_on_observed", "blocks", "supersedes", "invalidates", "references_asset", "affects_code", "released_by", "duplicates", "recurs_as", "waives"]}, {"type": "null"}]},
+          "repository_key": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+          "requirement_ids": {"items": {"type": "string"}, "type": "array", "uniqueItems": true},
+          "revision": {"anyOf": [{"pattern": "^(no-head|[0-9a-f]{40})$", "type": "string"}, {"type": "null"}]},
+          "schema": {"const": "doc-warden/plan-assumption/v1"},
+          "source_id": {"type": ["string", "null"]},
+          "symbol": {"type": ["string", "null"]},
+          "target_id": {"minLength": 1, "type": "string"},
+          "target_kind": {"enum": ["project", "prd", "requirement", "spec", "uxr", "design", "asset", "prototype", "sketch", "spike", "adr", "plan", "summary", "verification", "uat", "release", "defect", "file", "symbol", "schema", "test", "repository", "external_asset", "roadmap", "milestone", "task", "decision", "dependency", "code"]},
+          "task_ids": {"items": {"type": "string"}, "type": "array", "uniqueItems": true},
+          "version": {"type": ["integer", "null"]}
+        },
+        "required": ["schema", "id", "kind", "source_id", "target_id", "target_kind", "version", "digest", "repository_key", "revision", "provider_revision", "path", "symbol", "relation", "task_ids", "requirement_ids"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "canonical_plan_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "design_digests": {
+      "additionalProperties": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+      "type": "object"
+    },
+    "design_ids": {
+      "items": {"pattern": "^DESIGN-[0-9a-f-]{36}-[0-9a-f-]{36}$", "type": "string"},
+      "type": "array",
+      "uniqueItems": true
+    },
+    "design_versions": {
+      "additionalProperties": {"minimum": 1, "type": "integer"},
+      "type": "object"
+    },
+    "requirement_ids": {
+      "items": {"pattern": "^REQ-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$", "type": "string"},
+      "type": "array",
+      "uniqueItems": true
+    },
+    "task_ids": {
+      "items": {"minLength": 1, "type": "string"},
+      "type": "array",
+      "uniqueItems": true
+    },
+    "schema": {"const": "doc-warden/plan-governance-sidecar/v2"}
+  },
+  "required": ["schema", "artifact_id", "artifact_version", "canonical_plan_digest", "requirement_ids", "design_ids", "design_versions", "design_digests", "accepted"],
+  "type": "object"
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "external_asset_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "observation_method": {"const": "read_only_provider_observation"},
+    "observed_at": {"minLength": 1, "type": "string"},
+    "observed_by": {"minLength": 1, "type": "string"},
+    "observed_export_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+    "observed_revision": {"minLength": 1, "type": "string"},
+    "schema": {"const": "doc-warden/external-asset-observation/v1"}
+  },
+  "required": ["schema", "external_asset_digest", "observed_revision", "observed_export_sha256", "observed_at", "observed_by", "observation_method"],
+  "type": "object"
+}

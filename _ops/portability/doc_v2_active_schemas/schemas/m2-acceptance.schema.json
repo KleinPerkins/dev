@@ -1,0 +1,824 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authority_sha256": {
+      "additionalProperties": false,
+      "properties": {
+        "_ops/adr/0009-doc-warden-v2-gsd-aligned-governance.md": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "_ops/plans/doc-warden-execution-plan-v2.md": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "_ops/adr/0009-doc-warden-v2-gsd-aligned-governance.md",
+        "_ops/plans/doc-warden-execution-plan-v2.md"
+      ],
+      "type": "object"
+    },
+    "criteria_disposition": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted_for_m2_scope": {
+          "items": {
+            "enum": [
+              "AC-012",
+              "AC-013",
+              "AC-014",
+              "AC-023",
+              "AC-024",
+              "AC-025",
+              "AC-028",
+              "AC-029",
+              "AC-030",
+              "AC-031",
+              "AC-032"
+            ],
+            "type": "string"
+          },
+          "minItems": 11,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "blockers": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deferred_authorities": {
+          "items": {
+            "enum": [
+              "ADR-0010",
+              "M3-X01"
+            ],
+            "type": "string"
+          },
+          "minItems": 2,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "later_milestones_started": {
+          "const": false,
+          "type": "boolean"
+        },
+        "m2_t03_failing_baseline": {
+          "additionalProperties": false,
+          "properties": {
+            "decision": {
+              "const": "accepted_attestation_with_limitation",
+              "type": "string"
+            },
+            "event_digest": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "observed_at": {
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?\\+00:00$",
+              "type": "string"
+            },
+            "post_hoc_output_manufactured": {
+              "const": false,
+              "type": "boolean"
+            },
+            "raw_output_available": {
+              "const": false,
+              "type": "boolean"
+            },
+            "source_worker_id": {
+              "pattern": "^[0-9a-f-]{36}$",
+              "type": "string"
+            },
+            "task": {
+              "const": "M2-T03",
+              "type": "string"
+            }
+          },
+          "required": [
+            "task",
+            "decision",
+            "observed_at",
+            "event_digest",
+            "source_worker_id",
+            "raw_output_available",
+            "post_hoc_output_manufactured"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "accepted_for_m2_scope",
+        "blockers",
+        "deferred_authorities",
+        "later_milestones_started",
+        "m2_t03_failing_baseline"
+      ],
+      "type": "object"
+    },
+    "criteria_evidence": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "criterion": {
+            "enum": [
+              "AC-012",
+              "AC-013",
+              "AC-014",
+              "AC-023",
+              "AC-024",
+              "AC-025",
+              "AC-028",
+              "AC-029",
+              "AC-030",
+              "AC-031",
+              "AC-032"
+            ],
+            "type": "string"
+          },
+          "evidence_artifact": {
+            "enum": [
+              "cycle_report",
+              "defect_history",
+              "defect_lifecycle",
+              "defect_ready",
+              "discovery_artifact_report",
+              "external_asset_provenance",
+              "finding_class_matrix",
+              "graph_manifest",
+              "plan_refinement_receipt",
+              "ui_contract",
+              "visual_uat_contract"
+            ],
+            "type": "string"
+          },
+          "test_selectors": {
+            "items": {
+              "pattern": "^test_[a-z0-9_]+\\.[A-Za-z0-9_]+\\.test_[a-z0-9_]+$",
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "criterion",
+          "evidence_artifact",
+          "test_selectors"
+        ],
+        "type": "object"
+      },
+      "minItems": 11,
+      "type": "array"
+    },
+    "deliveries": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revision": {
+            "pattern": "^[0-9a-f]{40}$",
+            "type": "string"
+          },
+          "candidate_revision": {
+            "pattern": "^[0-9a-f]{40}$",
+            "type": "string"
+          },
+          "candidate_tree": {
+            "pattern": "^[0-9a-f]{40}$",
+            "type": "string"
+          },
+          "checks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "completed_at": {
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+                  "type": "string"
+                },
+                "conclusion": {
+                  "const": "success",
+                  "type": "string"
+                },
+                "name": {
+                  "enum": [
+                    "pr-automation / contract",
+                    "pr-automation / job:repo.dev.m3-verify",
+                    "pr-automation / source",
+                    "pr-automation / tests",
+                    "pr-automation / verify"
+                  ],
+                  "type": "string"
+                },
+                "run_id": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "status": {
+                  "const": "completed",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "run_id",
+                "name",
+                "status",
+                "conclusion",
+                "completed_at"
+              ],
+              "type": "object"
+            },
+            "minItems": 5,
+            "type": "array"
+          },
+          "criteria": {
+            "items": {
+              "pattern": "^AC-[0-9]{3}$",
+              "type": "string"
+            },
+            "minItems": 3,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "local_gate": {
+            "additionalProperties": false,
+            "properties": {
+              "elapsed_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "ended_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "event_digest": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "evidence_kind": {
+                "enum": [
+                  "orchestration_event",
+                  "terminal_and_orchestration_event"
+                ],
+                "type": "string"
+              },
+              "fail_markers": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "focused_tests": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "full_tests": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "observed_at": {
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|\\+00:00)$",
+                "type": "string"
+              },
+              "pass_markers": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "started_at": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "status": {
+                "const": "passed",
+                "type": "string"
+              },
+              "terminal_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "terminal_sha256": {
+                "anyOf": [
+                  {
+                    "pattern": "^sha256:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "worker_id": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "evidence_kind",
+              "event_digest",
+              "worker_id",
+              "observed_at",
+              "status",
+              "focused_tests",
+              "full_tests",
+              "pass_markers",
+              "fail_markers",
+              "terminal_id",
+              "terminal_sha256",
+              "started_at",
+              "ended_at",
+              "elapsed_ms"
+            ],
+            "type": "object"
+          },
+          "merge_event_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "merged_revision": {
+            "pattern": "^[0-9a-f]{40}$",
+            "type": "string"
+          },
+          "merged_tree": {
+            "pattern": "^[0-9a-f]{40}$",
+            "type": "string"
+          },
+          "pull_request": {
+            "additionalProperties": false,
+            "properties": {
+              "auto_merge_arm_action_taken": {
+                "const": false,
+                "type": "boolean"
+              },
+              "auto_merge_request": {
+                "const": false,
+                "type": "boolean"
+              },
+              "feature_branch": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "feature_branch_deleted": {
+                "const": true,
+                "type": "boolean"
+              },
+              "merge_method": {
+                "const": "squash",
+                "type": "string"
+              },
+              "merged_at": {
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+                "type": "string"
+              },
+              "merged_by": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "number": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "opened_as_draft": {
+                "type": "boolean"
+              },
+              "state": {
+                "const": "MERGED",
+                "type": "string"
+              },
+              "url": {
+                "pattern": "^https://github.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "number",
+              "url",
+              "state",
+              "opened_as_draft",
+              "auto_merge_arm_action_taken",
+              "auto_merge_request",
+              "feature_branch",
+              "feature_branch_deleted",
+              "merge_method",
+              "merged_at",
+              "merged_by"
+            ],
+            "type": "object"
+          },
+          "remote_checks_event_digest": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reviews": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "event_digest": {
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "bugbot",
+                    "security"
+                  ],
+                  "type": "string"
+                },
+                "native_handle": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "observed_at": {
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?\\+00:00$",
+                  "type": "string"
+                },
+                "outcome": {
+                  "enum": [
+                    "clean",
+                    "clean_no_bugs",
+                    "clean_no_medium_high_critical"
+                  ],
+                  "type": "string"
+                },
+                "worker_id": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "event_digest",
+                "worker_id",
+                "native_handle",
+                "observed_at",
+                "outcome"
+              ],
+              "type": "object"
+            },
+            "minItems": 2,
+            "type": "array"
+          },
+          "task": {
+            "enum": [
+              "M2-T01",
+              "M2-T02",
+              "M2-T03"
+            ],
+            "type": "string"
+          },
+          "verify_summary": {
+            "const": "Verification succeeded; protected path requires owner/admin manual approval.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task",
+          "criteria",
+          "base_revision",
+          "candidate_revision",
+          "candidate_tree",
+          "merged_revision",
+          "merged_tree",
+          "pull_request",
+          "local_gate",
+          "reviews",
+          "checks",
+          "verify_summary",
+          "remote_checks_event_digest",
+          "merge_event_digest"
+        ],
+        "type": "object"
+      },
+      "minItems": 3,
+      "type": "array"
+    },
+    "milestone": {
+      "const": "M2",
+      "type": "string"
+    },
+    "proof": {
+      "additionalProperties": false,
+      "properties": {
+        "cycle_report": {
+          "additionalProperties": false,
+          "properties": {
+            "auto_resolve": {
+              "const": false,
+              "type": "boolean"
+            },
+            "stable_id_path": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "minItems": 4,
+              "type": "array"
+            },
+            "test_selector": {
+              "pattern": "^test_[a-z0-9_]+\\.[A-Za-z0-9_]+\\.test_[a-z0-9_]+$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "stable_id_path",
+            "auto_resolve",
+            "test_selector"
+          ],
+          "type": "object"
+        },
+        "finding_class_matrix": {
+          "additionalProperties": false,
+          "properties": {
+            "classifications": {
+              "items": {
+                "enum": [
+                  "added",
+                  "changed-assumption",
+                  "cyclic",
+                  "dangling",
+                  "inconsistent",
+                  "missing",
+                  "removed",
+                  "stale",
+                  "superseded",
+                  "unmapped"
+                ],
+                "type": "string"
+              },
+              "minItems": 10,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "representative_target_kinds": {
+              "items": {
+                "enum": [
+                  "external_asset",
+                  "prd",
+                  "release",
+                  "repository",
+                  "symbol"
+                ],
+                "type": "string"
+              },
+              "minItems": 5,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "test_selector": {
+              "pattern": "^test_[a-z0-9_]+\\.[A-Za-z0-9_]+\\.test_[a-z0-9_]+$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "classifications",
+            "representative_target_kinds",
+            "test_selector"
+          ],
+          "type": "object"
+        },
+        "graph_manifest": {
+          "additionalProperties": false,
+          "properties": {
+            "node_kinds": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "minItems": 26,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "relation_vocabulary": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "minItems": 16,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "test_selector": {
+              "pattern": "^test_[a-z0-9_]+\\.[A-Za-z0-9_]+\\.test_[a-z0-9_]+$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "node_kinds",
+            "relation_vocabulary",
+            "test_selector"
+          ],
+          "type": "object"
+        },
+        "idempotence": {
+          "additionalProperties": false,
+          "properties": {
+            "applied_projection_target_ids": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "apply_replay_exact": {
+              "const": true,
+              "type": "boolean"
+            },
+            "first_preview_status": {
+              "const": "ready",
+              "type": "string"
+            },
+            "persisted_projection_unchanged": {
+              "const": true,
+              "type": "boolean"
+            },
+            "second_preview_status": {
+              "const": "review_required",
+              "type": "string"
+            },
+            "second_safe_updates_empty": {
+              "const": true,
+              "type": "boolean"
+            },
+            "test_selector": {
+              "pattern": "^test_[a-z0-9_]+\\.[A-Za-z0-9_]+\\.test_[a-z0-9_]+$",
+              "type": "string"
+            },
+            "unsafe_classifications_required": {
+              "items": {
+                "enum": [
+                  "dangling",
+                  "unmapped"
+                ],
+                "type": "string"
+              },
+              "minItems": 2,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "first_preview_status",
+            "applied_projection_target_ids",
+            "unsafe_classifications_required",
+            "apply_replay_exact",
+            "second_preview_status",
+            "second_safe_updates_empty",
+            "persisted_projection_unchanged",
+            "test_selector"
+          ],
+          "type": "object"
+        },
+        "plan_refinement": {
+          "additionalProperties": false,
+          "properties": {
+            "authoring_import_blocked": {
+              "const": true,
+              "type": "boolean"
+            },
+            "classification": {
+              "const": "changed-assumption",
+              "type": "string"
+            },
+            "successor_actions": {
+              "additionalProperties": false,
+              "properties": {
+                "adr": {
+                  "const": "create_successor_plan_rebinding_adr",
+                  "type": "string"
+                },
+                "code": {
+                  "const": "create_successor_plan_revalidating_code_precondition",
+                  "type": "string"
+                },
+                "dependency": {
+                  "const": "create_successor_plan_after_dependency_reconciliation",
+                  "type": "string"
+                },
+                "design": {
+                  "const": "create_successor_plan_rebinding_design",
+                  "type": "string"
+                },
+                "requirement": {
+                  "const": "create_successor_plan_rebinding_requirement",
+                  "type": "string"
+                },
+                "schema": {
+                  "const": "create_successor_plan_revalidating_schema_precondition",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "requirement",
+                "design",
+                "adr",
+                "dependency",
+                "code",
+                "schema"
+              ],
+              "type": "object"
+            },
+            "test_selectors": {
+              "items": {
+                "pattern": "^test_[a-z0-9_]+\\.[A-Za-z0-9_]+\\.test_[a-z0-9_]+$",
+                "type": "string"
+              },
+              "minItems": 2,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "classification",
+            "authoring_import_blocked",
+            "successor_actions",
+            "test_selectors"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "graph_manifest",
+        "finding_class_matrix",
+        "cycle_report",
+        "plan_refinement",
+        "idempotence"
+      ],
+      "type": "object"
+    },
+    "recorded_at": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "type": "string"
+    },
+    "repository": {
+      "const": "KleinPerkins/dev",
+      "type": "string"
+    },
+    "schema": {
+      "const": "doc-warden/m2-acceptance/v1",
+      "type": "string"
+    },
+    "source_revision": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "source_sha256": {
+      "additionalProperties": {
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "source_tree": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "status": {
+      "const": "accepted",
+      "type": "string"
+    },
+    "title": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "milestone",
+    "title",
+    "status",
+    "recorded_at",
+    "repository",
+    "source_revision",
+    "source_tree",
+    "authority_sha256",
+    "source_sha256",
+    "criteria_disposition",
+    "proof",
+    "criteria_evidence",
+    "deliveries"
+  ],
+  "type": "object"
+}

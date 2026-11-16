@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "check_name", "verifier", "reviewer", "release", "runtime", "images", "ruleset_fingerprints", "hard_exclusions"],
+  "properties": {
+    "schema": {"type": "string", "const": "pr-automation-controller-binding/v3"},
+    "check_name": {"type": "string", "const": "pr-automation / verify"},
+    "verifier": {"$ref": "#/$defs/app"},
+    "reviewer": {"$ref": "#/$defs/app"},
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "commit", "digest", "lock_compiler_digest", "activation_generation", "lock_contract_version"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "lock_compiler_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "activation_generation": {"type": "integer", "minimum": 1},
+        "lock_contract_version": {"const": 1, "type": "integer"}
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["poll_timeout_seconds", "systemd"],
+      "properties": {
+        "poll_timeout_seconds": {"const": 8100, "type": "integer"},
+        "systemd": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["timeout_start_seconds", "timeout_stop_seconds", "kill_mode"],
+          "properties": {
+            "timeout_start_seconds": {"const": 8400, "type": "integer"},
+            "timeout_stop_seconds": {"const": 180, "type": "integer"},
+            "kill_mode": {"const": "control-group", "type": "string"}
+          }
+        }
+      }
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fetch", "execution"],
+      "properties": {
+        "fetch": {
+          "type": "string",
+          "pattern": "^[^\\s]+@sha256:[0-9a-f]{64}$"
+        },
+        "execution": {
+          "type": "string",
+          "pattern": "^[^\\s]+@sha256:[0-9a-f]{64}$"
+        },
+        "profile_overrides": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "awa-authoritative-verify.v1": {
+              "type": "string",
+              "pattern": "^[^\\s]+@sha256:[0-9a-f]{64}$"
+            }
+          }
+        }
+      }
+    },
+    "ruleset_fingerprints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime_app_visible", "operator_full", "repository_overrides", "visibility_note", "home_merge_safety_bypass_note"],
+      "properties": {
+        "runtime_app_visible": {"$ref": "#/$defs/digestList"},
+        "operator_full": {"$ref": "#/$defs/digestList"},
+        "repository_overrides": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "additionalProperties": {"$ref": "#/$defs/fingerprintPair"}
+        },
+        "visibility_note": {"type": "string", "minLength": 1},
+        "home_merge_safety_bypass_note": {"type": "string", "minLength": 1}
+      }
+    },
+    "hard_exclusions": {
+      "type": "array",
+      "const": ["KleinPerkins/chaos-scheduler"]
+    }
+  },
+  "$defs": {
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app_id", "integration_id", "slug", "installation_id"],
+      "properties": {
+        "app_id": {"type": "integer", "minimum": 1},
+        "integration_id": {"type": "integer", "minimum": 1},
+        "slug": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+        "installation_id": {"type": "integer", "minimum": 1}
+      }
+    },
+    "digestList": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "fingerprintPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime_app_visible", "operator_full"],
+      "properties": {
+        "runtime_app_visible": {"$ref": "#/$defs/digestList"},
+        "operator_full": {"$ref": "#/$defs/digestList"}
+      }
+    }
+  }
+}

@@ -1,0 +1,373 @@
+{
+  "name": "CI",
+  "on": {
+    "pull_request": {
+      "types": [
+        "opened",
+        "reopened",
+        "synchronize",
+        "ready_for_review"
+      ]
+    },
+    "push": {
+      "branches": [
+        "main"
+      ]
+    },
+    "workflow_dispatch": {}
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "ci-${{ github.event.pull_request.number || github.ref }}",
+    "cancel-in-progress": true
+  },
+  "jobs": {
+    "owner-contracts": {
+      "name": "owner-contracts",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 20,
+      "outputs": {
+        "receipt": "${{ steps.verify.outputs.receipt }}"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "persist-credentials": false,
+            "fetch-depth": 0
+          }
+        },
+        {
+          "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+          "with": {
+            "python-version": "3.12.12"
+          }
+        },
+        {
+          "name": "Install locked source test dependency",
+          "run": "python3 -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r .github/ci-requirements.txt"
+        },
+        {
+          "name": "Run owner-contracts",
+          "id": "verify",
+          "env": {
+            "CI_HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
+            "CI_BASE_SHA": "${{ github.event.pull_request.base.sha }}"
+          },
+          "run": "python3 -I -B scripts/verify.py shard --shard owner-contracts"
+        }
+      ],
+      "if": "${{ github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' }}"
+    },
+    "doc-warden": {
+      "name": "doc-warden",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 30,
+      "outputs": {
+        "receipt": "${{ steps.verify.outputs.receipt }}"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "persist-credentials": false,
+            "fetch-depth": 0
+          }
+        },
+        {
+          "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+          "with": {
+            "python-version": "3.12.12"
+          }
+        },
+        {
+          "name": "Install locked source test dependency",
+          "run": "python3 -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r .github/ci-requirements.txt"
+        },
+        {
+          "name": "Run doc-warden",
+          "id": "verify",
+          "env": {
+            "CI_HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
+            "CI_BASE_SHA": "${{ github.event.pull_request.base.sha }}"
+          },
+          "run": "python3 -I -B scripts/verify.py shard --shard doc-warden"
+        }
+      ],
+      "if": "${{ github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' }}"
+    },
+    "baseline-scaffold": {
+      "name": "baseline-scaffold",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 20,
+      "outputs": {
+        "receipt": "${{ steps.verify.outputs.receipt }}"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "persist-credentials": false,
+            "fetch-depth": 0
+          }
+        },
+        {
+          "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+          "with": {
+            "python-version": "3.12.12"
+          }
+        },
+        {
+          "name": "Install locked source test dependency",
+          "run": "python3 -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r .github/ci-requirements.txt"
+        },
+        {
+          "name": "Run baseline-scaffold",
+          "id": "verify",
+          "env": {
+            "CI_HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
+            "CI_BASE_SHA": "${{ github.event.pull_request.base.sha }}"
+          },
+          "run": "python3 -I -B scripts/verify.py shard --shard baseline-scaffold"
+        }
+      ],
+      "if": "${{ github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' }}"
+    },
+    "host-overlay-lifecycle": {
+      "name": "host-overlay-lifecycle",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 30,
+      "outputs": {
+        "receipt": "${{ steps.verify.outputs.receipt }}"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "persist-credentials": false,
+            "fetch-depth": 0
+          }
+        },
+        {
+          "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+          "with": {
+            "python-version": "3.12.12"
+          }
+        },
+        {
+          "name": "Install locked source test dependency",
+          "run": "python3 -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r .github/ci-requirements.txt"
+        },
+        {
+          "name": "Run host-overlay-lifecycle",
+          "id": "verify",
+          "env": {
+            "CI_HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
+            "CI_BASE_SHA": "${{ github.event.pull_request.base.sha }}"
+          },
+          "run": "python3 -I -B scripts/verify.py shard --shard host-overlay-lifecycle"
+        }
+      ],
+      "if": "${{ github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' }}"
+    },
+    "interop-portability": {
+      "name": "interop-portability",
+      "runs-on": "macos-14",
+      "timeout-minutes": 30,
+      "outputs": {
+        "receipt": "${{ steps.verify.outputs.receipt }}"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "persist-credentials": false,
+            "fetch-depth": 0
+          }
+        },
+        {
+          "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+          "with": {
+            "python-version": "3.12.12"
+          }
+        },
+        {
+          "name": "Install locked source test dependency",
+          "run": "python3 -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r .github/ci-requirements.txt"
+        },
+        {
+          "name": "Run interop-portability",
+          "id": "verify",
+          "env": {
+            "CI_HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
+            "CI_BASE_SHA": "${{ github.event.pull_request.base.sha }}"
+          },
+          "run": "python3 -I -B scripts/verify.py shard --shard interop-portability"
+        }
+      ],
+      "if": "${{ github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' }}"
+    },
+    "context-measurement": {
+      "name": "context-measurement",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 15,
+      "outputs": {
+        "receipt": "${{ steps.verify.outputs.receipt }}"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "persist-credentials": false,
+            "fetch-depth": 0
+          }
+        },
+        {
+          "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+          "with": {
+            "python-version": "3.12.12"
+          }
+        },
+        {
+          "name": "Install locked source test dependency",
+          "run": "python3 -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r .github/ci-requirements.txt"
+        },
+        {
+          "name": "Run context-measurement",
+          "id": "verify",
+          "env": {
+            "CI_HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
+            "CI_BASE_SHA": "${{ github.event.pull_request.base.sha }}"
+          },
+          "run": "python3 -I -B scripts/verify.py shard --shard context-measurement"
+        }
+      ],
+      "if": "${{ github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' }}"
+    },
+    "review-admission": {
+      "name": "review-admission",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 15,
+      "outputs": {
+        "receipt": "${{ steps.verify.outputs.receipt }}"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "persist-credentials": false,
+            "fetch-depth": 0
+          }
+        },
+        {
+          "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+          "with": {
+            "python-version": "3.12.12"
+          }
+        },
+        {
+          "name": "Install locked source test dependency",
+          "run": "python3 -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r .github/ci-requirements.txt"
+        },
+        {
+          "name": "Run review-admission",
+          "id": "verify",
+          "env": {
+            "CI_HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
+            "CI_BASE_SHA": "${{ github.event.pull_request.base.sha }}"
+          },
+          "run": "python3 -I -B scripts/verify.py shard --shard review-admission"
+        }
+      ],
+      "if": "${{ github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' }}"
+    },
+    "ci-negative": {
+      "name": "ci-negative",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 10,
+      "outputs": {
+        "receipt": "${{ steps.verify.outputs.receipt }}"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "persist-credentials": false,
+            "fetch-depth": 0
+          }
+        },
+        {
+          "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+          "with": {
+            "python-version": "3.12.12"
+          }
+        },
+        {
+          "name": "Install locked source test dependency",
+          "run": "python3 -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r .github/ci-requirements.txt"
+        },
+        {
+          "name": "Run ci-negative",
+          "id": "verify",
+          "env": {
+            "CI_HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
+            "CI_BASE_SHA": "${{ github.event.pull_request.base.sha }}"
+          },
+          "run": "python3 -I -B scripts/verify.py shard --shard ci-negative"
+        }
+      ],
+      "if": "${{ github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main' }}"
+    },
+    "ci-required": {
+      "name": "ci-required",
+      "needs": [
+        "owner-contracts",
+        "doc-warden",
+        "baseline-scaffold",
+        "host-overlay-lifecycle",
+        "interop-portability",
+        "context-measurement",
+        "review-admission",
+        "ci-negative"
+      ],
+      "if": "${{ always() }}",
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 5,
+      "steps": [
+        {
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "persist-credentials": false,
+            "fetch-depth": 0
+          }
+        },
+        {
+          "uses": "actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c",
+          "with": {
+            "python-version": "3.12.12"
+          }
+        },
+        {
+          "name": "Require every exact-run shard",
+          "env": {
+            "CI_HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
+            "CI_BASE_SHA": "${{ github.event.pull_request.base.sha }}",
+            "CI_NEEDS": "${{ toJSON(needs) }}"
+          },
+          "run": "python3 -I -B scripts/verify.py aggregate"
+        }
+      ]
+    }
+  }
+}

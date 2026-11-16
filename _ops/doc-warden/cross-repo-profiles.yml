@@ -1,0 +1,289 @@
+# doc-warden cross-repo authority profiles — M4 / POC 3d
+#
+# Policy: _ops/doc-warden/POLICY.md §3 (DUPLICATE_AUTHORITY), §14
+# Execution plan: _ops/plans/doc-warden-execution-plan-v1.md §17 POC 3d
+#
+# Each profile names an owner repo (canonical authority) and a dependent repo
+# (host overlay / consumer). Topics declare where duplicate authority may appear.
+# Scope for poc3d intentionally includes OPERATING-MANUAL §11 and agent rules,
+# not _ops/awa/ alone — see scope_note.
+
+schema: doc-warden-cross-repo-profiles/v1
+policy_version: "1.1.0"
+
+profiles:
+  poc3d:
+    label: "AWA ↔ ~/dev host overlay"
+    scope_note: >
+      Canonical AWA product authority lives in KleinPerkins/awa (SSP). ~/dev is the
+      thin host overlay (policy literals + delegators). Duplicate surface includes
+      OPERATING-MANUAL §11, _ops/rules/* AWA sections, and _ops/policy/* — broader
+      than _ops/awa/ alone. Operator must confirm scope boundary before repair (WI-M4-06+).
+    owner:
+      slug: awa
+      repo: KleinPerkins/awa
+    dependent:
+      slug: dev
+      repo: KleinPerkins/dev
+    topics:
+      - id: ssp-product-location
+        claim: "AWA ships as one self-contained Standalone System Package (SSP) in KleinPerkins/awa"
+        owner_paths:
+          - ARCHITECTURE.md
+          - README.md
+        dependent_paths:
+          - OPERATING-MANUAL.md
+          - _ops/rules/agent-context.md
+          - _ops/rules/dev-operating-model.mdc
+        markers:
+          - "Standalone System Package"
+          - "KleinPerkins/awa"
+          - "zero-link"
+
+      - id: host-overlay-role
+        claim: "~/dev is a thin host overlay supplying policy literals and stable-path delegators only"
+        owner_paths:
+          - ARCHITECTURE.md
+          - README.md
+        dependent_paths:
+          - OPERATING-MANUAL.md
+          - _ops/rules/agent-context.md
+          - _ops/rules/dev-operating-model.mdc
+        markers:
+          - "host overlay"
+          - "thin host"
+          - "policy overlay"
+          - "AWA_POLICY"
+
+      - id: kernel-first-invariant
+        claim: "Safety guarantee holds with engine/daemon OFF (kernel-first invariant)"
+        owner_paths:
+          - ARCHITECTURE.md
+          - README.md
+        dependent_paths:
+          - OPERATING-MANUAL.md
+          - _ops/rules/agent-context.md
+          - _ops/rules/dev-operating-model.mdc
+          - _ops/rules/awa-operator.mdc
+        markers:
+          - "kernel-first"
+          - "engine OFF"
+          - "engine off"
+          - "holds with the engine OFF"
+
+      - id: no-duplicated-contract
+        claim: "Host keeps no duplicated kernel or contract; installed awa-contract.v1.json is authoritative"
+        owner_paths:
+          - ARCHITECTURE.md
+          - contracts/awa-contract.v1.json
+        dependent_paths:
+          - OPERATING-MANUAL.md
+          - _ops/rules/agent-context.md
+          - _ops/rules/dev-operating-model.mdc
+          - _ops/checks/awa-contract-freeze.sh
+        markers:
+          - "no duplicated kernel"
+          - "contract copy"
+          - "awa-contract.v1.json"
+          - "delegates to the installed checker"
+
+      - id: operator-copy-honesty
+        claim: "Operator-facing AWA copy is honesty-gated (no protection promise ahead of verifier)"
+        owner_paths:
+          - SECURITY.md
+          - README.md
+        dependent_paths:
+          - OPERATING-MANUAL.md
+          - _ops/awa/copy/operator-copy.json
+          - _ops/checks/copy-honesty-check.sh
+        markers:
+          - "operator copy"
+          - "copy-honesty"
+          - "honesty-gated"
+          - "copy-honesty-check"
+
+      - id: host-policy-literals
+        claim: "Org-specific governed-repo literals live only in host worktree-policy.yml overlay"
+        owner_paths:
+          - ARCHITECTURE.md
+          - kernel/policy/default-worktree-policy.yml
+        dependent_paths:
+          - OPERATING-MANUAL.md
+          - _ops/policy/worktree-policy.yml
+          - _ops/policy/worktree-modes.yml
+        markers:
+          - "worktree-policy.yml"
+          - "affirm/*"
+          - "worktree-modes.yml"
+
+  awa-integrity:
+    label: "Proposed AWA integrity authority ↔ dev pointer"
+    scope_note: >
+      Proposed by paired Draft PRs: AWA ADR 0020 owns the integrity product authority;
+      KleinPerkins/dev carries pointer governance only. This profile does not implement or
+      activate host wiring.
+    owner:
+      slug: awa
+      repo: KleinPerkins/awa
+    dependent:
+      slug: dev
+      repo: KleinPerkins/dev
+    topics:
+      - id: integrity-sot
+        claim: "Draft AWA ADR 0020 proposes status.json as the single integrity status of record"
+        owner_paths:
+          - docs/adr/0020-awa-integrity-surveillance-and-lifecycle.md
+        dependent_paths:
+          - OPERATING-MANUAL.md
+          - _ops/rules/agent-context.md
+          - _ops/rules/dev-operating-model.mdc
+        markers:
+          - "status-last + generation-validation"
+
+      - id: integrity-invariants
+        claim: "Draft AWA ADR 0020 proposes deterministic integrity invariant-to-severity reduction"
+        owner_paths:
+          - docs/adr/0020-awa-integrity-surveillance-and-lifecycle.md
+        dependent_paths:
+          - OPERATING-MANUAL.md
+          - _ops/rules/agent-context.md
+          - _ops/rules/dev-operating-model.mdc
+        markers:
+          - "Every invariant resolves to exactly one of"
+
+      - id: runnerless-surveillance
+        claim: "Draft AWA ADR 0020 proposes fast observations plus a runnerless periodic deep sweep"
+        owner_paths:
+          - docs/adr/0020-awa-integrity-surveillance-and-lifecycle.md
+        dependent_paths:
+          - OPERATING-MANUAL.md
+          - _ops/rules/agent-context.md
+          - _ops/rules/dev-operating-model.mdc
+        markers:
+          - "periodic deep sweep"
+
+      - id: host-trigger-wiring
+        claim: "Draft AWA ADR 0020 separates AWA product roles from dev-owned live host projection"
+        owner_paths:
+          - docs/adr/0020-awa-integrity-surveillance-and-lifecycle.md
+        dependent_paths:
+          - OPERATING-MANUAL.md
+          - _ops/rules/agent-context.md
+          - _ops/rules/dev-operating-model.mdc
+        markers:
+          - "sole live host projection/owner"
+
+      - id: safe-workspace-entry
+        claim: "Draft AWA ADR 0020 bases Safe Workspace entry state on explicit handoff evidence"
+        owner_paths:
+          - docs/adr/0020-awa-integrity-surveillance-and-lifecycle.md
+        dependent_paths:
+          - OPERATING-MANUAL.md
+          - _ops/rules/agent-context.md
+          - _ops/rules/dev-operating-model.mdc
+        markers:
+          - "entry_handshake"
+
+      - id: operator-interface
+        claim: "Draft AWA ADR 0020 proposes a private static local HTML integrity console"
+        owner_paths:
+          - docs/adr/0020-awa-integrity-surveillance-and-lifecycle.md
+        dependent_paths:
+          - OPERATING-MANUAL.md
+          - _ops/rules/agent-context.md
+          - _ops/rules/dev-operating-model.mdc
+        markers:
+          - "self-contained static local HTML console"
+
+  pr-automation-required-checks:
+    label: "Controller required-node authority ↔ dev projection seam"
+    scope_note: >
+      Canonical required-node and generated-lock authority lives in pr-automation-controller
+      ADR 0008. KleinPerkins/dev owns only the dependent assignment, policy, fingerprint,
+      ruleset-render, and reconciliation projection.
+    owner:
+      slug: pr-automation-controller
+      repo: KleinPerkins/pr-automation-controller
+    dependent:
+      slug: dev
+      repo: KleinPerkins/dev
+    topics:
+      - id: controller-required-node-authority
+        claim: "The central controller assignment owns required-node selection"
+        owner_paths:
+          - docs/adr/0008-controller-owned-required-node-authority.md
+        dependent_paths:
+          - _ops/baseline/profiles/pr-automation/v3/README.md
+        markers:
+          - "The central assignment owns required-node selection"
+
+      - id: generated-lock-authority-boundary
+        claim: "Recipe and generated lock remain free of required-Check authority"
+        owner_paths:
+          - docs/adr/0008-controller-owned-required-node-authority.md
+        dependent_paths:
+          - _ops/baseline/profiles/pr-automation/v3/README.md
+        markers:
+          - "Recipe and generated lock remain free of Check authority"
+
+      - id: per-repository-ruleset-projection
+        claim: "One base ruleset produces repository-specific required-Check projections"
+        owner_paths:
+          - docs/adr/0008-controller-owned-required-node-authority.md
+        dependent_paths:
+          - _ops/baseline/profiles/pr-automation/v3/README.md
+        markers:
+          - "One base ruleset produces per-repository projections"
+
+  poc3d-fixture:
+    label: "POC 3d regression fixture (mini owner + dependent trees)"
+    scope_note: "Synthetic pair under _ops/doc-warden/fixtures/poc3d/ for verify regression only."
+    owner:
+      slug: awa-fixture
+      repo: fixture/owner
+    dependent:
+      slug: dev-fixture
+      repo: fixture/dependent
+    topics:
+      - id: ssp-product-location
+        claim: "AWA ships as SSP in KleinPerkins/awa"
+        owner_paths:
+          - ARCHITECTURE.md
+        dependent_paths:
+          - OPERATING-MANUAL.md
+          - _ops/rules/agent-context.md
+        markers:
+          - "Standalone System Package"
+          - "KleinPerkins/awa"
+
+      - id: kernel-first-invariant
+        claim: "Kernel-first: safety holds with engine OFF"
+        owner_paths:
+          - ARCHITECTURE.md
+        dependent_paths:
+          - OPERATING-MANUAL.md
+        markers:
+          - "kernel-first"
+          - "engine OFF"
+
+      - id: host-overlay-role
+        claim: "Host overlay is thin — policy literals and delegators only"
+        owner_paths:
+          - ARCHITECTURE.md
+        dependent_paths:
+          - OPERATING-MANUAL.md
+        markers:
+          - "host overlay"
+          - "thin host"
+
+      - id: contradictory-example
+        claim: "Per-repo default_mode for host overlay"
+        owner_paths:
+          - POLICY.md
+        dependent_paths:
+          - _ops/policy/worktree-modes.yml
+        markers:
+          - "default_mode"
+        contested:
+          owner: "default_mode: on"
+          dependent: "default_mode: off"

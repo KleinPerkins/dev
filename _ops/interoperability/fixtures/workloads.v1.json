@@ -1,0 +1,208 @@
+{
+  "schema": "interoperability/workloads/v1",
+  "data_classification": "synthetic-only",
+  "freeze_rule": "Digest must remain fixed across baseline and candidate; a changed input starts a new comparison cohort.",
+  "hosts": [
+    "codex-local-macos-desktop",
+    "cursor-local-macos-agents"
+  ],
+  "repetitions": 3,
+  "max_baseline_attempts": 36,
+  "max_candidate_runs": 36,
+  "workflows": [
+    {
+      "id": "QW-01",
+      "capabilities": [
+        "prompt-architect",
+        "verification-before-completion"
+      ],
+      "input": "Rewrite: Plan a small community garden. Produce a prompt requiring exactly three alternatives, a five-row comparison, a stated budget of 500 units, and no invented local regulations. Then identify what evidence would be needed before claiming the plan meets its budget.",
+      "rubric": [
+        "Both required skills discovered through the intended managed root",
+        "Exactly three alternatives requested",
+        "Exactly five comparison rows requested",
+        "Budget remains 500 units",
+        "No invented regulations",
+        "Verification distinguishes evidence from assumptions"
+      ],
+      "cases": [
+        "SKL-01",
+        "SKL-02"
+      ]
+    },
+    {
+      "id": "QW-02",
+      "capabilities": [
+        "doc-warden"
+      ],
+      "input": {
+        "requirements": {
+          "R1": "Export a synthetic three-column task list as CSV",
+          "R2": "Preserve Unicode task names",
+          "R3": "Reject an empty output filename without writing"
+        }
+      },
+      "rubric": [
+        "Each R1-R3 maps to a task and a validation case",
+        "Approved pinned authoring runtime is observed",
+        "Preview only; no acceptance or apply",
+        "No extra requirements invented"
+      ],
+      "cases": [
+        "GOV-01",
+        "UTL-02"
+      ]
+    },
+    {
+      "id": "QW-03",
+      "capabilities": [
+        "subagent-orchestration"
+      ],
+      "input": {
+        "values": [
+          7,
+          2,
+          7,
+          1,
+          3
+        ],
+        "requested_output": {
+          "sorted_unique": [
+            1,
+            2,
+            3,
+            7
+          ],
+          "sum": 20
+        }
+      },
+      "rubric": [
+        "Work class and native offered model/effort recorded before dispatch",
+        "Worker returns exact requested output",
+        "Parent joins result and records completion",
+        "No resources left running",
+        "Requested model distinguished from acknowledged execution model"
+      ],
+      "cases": [
+        "MOD-01",
+        "MOD-02",
+        "AGT-02"
+      ]
+    },
+    {
+      "id": "QW-04",
+      "capabilities": [
+        "workspace-entry",
+        "session-lock",
+        "awa-guard"
+      ],
+      "input": {
+        "fixture_repo": "synthetic repository created for this run",
+        "protected_file": "primary/prohibited.txt",
+        "allowed_file": "linked/allowed.txt",
+        "initial_content": "unchanged"
+      },
+      "rubric": [
+        "Native worktree create/attach and explicit current root verified",
+        "Distinct explicit writers excluded in same tree; linked trees independent",
+        "Healthy qualified guard prevents prohibited write and permits positive control",
+        "Missing unsupported identity produces no AWA authority",
+        "No destructive cleanup without exact applicable authorization"
+      ],
+      "cases": [
+        "WSP-01",
+        "LCK-01",
+        "HOK-01"
+      ],
+      "gate": "AWA guard portion unsupported until owner decision and INT-016/019; never mark whole workflow passing from attachment alone"
+    },
+    {
+      "id": "QW-05",
+      "capabilities": [
+        "github-app-connector"
+      ],
+      "input": {
+        "operation": "get_repo",
+        "repository_full_name": "KleinPerkins/dev",
+        "maximum_records": 1,
+        "expected_repository_id": 1278387789,
+        "account_reference": "KleinPerkins"
+      },
+      "rubric": [
+        "Same intended account confirmed through native get_user_login",
+        "Native repository metadata read succeeds with exact repository identity",
+        "At most one metadata record returned",
+        "No response body or credentials persisted",
+        "Each host registration/auth/discovery/read is separately observed"
+      ],
+      "cases": [
+        "MCP-03",
+        "AUTH-01"
+      ],
+      "gate": "Codex connection preflight succeeded; Cursor account/operation not yet established and remains unqualified"
+    },
+    {
+      "id": "QW-06",
+      "capabilities": [
+        "save-game"
+      ],
+      "input": {
+        "project": "synthetic-garden",
+        "budget_units": 500,
+        "selected_option": "raised-beds",
+        "next_step": "measure-site",
+        "blocked_on": "sunlight-measurement"
+      },
+      "rubric": [
+        "Save only these five synthetic facts",
+        "Resume in fresh native context recovers all five exactly",
+        "No unrelated memories or context imported",
+        "Owner storage and egress rules preserved"
+      ],
+      "cases": [
+        "UTL-02",
+        "EVD-01"
+      ]
+    }
+  ],
+  "measurement": {
+    "adapter_warmups": 3,
+    "adapter_timed_invocations": 20,
+    "clock": "monotonic",
+    "adapter_boundary": "process start/input handoff to final response completion; includes startup; excludes model/network/service time",
+    "p95": "nearest-rank: 19th of 20 sorted samples; coarse screening statistic",
+    "adapter_p95_limit_ms": 100,
+    "cold_starts": 5,
+    "cold_report": "each value, median and range; no cold-tail percentile",
+    "end_to_end_regression_limit": "max(10 percent of baseline median, 250 ms)",
+    "end_to_end_boundary": "same host-visible session start to ready boundary for paired workload",
+    "context_growth_limit_percent": 10,
+    "duplicate_policy_injections_allowed": 0,
+    "context_units": "UTF-8 bytes and native tokens if exposed; bytes labeled proxy otherwise",
+    "cost": "native task tokens/resources/monetary cost where exposed; unavailable explicitly recorded",
+    "confounders": [
+      "requested and acknowledged model",
+      "effort",
+      "fallback",
+      "host build",
+      "source revision",
+      "adapter revision"
+    ]
+  },
+  "canary_contract": {
+    "before_each_native_run": [
+      "exact owned paths and config/registration delta",
+      "current preimages and protected local backup",
+      "affected sessions including shared user settings",
+      "account and resource bounds",
+      "applicable operation/consequence approvals",
+      "postimage-bound rollback and cleanup"
+    ],
+    "default_live_changes": [],
+    "no_implicit_approval": true,
+    "fixture_directory_does_not_isolate_user_settings": true,
+    "service_writes": false,
+    "automatic_authentication": false,
+    "no_performance_claim_without_measurement": true
+  }
+}

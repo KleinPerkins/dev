@@ -1,0 +1,160 @@
+{
+  "schema": "pr-automation-lock-currency-fixtures/v1",
+  "recipe_bytes": "{\"schema\":\"fixture-recipe/v1\"}\n",
+  "current_v2": {
+    "schema_version": "pr-automation-lock/v2",
+    "lock_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+    "payload": {
+      "repository_id": "awa",
+      "activation_generation": 3,
+      "lock_contract_version": 1,
+      "catalog_id": "pr-automation-execution-catalog/v1",
+      "catalog_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "assignment_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "recipe_path": ".github/pr-recipe.json",
+      "recipe_base_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "recipe_blob_sha": "2be198783baecca95faa89dd3a0ed2b2281501fd",
+      "recipe_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "profile_id": "awa-pilot.v1",
+      "profile_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "image_digest": "buildpack-deps@sha256:877e9e4d949edfbcbedabc3a2d7ab593955fee5d6d0777adf3a991eb30c750d8",
+      "tool_inventory": ["bash5.2.15(1)-release"],
+      "dependency_method": "none",
+      "limits": {
+        "timeout_seconds": 300,
+        "cpus_millis": 1000,
+        "memory_mib": 512,
+        "pids": 64,
+        "disk_mib": 1024,
+        "inodes": 8192,
+        "output_bytes": 65536
+      },
+      "pipeline": {
+        "version": "pr-automation-pipeline/v1",
+        "pipeline_id": "awa-fixture-pipeline",
+        "jobs": [
+          {
+            "id": "canned.repository-contract.v1",
+            "depends_on": []
+          }
+        ],
+        "aggregate": "all_required"
+      },
+      "jobs": [
+        {
+          "runtime": {
+            "id": "canned.repository-contract.v1",
+            "image": "buildpack-deps@sha256:877e9e4d949edfbcbedabc3a2d7ab593955fee5d6d0777adf3a991eb30c750d8",
+            "argv": ["repository-contract"],
+            "environment": {},
+            "network": "none",
+            "discovery": {
+              "kind": "literal_stdout",
+              "literal": "PR_AUTOMATION_VERIFY_OK"
+            },
+            "limits": {
+              "timeout_seconds": 300,
+              "cpus_millis": 1000,
+              "memory_mib": 512,
+              "pids": 64,
+              "disk_mib": 1024,
+              "inodes": 8192,
+              "output_bytes": 65536
+            }
+          },
+          "source_ref": {
+            "kind": "canned",
+            "id": "canned.repository-contract.v1",
+            "digest": "sha256:43d4d6238bad4513a58135cc28b0810aff03921053f3d0a282261c756e8d5189"
+          },
+          "provenance_kind": "canned",
+          "profile_ref": {
+            "id": "awa-pilot.v1",
+            "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "depends_on": []
+        }
+      ]
+    }
+  },
+  "legacy_v1": {
+    "schema_version": "pr-automation-lock/v1",
+    "lock_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "payload": {
+      "repository_id": "awa",
+      "activation_generation": 3,
+      "controller_release": "0.7.1",
+      "catalog_id": "pr-automation-execution-catalog/v1",
+      "catalog_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "assignment_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "recipe_path": ".github/pr-recipe.json",
+      "recipe_base_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "recipe_blob_sha": "2be198783baecca95faa89dd3a0ed2b2281501fd",
+      "recipe_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "profile_id": "awa-pilot.v1",
+      "profile_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "image_digest": "buildpack-deps@sha256:877e9e4d949edfbcbedabc3a2d7ab593955fee5d6d0777adf3a991eb30c750d8"
+    }
+  },
+  "stale_cases": [
+    {
+      "name": "wrong_epoch",
+      "path": "payload.lock_contract_version",
+      "value": 2,
+      "expected_failure": "lock_contract_version"
+    },
+    {
+      "name": "missing_epoch",
+      "path": "payload.lock_contract_version",
+      "remove": true,
+      "expected_failure": "lock_contract_version"
+    },
+    {
+      "name": "stale_catalog",
+      "path": "payload.catalog_digest",
+      "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "expected_failure": "catalog"
+    },
+    {
+      "name": "stale_profile",
+      "path": "payload.profile_digest",
+      "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "expected_failure": "profile_digest"
+    },
+    {
+      "name": "stale_image",
+      "path": "payload.image_digest",
+      "value": "buildpack-deps@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "expected_failure": "image_digest"
+    },
+    {
+      "name": "stale_recipe",
+      "path": "payload.recipe_digest",
+      "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "expected_failure": "recipe"
+    },
+    {
+      "name": "stale_assignment",
+      "path": "payload.assignment_digest",
+      "value": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "expected_failure": "assignment"
+    }
+  ],
+  "release_only_change": {
+    "before": {
+      "version": "v0.8.0",
+      "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "lock_compiler_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "after": {
+      "version": "v0.8.1",
+      "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "lock_compiler_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "expected": {
+      "policy_rebind": true,
+      "deployment": true,
+      "relock": false
+    }
+  }
+}

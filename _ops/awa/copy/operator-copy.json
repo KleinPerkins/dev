@@ -1,0 +1,76 @@
+{
+  "contract": "awa-operator-copy",
+  "version": 1,
+  "rationale": "Single source of truth for AWA operator-facing copy (plan v2.1 §H1). No string may promise a PROTECTION VERB ahead of the capability that backs it. _ops/checks/copy-honesty-check.sh greps this table AND the rendered operator surfaces for gated verbs; a gated verb may ship only if the capability that unlocks it is `green:true` AND its named verifier actually passes. Until then, use the honest phrasing in `strings` below.",
+
+  "surfaces": [
+    "_ops/dashboards/awa-dashboard.canvas.tsx",
+    "_ops/rules/global/worktree-default.mdc"
+  ],
+
+  "gated_verbs": [
+    {"id": "pristine", "pattern": "pristine"},
+    {"id": "before-local-changes", "pattern": "before local changes"},
+    {"id": "nothing-lost", "pattern": "nothing (gets )?lost"},
+    {"id": "saved-a-patch", "pattern": "saved a (recovery )?patch"},
+    {"id": "cant-be-lost", "pattern": "can.?t be lost"},
+    {"id": "protected", "pattern": "\\bprotected\\b"}
+  ],
+
+  "capabilities": {
+    "shell-gate-and-native-detection": {
+      "unlocks": ["pristine", "before-local-changes"],
+      "named_verifier": "worktree-verify guard-behavior + hook-probe Desktop + cloud (§H5)",
+      "verifier_cmd": "AWA=\"$(bash _ops/bin/awa-sibling-root.sh)\" && test -f \"$AWA/hook-probe/RESULTS-2026-07-05.md\" && test -f \"$AWA/hook-probe/RESULTS-CLOUD-2026-07-05.md\"",
+      "green": true,
+      "reason": "Desktop hook-probe 2026-07-05 (RESULTS-2026-07-05.md): L3/L4 + kernel-gate beforeShellExecution. Cloud hook-probe 2026-07-05 (RESULTS-CLOUD-2026-07-05.md): L9/L10 committed project hooks on real cloud VM; beforeShellExecution/afterFileEdit/beforeReadFile fired; shell not blocked."
+    },
+    "recovery-manager": {
+      "unlocks": ["nothing-lost", "saved-a-patch", "cant-be-lost"],
+      "named_verifier": "KleinPerkins/awa engine.tests.test_recovery (Phase 3 recovery suite)",
+      "verifier_cmd": "AWA=\"$(bash _ops/bin/awa-sibling-root.sh)\" && cd \"$AWA\" && PYTHONPATH=. python3 -m unittest engine.tests.test_recovery",
+      "green": true,
+      "reason": "Recovery manager (bundles/patches/restore/quarantine) is built in KleinPerkins/awa with a green Phase-3 test suite."
+    },
+    "kernel-guarantee": {
+      "unlocks": ["protected"],
+      "named_verifier": "engine.tests.test_guard + kernel-guarantee env matrix (_ops/checks/kernel-guarantee-verify.sh)",
+      "verifier_cmd": "test -x _ops/checks/kernel-guarantee-verify.sh && AWA_ENGINE_ROOT=\"$(bash _ops/bin/awa-sibling-root.sh)\" _ops/checks/kernel-guarantee-verify.sh",
+      "green": true,
+      "reason": "Phase 5 local guard (engine OFF) is green via engine.tests.test_guard; kernel shims + cloud degradation rows are green via kernel-guarantee-verify.sh (included-primary mutation ENFORCED deny — ASK_ON removed 2026-07-07, cloud fail-open, failClosed false)."
+    }
+  },
+
+  "strings": [
+    {
+      "id": "invariant.upgraded",
+      "surface": "doc",
+      "text": "AWA keeps your main folder pristine for shell commands and detects native file edits there; recovery bundles and patches protect work before destructive cleanup."
+    },
+    {
+      "id": "mode.on.label",
+      "surface": "doc",
+      "text": "Automatic (shell-gated) — mutating commands enter a Safe Workspace before local changes land; native edits to main are detected, not pre-blocked."
+    },
+    {
+      "id": "promise.main-folder",
+      "surface": "dashboard",
+      "text": "I keep git/install commands out of your main folder before local changes land, and I flag native file edits."
+    },
+    {
+      "id": "promise.recovery",
+      "surface": "dashboard",
+      "text": "Committed work stays on a branch; I save recovery bundles before cleanup and patches when you edit main natively — nothing gets lost."
+    },
+    {
+      "id": "promise.protection",
+      "surface": "dashboard",
+      "text": "Your main folder is protected against shell mutations; native file edits are detected and recoverable."
+    },
+    {
+      "id": "degraded.engine-off",
+      "surface": "dashboard",
+      "text": "Engine off — your main folder is still protected for shell commands; native edits are detected."
+    }
+  ]
+}

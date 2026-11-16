@@ -1,0 +1,119 @@
+{
+  "schema": "dev-delivery-policy/v1",
+  "controller": "retired-down-abandoned",
+  "pac_mini": "planned-not-operational",
+  "default_disposition": "unenrolled",
+  "repositories": [
+    {
+      "repository": "KleinPerkins/ai-analytics-context",
+      "repository_id": 1301629826,
+      "disposition": "private-no-ci"
+    },
+    {
+      "repository": "KleinPerkins/awa",
+      "repository_id": 1289571438,
+      "disposition": "actions-app"
+    },
+    {
+      "repository": "KleinPerkins/chaos-labs",
+      "repository_id": 1202219494,
+      "disposition": "private-no-ci"
+    },
+    {
+      "repository": "KleinPerkins/cpp",
+      "repository_id": 1283982665,
+      "disposition": "private-no-ci"
+    },
+    {
+      "repository": "KleinPerkins/dev",
+      "repository_id": 1459458379,
+      "disposition": "actions-app"
+    },
+    {
+      "repository": "KleinPerkins/doc-warden-canary",
+      "repository_id": 1324068071,
+      "disposition": "actions-app"
+    },
+    {
+      "repository": "KleinPerkins/ecosystem-orchestrator",
+      "repository_id": 1281300995,
+      "disposition": "actions-app"
+    },
+    {
+      "repository": "KleinPerkins/intent-router",
+      "repository_id": 1294651532,
+      "disposition": "actions-app"
+    },
+    {
+      "repository": "KleinPerkins/kp-mcp",
+      "repository_id": 1271164179,
+      "disposition": "actions-app"
+    },
+    {
+      "repository": "KleinPerkins/kp-pr-bot-canary",
+      "repository_id": 1297059298,
+      "disposition": "actions-app"
+    },
+    {
+      "repository": "KleinPerkins/local-jobs",
+      "repository_id": 1284625858,
+      "disposition": "actions-app"
+    },
+    {
+      "repository": "KleinPerkins/machine-monitor",
+      "repository_id": 1449284973,
+      "disposition": "actions-app"
+    },
+    {
+      "repository": "KleinPerkins/operator-voice",
+      "repository_id": 1317232260,
+      "disposition": "actions-app"
+    },
+    {
+      "repository": "KleinPerkins/operator-voice-profile",
+      "repository_id": 1317206810,
+      "disposition": "private-no-ci"
+    },
+    {
+      "repository": "KleinPerkins/pr-automation-controller",
+      "repository_id": 1297666445,
+      "disposition": "actions-app"
+    },
+    {
+      "repository": "KleinPerkins/server-guard",
+      "repository_id": 1302096938,
+      "disposition": "private-no-ci"
+    },
+    {
+      "repository": "KleinPerkins/shadow-sync",
+      "repository_id": 1442961455,
+      "disposition": "actions-app"
+    },
+    {
+      "repository": "KleinPerkins/skills",
+      "repository_id": 1275604090,
+      "disposition": "actions-app"
+    },
+    {
+      "repository": "KleinPerkins/sterling",
+      "repository_id": 1276598286,
+      "disposition": "retired"
+    },
+    {
+      "repository": "KleinPerkins/sterling.io",
+      "repository_id": 1439196929,
+      "disposition": "actions-app"
+    }
+  ],
+  "dev_names": [
+    "KleinPerkins/dev-temp",
+    "KleinPerkins/dev"
+  ],
+  "rejected_repository_ids": [
+    1278387789
+  ],
+  "excluded": [
+    "KleinPerkins/chaos-scheduler"
+  ],
+  "live_mutation_authorized": false
+}

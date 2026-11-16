@@ -1,0 +1,144 @@
+{
+  "schema": "interoperability/internal-comms-source-notes/v1",
+  "synthetic": true,
+  "company": "Canopy Tools",
+  "scope": "Entirely fictional personal migration fixture. No real employer, employee, account, conversation or service is represented.",
+  "reporting_period": "2026-10-26 to 2026-11-01",
+  "plans_period": "2026-11-02 to 2026-11-08",
+  "newsletter_facts": [
+    {
+      "id": "N01",
+      "topic": "Seed Hub access",
+      "text": "We shipped Seed Hub to all 1,008 synthetic accounts on October 30.",
+      "url": "https://example.invalid/canopy/announcements/n01"
+    },
+    {
+      "id": "N02",
+      "topic": "Community milestone",
+      "text": "We completed the first company-wide seed exchange with 480 packets shared.",
+      "url": "https://example.invalid/canopy/announcements/n02"
+    },
+    {
+      "id": "N03",
+      "topic": "Accessibility",
+      "text": "We published keyboard instructions for every Seed Hub control.",
+      "url": "https://example.invalid/canopy/announcements/n03"
+    },
+    {
+      "id": "N04",
+      "topic": "Support",
+      "text": "We opened one shared help queue for everyone in the synthetic company.",
+      "url": "https://example.invalid/canopy/announcements/n04"
+    },
+    {
+      "id": "N05",
+      "topic": "Maintenance",
+      "text": "We scheduled Seed Hub maintenance for November 4 at 09:00 UTC for 2 minutes; saved seed lists remain stored. Save drafts before maintenance.",
+      "url": "https://example.invalid/canopy/announcements/n05"
+    },
+    {
+      "id": "N06",
+      "topic": "Translation",
+      "text": "We need a volunteer editor for translation review; there is no approved completion date.",
+      "url": "https://example.invalid/canopy/announcements/n06"
+    },
+    {
+      "id": "N07",
+      "topic": "Security",
+      "text": "We added passkey guidance to the personal test account handbook.",
+      "url": "https://example.invalid/canopy/announcements/n07"
+    },
+    {
+      "id": "N08",
+      "topic": "Search",
+      "text": "We released seed-name search to every synthetic account.",
+      "url": "https://example.invalid/canopy/announcements/n08"
+    },
+    {
+      "id": "N09",
+      "topic": "Data export",
+      "text": "We published the seed-list export guide for every account.",
+      "url": "https://example.invalid/canopy/announcements/n09"
+    },
+    {
+      "id": "N10",
+      "topic": "Orientation",
+      "text": "We refreshed orientation materials for all synthetic members.",
+      "url": "https://example.invalid/canopy/announcements/n10"
+    },
+    {
+      "id": "N11",
+      "topic": "Roadmap",
+      "text": "We published the next-quarter roadmap for everyone to review.",
+      "url": "https://example.invalid/canopy/announcements/n11"
+    },
+    {
+      "id": "N12",
+      "topic": "Accessibility guide",
+      "text": "We published the accessibility guide in the shared handbook.",
+      "url": "https://example.invalid/canopy/announcements/n12"
+    },
+    {
+      "id": "N13",
+      "topic": "Feedback",
+      "text": "We opened the monthly company-wide feedback form.",
+      "url": "https://example.invalid/canopy/announcements/n13"
+    },
+    {
+      "id": "N14",
+      "topic": "Continuity",
+      "text": "We completed the synthetic backup restore rehearsal on October 29.",
+      "url": "https://example.invalid/canopy/announcements/n14"
+    },
+    {
+      "id": "N15",
+      "topic": "Support hours",
+      "text": "We published the shared support-hours calendar for November.",
+      "url": "https://example.invalid/canopy/announcements/n15"
+    },
+    {
+      "id": "N16",
+      "topic": "Training",
+      "text": "We opened a seed-storage workshop to everyone on November 6.",
+      "url": "https://example.invalid/canopy/announcements/n16"
+    },
+    {
+      "id": "N17",
+      "topic": "Community policy",
+      "text": "We published a revised seed-exchange etiquette guide.",
+      "url": "https://example.invalid/canopy/announcements/n17"
+    },
+    {
+      "id": "N18",
+      "topic": "Device guide",
+      "text": "We published the Seed Hub guide for small screens.",
+      "url": "https://example.invalid/canopy/announcements/n18"
+    },
+    {
+      "id": "N19",
+      "topic": "Next week",
+      "text": "We plan to review translation coverage and publish the rollback guide during November 2 to November 8.",
+      "url": "https://example.invalid/canopy/announcements/n19"
+    },
+    {
+      "id": "N20",
+      "topic": "Offline mode",
+      "text": "We have no approved release date for offline mode; the date is unconfirmed and the project owner must provide an official response.",
+      "url": "https://example.invalid/canopy/announcements/n20"
+    }
+  ],
+  "faq_questions": [
+    "Who can access Seed Hub?",
+    "Will the November 4 maintenance delete saved seed lists?",
+    "Where can people find the accessibility guide?",
+    "When will offline mode be released?"
+  ],
+  "announcement": {
+    "audience": "All fictional Canopy Tools members",
+    "purpose": "Explain the scheduled maintenance and action to take beforehand",
+    "tone": "Calm and informative",
+    "format": "One short heading and two short paragraphs",
+    "required_action": "save your drafts"
+  },
+  "incomplete_general_request": "Write something about next week."
+}

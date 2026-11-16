@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "canonical_root": {"minLength": 1, "type": "string"},
+    "choice": {"const": "apply"},
+    "consequence_class": {"enum": ["semantic", "structural", "lifecycle", "migration", "release", "external"]},
+    "expires_at": {"type": "string"},
+    "issued_at": {"type": "string"},
+    "nonce": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+    "operation_id": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+    "repository_key": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+    "schema": {"const": "doc-warden/consent-envelope/v1"},
+    "source_revision": {"pattern": "^(no-head|[0-9a-f]{40})$", "type": "string"}
+  },
+  "required": ["schema", "operation_id", "repository_key", "canonical_root", "source_revision", "action_digest", "consequence_class", "nonce", "issued_at", "expires_at", "choice"],
+  "type": "object"
+}

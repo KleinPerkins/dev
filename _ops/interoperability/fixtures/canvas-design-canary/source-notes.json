@@ -1,0 +1,26 @@
+{
+  "schema": "interoperability/canvas-design-source-notes/v1",
+  "synthetic": true,
+  "subject": "A fictional seed exchange: patient growth, shared resources and seasonal return.",
+  "title": "SEED EXCHANGE",
+  "subtitle": "Save a seed. Share a season.",
+  "page_points": [
+    600,
+    800
+  ],
+  "margin_points": 36,
+  "font_names": [
+    "InstrumentSans-Regular.ttf",
+    "GeistMono-Regular.ttf"
+  ],
+  "font_licenses": [
+    "InstrumentSans-OFL.txt",
+    "GeistMono-OFL.txt"
+  ],
+  "required_deliverables": [
+    "philosophy.md",
+    "artwork.pdf",
+    "worker-notes.md"
+  ],
+  "all_real_owner_identity_or_artifact_decisions": false
+}

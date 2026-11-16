@@ -1,0 +1,56 @@
+{"kind":"open","note":"sanitized structural replay of the closed Milestone 1 journal; no names, hosts, ids or text","seq":1,"source":{"close_prefix_events":55,"close_prefix_sha256":"45d156a2e9a8613c82a075d1ceb717b787a208eb5692a43dd15b0d6082b89738","events":56,"operation":"ret-20261023-2210","plan_body_sha256":"2ce6764fbeba0e1e0e3f299986e1f5522792532dd928d904faf36c4d44324a1f"},"step":"bind","subsystem":"journal"}
+{"kind":"baseline","seq":2,"step":"baseline","subsystem":"doctors","target":"control-plane-doctor","verdict":"preexisting-violation"}
+{"kind":"baseline","seq":3,"step":"baseline","subsystem":"doctors","target":"scheduled-jobs","verdict":"pass"}
+{"kind":"baseline","seq":4,"step":"baseline","subsystem":"doctors","target":"shadow-sync","verdict":"non-ok-preexisting"}
+{"kind":"baseline","seq":5,"step":"baseline","subsystem":"doctors","target":"pr-automation-live","verdict":"pass"}
+{"kind":"baseline","seq":6,"step":"baseline","subsystem":"scan","target":"mention-scan-spec","verdict":"recorded"}
+{"case":"risk-waivers","kind":"preflight","risks":["untracked-files","ignored-data","unpushed-commits","linked-worktree-work"],"seq":7,"step":"preflight","subsystem":"targets","target":"fourteen-checkouts"}
+{"case":"operator-gates-listed","gates":["github-rulesets","github-pages","dns-registrar"],"kind":"preflight","seq":8,"step":"preflight","subsystem":"github","target":"remote-state"}
+{"case":"concurrent-writer","kind":"drift","note":"live state differed from the plan baseline; other agent sessions active","seq":9,"step":"preflight","subsystem":"primary-tree","target":"home-repo"}
+{"kind":"baseline","seq":10,"step":"baseline","subsystem":"doctors","target":"agent-route-and-awa","verdict":"pass"}
+{"case":"operator-gate-github-rules","expect":{"corrected":false,"reopened":false,"status":"completed"},"kind":"intent","seq":11,"step":"retire-remote-automation","subsystem":"baseline-ruleset","target":"two-repos","verb":"operator-gate"}
+{"closes":11,"kind":"complete","observed":"rules active","seq":12,"step":"retire-remote-automation","subsystem":"baseline-ruleset"}
+{"kind":"complete","seq":13,"state":"prepared-unarmed","step":"retire-remote-automation","subsystem":"prepared-prs","target":"governed-prs"}
+{"case":"local-jobs-composed","expect":{"corrected":false,"reopened":false,"status":"completed"},"kind":"intent","preimage_recorded":true,"seq":14,"step":"remove-local-wiring","subsystem":"local-jobs","target":"scheduler-rows"}
+{"closes":14,"kind":"complete","observed":"rows removed","seq":15,"step":"remove-local-wiring","subsystem":"local-jobs"}
+{"case":"invalid-complete-corrected","expect":{"corrected":true,"reopened":false,"status":"completed"},"kind":"intent","seq":16,"step":"remove-local-wiring","subsystem":"client-config","target":"client-registration","verb":"owning-client-verb"}
+{"closes":16,"kind":"complete","observed":"reported removed","seq":17,"step":"remove-local-wiring","subsystem":"client-config"}
+{"invalidates":[17],"kind":"surprise","note":"the earlier complete was invalid: the client refused (tool too old); registration remained","seq":18,"step":"remove-local-wiring","subsystem":"client-config"}
+{"closes":16,"kind":"complete","observed":"removed after updating the client; verified in its config","seq":19,"step":"remove-local-wiring","subsystem":"client-config"}
+{"case":"preimage-digest-recorded","kind":"manifest","preimage_digest_recorded":true,"seq":20,"staged_digest_recorded":true,"step":"retire-remote-automation","subsystem":"remote-config"}
+{"case":"governed-repo-detachment-gate","kind":"complete","seq":21,"state":"merged-by-owner-bot","step":"detach-consumers","subsystem":"retained-repo","target":"separately-governed-repo"}
+{"approval":"operator","case":"guard-mode-restore","expect":{"corrected":false,"reopened":false,"status":"completed"},"kind":"intent","preimage_recorded":true,"seq":22,"step":"remove-local-wiring","subsystem":"awa-mode","target":"six-mode-keys"}
+{"case":"linked-worktree-waiver","expect":{"corrected":false,"reopened":false,"status":"completed"},"guard":"allow-after-approved-mode-off","kind":"intent","seq":23,"step":"remove-local-wiring","subsystem":"linked-worktree","target":"one-worktree","waiver":"destroy-target-only-state"}
+{"closes":23,"kind":"complete","observed":"removed and pruned","seq":24,"step":"remove-local-wiring","subsystem":"linked-worktree"}
+{"case":"cohort-reference-clones","expect":{"corrected":false,"reopened":false,"status":"completed"},"kind":"intent","precheck":"clean-no-writers","seq":25,"step":"delete-checkouts","subsystem":"cohort-vendor","target":"five-reference-clones"}
+{"closes":25,"kind":"complete","observed":"five paths absent","seq":26,"step":"delete-checkouts","subsystem":"cohort-vendor"}
+{"case":"cohort-with-destruction-waiver","expect":{"corrected":false,"reopened":false,"status":"completed"},"kind":"intent","seq":27,"step":"delete-checkouts","subsystem":"cohort-work","target":"three-work-clones","waiver":"destroy-untracked-and-unpushed"}
+{"closes":27,"kind":"complete","observed":"three paths absent","seq":28,"step":"delete-checkouts","subsystem":"cohort-work"}
+{"case":"cohort-personal","expect":{"corrected":false,"reopened":false,"status":"completed"},"kind":"intent","precheck":"clean-no-writers","seq":29,"step":"delete-checkouts","subsystem":"cohort-personal-a","target":"two-personal-clones"}
+{"closes":29,"kind":"complete","observed":"absent","seq":30,"step":"delete-checkouts","subsystem":"cohort-personal-a"}
+{"case":"cache-removal-keep-transcripts","decision":"caches-only-keep-transcripts","expect":{"corrected":false,"reopened":false,"status":"completed"},"kind":"intent","seq":31,"step":"remove-local-wiring","subsystem":"cursor-project-dirs","target":"four-project-folders"}
+{"closes":31,"kind":"complete","observed":"caches removed; transcripts kept","seq":32,"step":"remove-local-wiring","subsystem":"cursor-project-dirs"}
+{"case":"operator-gate-reopen-then-complete","expect":{"corrected":false,"reopened":true,"status":"completed"},"kind":"intent","rollback_recorded":true,"seq":33,"step":"retire-remote-automation","subsystem":"pac-pause-install","target":"remote-controller"}
+{"closes":33,"kind":"complete","observed":"config installed; controller paused","seq":34,"step":"retire-remote-automation","subsystem":"pac-config-install"}
+{"kind":"surprise","note":"live doctor refuses until the external app scope matches","reopens":[33],"seq":35,"state":"open-intent-controller-paused","step":"retire-remote-automation","subsystem":"pac-pause-install"}
+{"case":"permission-boundary-failure","expect":{"corrected":false,"reopened":false,"status":"failed"},"kind":"intent","method":"api-equivalent-of-declined-ui-step","preimage_recorded":true,"seq":36,"step":"retire-remote-automation","subsystem":"app-scope"}
+{"closes":36,"fallback":"shrink-fleet-only; scope reduction becomes a ledger exception","kind":"failure","result":"forbidden","seq":37,"step":"retire-remote-automation","subsystem":"app-scope"}
+{"closes":33,"kind":"complete","observed":"fleet reduced; live doctor valid; controller resumed","seq":38,"step":"retire-remote-automation","subsystem":"pac-shrink"}
+{"case":"operator-gate-github-rules","expect":{"corrected":false,"reopened":false,"status":"completed"},"kind":"intent","precondition":"replacement-rules-verified","seq":39,"step":"retire-remote-automation","subsystem":"ruleset-delete","target":"three-repos"}
+{"closes":39,"kind":"complete","observed":"deleted; replacement rules retained","seq":40,"step":"retire-remote-automation","subsystem":"ruleset-delete"}
+{"case":"cohort-with-destruction-waiver","expect":{"corrected":false,"reopened":false,"status":"completed"},"kind":"intent","precheck":"remote-rules-replaced","seq":41,"step":"delete-checkouts","subsystem":"cohort-personal-b","target":"two-personal-clones","waiver":"destroy-local-only-branches"}
+{"closes":41,"kind":"complete","observed":"absent","seq":42,"step":"delete-checkouts","subsystem":"cohort-personal-b"}
+{"case":"operator-gate-reopen-then-complete","expect":{"corrected":false,"reopened":false,"status":"completed"},"kind":"intent","seq":43,"step":"retire-remote-automation","subsystem":"pac-config-final","target":"remote-controller","why":"align external scope after owner action"}
+{"closes":43,"kind":"complete","observed":"scope equals fleet; live doctor valid; resumed","seq":44,"step":"retire-remote-automation","subsystem":"pac-config-final"}
+{"case":"pages-dns-attestation","expect":{"corrected":false,"reopened":false,"status":"completed"},"kind":"intent","precheck":"dns-empty-site-offline","seq":45,"step":"retire-domain","steps":"disable-pages-then-archive","subsystem":"pages-archive","target":"two-site-repos"}
+{"closes":45,"kind":"complete","observed":"pages disabled; both repositories archived","seq":46,"step":"retire-domain","subsystem":"pages-archive"}
+{"case":"external-pending-exception","kind":"complete","seq":47,"state":"redemption-period","step":"retire-domain","subsystem":"registrar-delete","target":"domain"}
+{"case":"ordered-cohort-after-external-gates","expect":{"corrected":false,"reopened":false,"status":"completed"},"kind":"intent","precheck":"remote-archived-domain-settled","seq":48,"step":"delete-checkouts","subsystem":"cohort-personal-c","target":"two-site-clones"}
+{"closes":48,"kind":"complete","observed":"absent; all fourteen checkouts deleted","seq":49,"step":"delete-checkouts","subsystem":"cohort-personal-c"}
+{"closes":22,"kind":"complete","observed":"all temporary mode entries removed","seq":50,"step":"remove-local-wiring","subsystem":"awa-mode"}
+{"case":"subsystem-stale-exception","disposition":"ledger-exception-inert","finding":"stale authority records for removed checkouts remain","kind":"surprise","seq":51,"step":"remove-local-wiring","subsystem":"shadow-sync"}
+{"case":"generated-index-refresh","kind":"complete","observed":"index regenerated; target-path scan clean","seq":52,"step":"remove-local-wiring","subsystem":"agent-route"}
+{"case":"generated-memory-mentions","kind":"complete","observed":"only a stale count updated; generated memory had no target mentions","seq":53,"step":"verify-retirement","subsystem":"learnings-purge"}
+{"case":"health-vs-baseline","kind":"complete","observed":"no retired-repo rows; violation set unchanged","seq":54,"step":"verify-retirement","subsystem":"doctors"}
+{"case":"secret-handling-cleanup","kind":"complete","observed":"restricted-mode preimage and staging deleted from the remote host","seq":55,"step":"retire-remote-automation","subsystem":"pac-cleanup"}
+{"case":"close-with-exceptions","events":55,"kind":"close","outcome":"verified-with-exceptions","seq":56,"step":"verify-retirement","subsystem":"operation"}

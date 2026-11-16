@@ -1,0 +1,55 @@
+{
+  "schema": "shadow-sync-host-overlay/v1",
+  "governed_root_repository_id": "kleinperkins/dev",
+  "shelves": [
+    [
+      "affirm",
+      "src"
+    ],
+    [
+      "affirm",
+      "vendor"
+    ],
+    [
+      "personal"
+    ],
+    [
+      "capabilities"
+    ]
+  ],
+  "writable_paths": [
+    "."
+  ],
+  "permanent_no_touch_repository_ids": [
+    "affirm/card-platform-product",
+    "kleinperkins/chaos-scheduler"
+  ],
+  "managed_locations": [
+    {
+      "kind": "cursor",
+      "components": [
+        ".cursor",
+        "worktrees"
+      ],
+      "minimum_depth": 2
+    },
+    {
+      "kind": "awa",
+      "components": [
+        ".local",
+        "share",
+        "awa",
+        "worktrees"
+      ],
+      "minimum_depth": 2
+    }
+  ],
+  "awa_evidence": {
+    "adapter_path": "dev/_ops/bin/dev-worktree.sh",
+    "root_records_path": ".local/state/awa/roots",
+    "lease_components": [
+      ".awa",
+      "lease.json"
+    ]
+  }
+}

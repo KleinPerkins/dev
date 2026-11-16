@@ -1,0 +1,62 @@
+{
+  "schema": "personal-portability/doc-v2-schema-source/v1",
+  "owner_ref": "2b41485359c1d64129003535ae919c7caf817459",
+  "purpose": "Complete transitive schema closure for current read-only ADR validation; no active-v2 capability acceptance",
+  "files": [
+    {
+      "name": "artifact.schema.json",
+      "path": "_ops/doc-warden/schemas/v2/artifact.schema.json",
+      "git_blob": "0fb17c32cca5a690c6b847eccd9f8776540f9dc7",
+      "sha256": "b31cecb88bc19cd39163516977c3093023248e278f0275ae4edee7ebb25e1ff8"
+    },
+    {
+      "name": "defect.schema.json",
+      "path": "_ops/doc-warden/schemas/v2/defect.schema.json",
+      "git_blob": "ae767edc6aa3b80c3aafbf6bc521f499f4d288f9",
+      "sha256": "eac27a3f6bd17d7e905a51bfae8cb5a14e97dba6b46c70f769a646edbd8cb703"
+    },
+    {
+      "name": "design-contract.schema.json",
+      "path": "_ops/doc-warden/schemas/v2/design-contract.schema.json",
+      "git_blob": "bb4d23a9d58d2bf4b67e1eb52336ef5d779248a5",
+      "sha256": "b8bad4d4906a9bf0f7969d9466a86728146db47ea8c29b70690727ca3cba90a4"
+    },
+    {
+      "name": "doc-warden-config.schema.json",
+      "path": "_ops/doc-warden/schemas/v2/doc-warden-config.schema.json",
+      "git_blob": "6c7d0ffce636bb69ad1fc95af25dfb49ea7b0d8b",
+      "sha256": "bc022e54f239454d910f32d2720d6cc93871c5c596ea94a62400899151df2703"
+    },
+    {
+      "name": "external-asset-observation.schema.json",
+      "path": "_ops/doc-warden/schemas/v2/external-asset-observation.schema.json",
+      "git_blob": "e7d85143306bc4fc43b9e7d309e2fd093c57af8b",
+      "sha256": "abc3f603dd18295b47cf5f8167a84dd057d0c06cd602257a71b196934aea69db"
+    },
+    {
+      "name": "external-asset.schema.json",
+      "path": "_ops/doc-warden/schemas/v2/external-asset.schema.json",
+      "git_blob": "25f272b12410f9edacc2585e3bac251c04a79b3b",
+      "sha256": "49ae04f4166661bc75b7ba828e9f98875b34c8e88fcf4b36cd00731e06743778"
+    },
+    {
+      "name": "operation-event.schema.json",
+      "path": "_ops/doc-warden/schemas/v2/operation-event.schema.json",
+      "git_blob": "fd93e58b09ce45261aad986d43356cff8453b496",
+      "sha256": "f9230bd12804a2ec621e5308d4c74d9e50e5e041df045566a5578e184e98b0d2"
+    },
+    {
+      "name": "receipt.schema.json",
+      "path": "_ops/doc-warden/schemas/v2/receipt.schema.json",
+      "git_blob": "377979fc65b11b4256c28cc016111f0b5265466c",
+      "sha256": "93b9c4a0b239d542d5f46c96041c6ffc2d5bf1f5af0f792f909a46f6924d1113"
+    },
+    {
+      "name": "relation.schema.json",
+      "path": "_ops/doc-warden/schemas/v2/relation.schema.json",
+      "git_blob": "8f9ada6c538fa75538a8be403d061e46002e8757",
+      "sha256": "e697403efcbe5ce266b98d918c3084165013168b14552161dffaec55ef6a8c84"
+    }
+  ],
+  "unused_reference_schemas_preserved": 14
+}

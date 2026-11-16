@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KleinPerkins/dev/pr-automation/state/v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "owner_repo",
+    "default_branch",
+    "lifecycle",
+    "generation",
+    "target_branch",
+    "target_sha",
+    "controller_digest",
+    "production_controller_digest",
+    "policy_digest",
+    "template_digests",
+    "pair",
+    "rollback_preimage",
+    "managed_settings",
+    "credentials",
+    "history",
+    "revision",
+    "updated_at"
+  ],
+  "properties": {
+    "schema": {"const": "pr-automation-state/v2"},
+    "owner_repo": {"type": "string"},
+    "default_branch": {"type": "string"},
+    "lifecycle": {
+      "enum": [
+        "staged", "canary", "canary_active", "qualified", "promoted", "active",
+        "paused", "credentials_revoked",
+        "rolling_back", "rolled_back", "blocked", "ownership_ambiguous"
+      ]
+    },
+    "generation": {"type": "integer", "minimum": 0},
+    "target_branch": {"type": ["string", "null"]},
+    "target_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
+    "controller_digest": {"$ref": "#/$defs/digest"},
+    "production_controller_digest": {"$ref": "#/$defs/digest"},
+    "policy_digest": {"$ref": "#/$defs/digest"},
+    "template_digests": {"$ref": "#/$defs/pairDigests"},
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["merge_safety", "review_gate"],
+      "properties": {
+        "merge_safety": {"$ref": "#/$defs/resource"},
+        "review_gate": {"$ref": "#/$defs/resource"}
+      }
+    },
+    "rollback_preimage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["settings", "rulesets"],
+      "properties": {
+        "settings": {"$ref": "#/$defs/settings"},
+        "rulesets": {"type": "object", "maxProperties": 0}
+      }
+    },
+    "managed_settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allow_auto_merge", "delete_branch_on_merge", "allow_update_branch",
+        "allow_squash_merge", "allow_merge_commit", "allow_rebase_merge"
+      ],
+      "properties": {
+        "allow_auto_merge": {"type": "boolean"},
+        "delete_branch_on_merge": {"type": "boolean"},
+        "allow_update_branch": {"type": "boolean"},
+        "allow_squash_merge": {"type": "boolean"},
+        "allow_merge_commit": {"type": "boolean"},
+        "allow_rebase_merge": {"type": "boolean"}
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["variable", "secret", "activation"],
+      "properties": {
+        "variable": {"$ref": "#/$defs/credential"},
+        "secret": {"$ref": "#/$defs/credential"},
+        "activation": {"$ref": "#/$defs/credential"}
+      }
+    },
+    "qualification": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema", "digest", "observed_at", "required_check", "scenario_modes"],
+          "properties": {
+            "schema": {"const": "pr-automation-evidence-summary/v2"},
+            "digest": {"$ref": "#/$defs/digest"},
+            "observed_at": {"type": "string", "format": "date-time"},
+            "required_check": {"$ref": "#/$defs/requiredCheck"},
+            "scenario_modes": {"type": "object", "additionalProperties": {"const": "live"}}
+          }
+        }
+      ]
+    },
+    "rollback_proofs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/rollbackProof"}
+    },
+    "pending": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/pending"}
+      ]
+    },
+    "history": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/history"}
+    },
+    "revision": {"type": "integer", "minimum": 1},
+    "updated_at": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "pairDigests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["merge_safety", "review_gate"],
+      "properties": {
+        "merge_safety": {"$ref": "#/$defs/digest"},
+        "review_gate": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "fingerprint", "owned"],
+      "properties": {
+        "id": {"type": ["integer", "null"], "minimum": 1},
+        "fingerprint": {"$ref": "#/$defs/digest"},
+        "owned": {"type": "boolean"}
+      }
+    },
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "owned", "updated_at"],
+      "properties": {
+        "name": {"type": "string"},
+        "owned": {"type": "boolean"},
+        "updated_at": {"type": ["string", "null"]}
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allow_auto_merge", "delete_branch_on_merge", "allow_update_branch",
+        "allow_squash_merge", "allow_merge_commit", "allow_rebase_merge"
+      ],
+      "properties": {
+        "allow_auto_merge": {"type": "boolean"},
+        "delete_branch_on_merge": {"type": "boolean"},
+        "allow_update_branch": {"type": "boolean"},
+        "allow_squash_merge": {"type": "boolean"},
+        "allow_merge_commit": {"type": "boolean"},
+        "allow_rebase_merge": {"type": "boolean"}
+      }
+    },
+    "requiredCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "context", "integration_id", "workflow_path", "workflow_run_id",
+        "check_suite_id", "check_run_id", "head_sha"
+      ],
+      "properties": {
+        "context": {"const": "required / ci"},
+        "integration_id": {"const": 15368},
+        "workflow_path": {"type": "string"},
+        "workflow_run_id": {"type": "integer", "minimum": 1},
+        "check_suite_id": {"type": "integer", "minimum": 1},
+        "check_run_id": {"type": "integer", "minimum": 1},
+        "head_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      }
+    },
+    "pending": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation"],
+      "properties": {
+        "operation": {"type": "string"},
+        "phase": {"type": "string"},
+        "preexisting": {"type": "object"},
+        "settings": {"type": "object"},
+        "returned_id": {"type": ["integer", "null"]},
+        "original_pair": {"type": "object"},
+        "key": {"type": "string"},
+        "id": {"type": "integer"},
+        "preimage": {"type": "object"},
+        "preimage_fingerprint": {"$ref": "#/$defs/digest"},
+        "desired": {"type": "object"},
+        "desired_fingerprint": {"$ref": "#/$defs/digest"},
+        "destination_branch": {"type": "string"},
+        "destination_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "required_check": {"$ref": "#/$defs/requiredCheck"},
+        "updated_at": {"type": ["string", "null"]}
+      }
+    },
+    "rollbackProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generation", "pair_ids", "pair_fingerprints", "target_branch",
+        "target_sha", "restored_settings_fingerprint", "completed_at", "digest"
+      ],
+      "properties": {
+        "generation": {"type": "integer", "minimum": 1},
+        "pair_ids": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["merge_safety", "review_gate"],
+          "properties": {
+            "merge_safety": {"type": "integer", "minimum": 1},
+            "review_gate": {"type": "integer", "minimum": 1}
+          }
+        },
+        "pair_fingerprints": {"$ref": "#/$defs/pairDigests"},
+        "target_branch": {"type": "string"},
+        "target_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "restored_settings_fingerprint": {"$ref": "#/$defs/digest"},
+        "completed_at": {"type": "string", "format": "date-time"},
+        "digest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "history": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "at"],
+      "properties": {
+        "operation": {"type": "string"},
+        "at": {"type": "string", "format": "date-time"},
+        "generation": {"type": "integer"},
+        "target_branch": {"type": "string"},
+        "target_sha": {"type": "string"},
+        "evidence_digest": {"$ref": "#/$defs/digest"},
+        "destination_sha": {"type": "string"},
+        "required_check": {"$ref": "#/$defs/requiredCheck"},
+        "secret_preserved": {"type": "boolean"},
+        "original_pair": {"type": "object"}
+      }
+    }
+  }
+}

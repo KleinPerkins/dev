@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kleinperkins.dev/schemas/pr-automation-canary-proof-v1.json",
+  "title": "PR automation canary proof",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "owner_repo",
+    "generation",
+    "owned_ruleset_id",
+    "canary_branch",
+    "canary_sha",
+    "destination_branch",
+    "ruleset_fingerprint",
+    "settings_fingerprint",
+    "required_context",
+    "integration_id",
+    "observed_at",
+    "scenarios"
+  ],
+  "properties": {
+    "schema": {"const": "pr-automation-canary-proof/v1"},
+    "owner_repo": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+    "generation": {"type": "integer", "minimum": 2},
+    "owned_ruleset_id": {"type": "integer", "minimum": 1},
+    "canary_branch": {"type": "string", "minLength": 1},
+    "canary_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "destination_branch": {"type": "string", "minLength": 1},
+    "ruleset_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "settings_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "required_context": {"const": "required / ci"},
+    "integration_id": {"const": 15368},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "scenarios": {
+      "type": "array",
+      "minItems": 15,
+      "maxItems": 15,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "mode", "outcome"],
+        "properties": {
+          "id": {"type": "string"},
+          "mode": {"enum": ["live", "mocked"]},
+          "outcome": {"const": "pass"},
+          "evidence_url": {"type": "string", "pattern": "^https://", "maxLength": 1000},
+          "api_observation": {"type": "string", "minLength": 1, "maxLength": 500}
+        },
+        "oneOf": [
+          {"required": ["evidence_url"], "not": {"required": ["api_observation"]}},
+          {"required": ["api_observation"], "not": {"required": ["evidence_url"]}}
+        ]
+      }
+    }
+  }
+}

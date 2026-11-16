@@ -1,0 +1,71 @@
+---
+description: Safety and quality guardrails for Notion MCP operations — enforces schema discovery before writes, explicit confirmation before mutating tools, and graceful degradation. Apply when Notion MCP is connected or the user is working with Notion pages, databases, data sources, comments, or views.
+globs: 
+alwaysApply: false
+# To have this rule always apply instead of letting the agent decide, change to:
+# alwaysApply: true
+---
+
+# Notion MCP Safety & Quality
+
+**This rule applies when Notion MCP is connected and the user is working with Notion pages, databases, data sources, comments, or views.**
+
+## MCP & Data Safety
+
+- Assume the workflow is executed via Notion MCP (`user-Notion`) and ensure the MCP is connected before running operations.
+- Before writing to a page or data source, **always fetch schema first** via `notion-fetch`. Database schemas define required properties, property types, and available templates — writing without first inspecting the schema produces malformed pages or silent property misassignment.
+- For pages outside a database, the only valid property is `title`. For pages inside a database, use the fetched data source schema's property names exactly (case-sensitive).
+- Never create duplicate pages for the same semantic entity without first calling `notion-search` or `notion-query-data-sources` to confirm absence.
+- When given a database URL, treat it as a `database_id` only if the database has exactly one data source. Multi-data-source databases require `data_source_id` resolution via `notion-fetch` on the database URL first.
+
+## Tool Surface
+
+**Read-only tools (`posture: fail-open`)** — safe to invoke without confirmation:
+
+| Tool | Purpose |
+|---|---|
+| `notion-fetch` | Fetch a page, database, data source, or block by ID or URL |
+| `notion-search` | Workspace-wide search (pages, databases, comments) |
+| `notion-query-data-sources` | Structured query against a data source (filter, sort, pagination) |
+| `notion-query-meeting-notes` | Query the user's meeting-notes data source |
+| `notion-get-comments` | List comments on a page or discussion |
+| `notion-get-teams` | Enumerate teams in the workspace |
+| `notion-get-users` | Enumerate users in the workspace |
+
+**Mutating tools (`posture: fail-closed`)** — require explicit user confirmation of payload before invocation:
+
+| Tool | Mutation | Confirmation payload MUST include |
+|---|---|---|
+| `notion-create-pages` | Creates one or more pages | parent (page_id / database_id / data_source_id), full properties map, content (or template_id), icon + cover (if set). Confirm the full `pages[]` array — never invoke with an unreviewed batch. |
+| `notion-update-page` | Updates page properties or content | page_id, every property being changed (before / after), content diff if any |
+| `notion-duplicate-page` | Clones a page (with or without content) | source page_id, target parent, whether content is included |
+| `notion-move-pages` | Moves pages to a new parent | page_ids[], new parent, confirmation that source parent is acceptable to leave |
+| `notion-update-data-source` | Updates a data source's schema or properties | data_source_id, full schema delta (properties added / removed / renamed). Schema mutations cascade across every page in the data source; confirmation is MANDATORY. |
+| `notion-create-database` | Creates a new database | parent, initial schema, title |
+| `notion-create-view` | Creates a view on a data source | data_source_id, view type, filter / sort config |
+| `notion-update-view` | Updates an existing view | view_id, filter / sort / visibility delta |
+| `notion-create-comment` | Posts a comment | target page_id or discussion_id, full comment body, mentions (if any) |
+
+A mutating call executed without the user's prior review of the payload is a safety violation. Schema mutations on data sources in particular require explicit confirmation because they cascade.
+
+## Usage Guidance
+
+- **Enhanced Markdown spec.** Before generating Notion page content, fetch the spec at `notion://docs/enhanced-markdown-spec` via `notion-fetch`. Notion-flavored Markdown differs from standard Markdown in toggles, callouts, embedded mentions, and property references. Do not hallucinate syntax.
+- **Title discipline.** Never include the page title at the top of the page's `content` — set it in `properties.title` only. Duplicate titles are a common error pattern.
+- **Property formatting for expanded types.** Date, place, number, and checkbox properties have expanded key formats (`date:{property}:start`, `place:{property}:latitude`, `"__YES__"` / `"__NO__"`, JavaScript numbers). Follow the tool description exactly; do not reformat.
+- **Reserved property names.** Properties named `id` or `url` (case-insensitive) require the `userDefined:` prefix (`userDefined:URL`, `userDefined:id`). Unprefixed they collide with Notion's internal fields.
+- **Templates.** When creating a page from a database template, pass `template_id` and omit `content`. Template application is asynchronous — the page appears immediately but template content populates shortly after.
+- **Search scope.** Prefer `notion-query-data-sources` over `notion-search` when the target is known to live in a specific data source; structured queries are cheaper and more precise.
+
+## Graceful Degradation
+
+When a Notion tool is unavailable (network, auth, rate limit, permission denied):
+
+- **Read-only tool failure** (`fail-open`): log the failure, surface the error, continue with already-known context. Do not block.
+- **Mutating tool failure** (`fail-closed`): abort the containing turn. Do NOT retry automatically; surface the error and ask the user how to proceed. Particular care is warranted for `notion-update-data-source` failures — a partial schema mutation can leave a data source in an inconsistent state. On such failure, immediately re-fetch the data source via `notion-fetch` and report the current schema state to the user.
+- **`permission_denied`**: report to the user that the integration lacks access to the target page or database; do not attempt to escalate via a different parent ID.
+- **Rate limit**: respect Notion's `Retry-After` signaling; do not aggressively retry.
+
+## Boundary
+
+This rule governs Notion MCP only. Other Notion integrations (the public Notion REST API, unofficial wrappers) have distinct surfaces and require their own safety treatment if consumed.

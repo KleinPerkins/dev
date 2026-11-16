@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authoring_interfaces": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+          "digest_basis": {"const": "live_descriptor_bytes"},
+          "id": {"pattern": "^gsd-[a-z0-9-]+$", "type": "string"},
+          "path": {"pattern": "^\\.cursor/skills/gsd-[a-z0-9-]+/SKILL\\.md$", "type": "string"}
+        },
+        "required": ["id", "path", "digest", "digest_basis"],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "deterministic_utilities": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "command": {"enum": ["gsd-core", "gsd-tools"]},
+          "digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+          "digest_basis": {"const": "live_bounded_shim_bytes"},
+          "path": {"pattern": "^\\.local/bin/gsd-(core|tools)$", "type": "string"}
+        },
+        "required": ["command", "path", "digest", "digest_basis"],
+        "type": "object"
+      },
+      "minItems": 2,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "machine_install_receipt": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "path": {"const": "gsd-core/doc-warden-manifest.json"}
+      },
+      "required": ["path", "digest"],
+      "type": "object"
+    },
+    "observation_id": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+    "observed_at": {"minLength": 1, "type": "string"},
+    "receipt_path": {"pattern": "^_ops/doc-warden/state/v2/runtime/live-doctor/[0-9a-f-]{36}\\.json$", "type": "string"},
+    "rollback": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {"const": "doc-warden runtime uninstall-gsd --preview"},
+        "ownership": {"const": "manifest_identity_matching_only"}
+      },
+      "required": ["command", "ownership"],
+      "type": "object"
+    },
+    "runtime": {
+      "additionalProperties": false,
+      "properties": {
+        "git_commit": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+        "interface_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "interface_digest_basis": {"const": "m1_t01_qualification"},
+        "npm_integrity": {"minLength": 1, "type": "string"},
+        "package": {"const": "@opengsd/gsd-core"},
+        "package_lock_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "pin_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "qualification_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "version": {"const": "1.11.0"}
+      },
+      "required": ["package", "version", "git_commit", "npm_integrity", "pin_digest", "package_lock_digest", "interface_digest", "interface_digest_basis", "qualification_digest"],
+      "type": "object"
+    },
+    "schema": {"const": "doc-warden/gsd-live-doctor-observation/v1"},
+    "source_revision": {"pattern": "^[0-9a-f]{40}$", "type": "string"},
+    "status": {"const": "passed"}
+  },
+  "required": ["schema", "observation_id", "observed_at", "source_revision", "status", "runtime", "machine_install_receipt", "authoring_interfaces", "deterministic_utilities", "receipt_path", "rollback"],
+  "type": "object"
+}

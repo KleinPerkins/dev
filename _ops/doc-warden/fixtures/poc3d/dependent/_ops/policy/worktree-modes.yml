@@ -1,0 +1,4 @@
+schema: awa-modes/v1
+default_mode: off
+
+modes: {}

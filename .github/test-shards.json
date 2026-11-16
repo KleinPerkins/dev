@@ -1,0 +1,239 @@
+{
+  "schema": "dev-test-sharding/v1",
+  "state": "configured",
+  "aggregate": "ci-required",
+  "discovery": {
+    "include": [
+      "_ops/**/test_*.py",
+      "tests/test_*.py"
+    ],
+    "exclude": []
+  },
+  "shards": [
+    {
+      "id": "owner-contracts",
+      "tests": [
+        "_ops/tests/test_dev_successor.py",
+        "_ops/verification/test_contracts.py",
+        "_ops/verification/test_path_gate.py",
+        "_ops/verification/test_runner.py",
+        "_ops/verification/test_selector.py",
+        "tests/test_dev_contract.py"
+      ],
+      "command": [
+        "python3",
+        "-I",
+        "-B",
+        "scripts/verify.py",
+        "local",
+        "--shard",
+        "owner-contracts"
+      ],
+      "timeout_seconds": 1200
+    },
+    {
+      "id": "doc-warden",
+      "tests": [
+        "_ops/doc-warden/v2/tests/test_activation.py",
+        "_ops/doc-warden/v2/tests/test_adr_legacy_basename.py",
+        "_ops/doc-warden/v2/tests/test_adrs.py",
+        "_ops/doc-warden/v2/tests/test_artifacts.py",
+        "_ops/doc-warden/v2/tests/test_authoring_binding.py",
+        "_ops/doc-warden/v2/tests/test_bootstrap.py",
+        "_ops/doc-warden/v2/tests/test_canonical.py",
+        "_ops/doc-warden/v2/tests/test_cli.py",
+        "_ops/doc-warden/v2/tests/test_config_schema.py",
+        "_ops/doc-warden/v2/tests/test_cross_repo_dependencies.py",
+        "_ops/doc-warden/v2/tests/test_dashboard.py",
+        "_ops/doc-warden/v2/tests/test_defect_authority.py",
+        "_ops/doc-warden/v2/tests/test_defect_promotion.py",
+        "_ops/doc-warden/v2/tests/test_defects.py",
+        "_ops/doc-warden/v2/tests/test_delivery_contract.py",
+        "_ops/doc-warden/v2/tests/test_dependencies.py",
+        "_ops/doc-warden/v2/tests/test_dependency_property_cases.py",
+        "_ops/doc-warden/v2/tests/test_external_assets.py",
+        "_ops/doc-warden/v2/tests/test_gsd_adapter.py",
+        "_ops/doc-warden/v2/tests/test_hook_contract.py",
+        "_ops/doc-warden/v2/tests/test_intents.py",
+        "_ops/doc-warden/v2/tests/test_inventory.py",
+        "_ops/doc-warden/v2/tests/test_live_install.py",
+        "_ops/doc-warden/v2/tests/test_migrate.py",
+        "_ops/doc-warden/v2/tests/test_native_delivery.py",
+        "_ops/doc-warden/v2/tests/test_new_repo.py",
+        "_ops/doc-warden/v2/tests/test_new_repo_e2e.py",
+        "_ops/doc-warden/v2/tests/test_plan_invalidation.py",
+        "_ops/doc-warden/v2/tests/test_product_lifecycle.py",
+        "_ops/doc-warden/v2/tests/test_receipts.py",
+        "_ops/doc-warden/v2/tests/test_reconcile.py",
+        "_ops/doc-warden/v2/tests/test_rigor.py",
+        "_ops/doc-warden/v2/tests/test_roadmap.py",
+        "_ops/doc-warden/v2/tests/test_runtime_qualification.py",
+        "_ops/doc-warden/v2/tests/test_save_game_adapter.py",
+        "_ops/doc-warden/v2/tests/test_scm.py",
+        "_ops/doc-warden/v2/tests/test_test_sharding.py",
+        "_ops/doc-warden/v2/tests/test_transactions.py",
+        "_ops/doc-warden/v2/tests/test_triggers.py",
+        "_ops/doc-warden/v2/tests/test_ui_contract.py",
+        "_ops/doc-warden/v2/tests/test_validators.py"
+      ],
+      "command": [
+        "python3",
+        "-I",
+        "-B",
+        "scripts/verify.py",
+        "local",
+        "--shard",
+        "doc-warden"
+      ],
+      "timeout_seconds": 1800
+    },
+    {
+      "id": "baseline-scaffold",
+      "tests": [
+        "_ops/baseline/profiles/pr-automation/test_fleet.py",
+        "_ops/baseline/profiles/pr-automation/test_profile.py",
+        "_ops/baseline/profiles/pr-automation/v3/test_prepare_candidate_tuple.py",
+        "_ops/baseline/profiles/pr-automation/v3/test_profile.py",
+        "_ops/tests/test_successor_delivery.py"
+      ],
+      "command": [
+        "python3",
+        "-I",
+        "-B",
+        "scripts/verify.py",
+        "local",
+        "--shard",
+        "baseline-scaffold"
+      ],
+      "timeout_seconds": 1200
+    },
+    {
+      "id": "host-overlay-lifecycle",
+      "tests": [
+        "_ops/tests/test_awa_evidence_binding.py",
+        "_ops/tests/test_identity_dispatcher.py",
+        "_ops/tests/test_shadow_sync_host_policy.py"
+      ],
+      "command": [
+        "python3",
+        "-I",
+        "-B",
+        "scripts/verify.py",
+        "local",
+        "--shard",
+        "host-overlay-lifecycle"
+      ],
+      "timeout_seconds": 1800
+    },
+    {
+      "id": "interop-portability",
+      "tests": [
+        "_ops/interoperability/test_canvas_design_canary.py",
+        "_ops/interoperability/test_codex_work_rules.py",
+        "_ops/interoperability/test_contracts.py",
+        "_ops/interoperability/test_imported_skill_isolation.py",
+        "_ops/interoperability/test_internal_comms_canary.py",
+        "_ops/interoperability/test_isokit_migration.py",
+        "_ops/interoperability/test_isokit_retained.py",
+        "_ops/interoperability/test_mcp_maintenance.py",
+        "_ops/interoperability/test_mcp_maintenance_owner_api.py",
+        "_ops/interoperability/test_mcp_migration.py",
+        "_ops/interoperability/test_mcp_registrar_slice.py",
+        "_ops/interoperability/test_native_rules.py",
+        "_ops/interoperability/test_plan_refine_canary.py",
+        "_ops/interoperability/test_plan_refine_fixture.py",
+        "_ops/interoperability/test_rule_preparation.py",
+        "_ops/interoperability/test_selected_skill_canary.py",
+        "_ops/interoperability/test_session_lock.py",
+        "_ops/interoperability/test_skill_migration.py",
+        "_ops/interoperability/test_theme_factory_canary.py",
+        "_ops/interoperability/test_theme_factory_retained.py",
+        "_ops/portability/test_device_attestation.py",
+        "_ops/portability/test_engine.py",
+        "_ops/portability/test_package.py",
+        "_ops/portability/test_personal_baseline.py",
+        "_ops/portability/test_personal_controls.py",
+        "_ops/portability/test_personal_doc_v2_read.py",
+        "_ops/portability/test_personal_doctor.py",
+        "_ops/portability/test_personal_documentation.py",
+        "_ops/portability/test_personal_git.py",
+        "_ops/portability/test_personal_gsd_codex_bundle.py",
+        "_ops/portability/test_personal_gsd_codex_source.py",
+        "_ops/portability/test_personal_linked_diagnostics.py",
+        "_ops/portability/test_personal_linked_registry.py",
+        "_ops/portability/test_personal_linked_worktree.py",
+        "_ops/portability/test_personal_native_imports.py",
+        "_ops/portability/test_personal_native_skill_creator.py",
+        "_ops/portability/test_personal_profile.py",
+        "_ops/portability/test_personal_remote.py",
+        "_ops/portability/test_personal_scope.py",
+        "_ops/portability/test_personal_worktree.py"
+      ],
+      "command": [
+        "python3",
+        "-I",
+        "-B",
+        "scripts/verify.py",
+        "local",
+        "--shard",
+        "interop-portability"
+      ],
+      "timeout_seconds": 1800
+    },
+    {
+      "id": "context-measurement",
+      "tests": [
+        "_ops/context-measurement/test_capability_discovery_inventory.py",
+        "_ops/context-measurement/test_correction_dogfood.py",
+        "_ops/context-measurement/test_kp_context_measure.py",
+        "_ops/context-measurement/test_release2_closure.py",
+        "_ops/context-measurement/test_validate_static_context_manifest.py"
+      ],
+      "command": [
+        "python3",
+        "-I",
+        "-B",
+        "scripts/verify.py",
+        "local",
+        "--shard",
+        "context-measurement"
+      ],
+      "timeout_seconds": 900
+    },
+    {
+      "id": "review-admission",
+      "tests": [
+        "tests/test_bootstrap_review.py",
+        "tests/test_create_review_pr.py",
+        "tests/test_local_review.py",
+        "tests/test_reviewer_app.py"
+      ],
+      "command": [
+        "python3",
+        "-I",
+        "-B",
+        "scripts/verify.py",
+        "local",
+        "--shard",
+        "review-admission"
+      ],
+      "timeout_seconds": 900
+    },
+    {
+      "id": "ci-negative",
+      "tests": [
+        "tests/test_ci.py"
+      ],
+      "command": [
+        "python3",
+        "-I",
+        "-B",
+        "scripts/verify.py",
+        "local",
+        "--shard",
+        "ci-negative"
+      ],
+      "timeout_seconds": 600
+    }
+  ]
+}

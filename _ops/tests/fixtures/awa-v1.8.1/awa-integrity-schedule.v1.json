@@ -1,0 +1,13 @@
+{
+  "schema": "awa-integrity-schedule/v1",
+  "label": "com.kleinperkins.awa-integrity",
+  "interval_seconds": 21600,
+  "minimum_interval_seconds": 3600,
+  "maximum_interval_seconds": 43200,
+  "profile": "deep",
+  "trigger": "launchd",
+  "executable": "kernel/bin/awa-integrity-sweep.sh",
+  "host_owner": "local-jobs",
+  "ships_plist": false,
+  "exit_codes_verbatim": true
+}

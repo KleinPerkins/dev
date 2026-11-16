@@ -1,0 +1,14 @@
+{
+  "name": "@kleinperkins/doc-warden-gsd-binding",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Exact dependency lock for doc-warden's GSD Core host overlay",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24.0.0",
+    "npm": ">=10.0.0"
+  },
+  "dependencies": {
+    "@opengsd/gsd-core": "1.11.0"
+  }
+}

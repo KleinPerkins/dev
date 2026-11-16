@@ -1,0 +1,21 @@
+{
+  "schema": "interoperability/plan-refine-source-notes/v1",
+  "pin": "f2301ce13d50e471ff1e8ae51fb5a41bf47eaf0a",
+  "payload_files": 4,
+  "canonical_contract_tests": 11,
+  "canonical_file": "global/skills/plan-refine/SKILL.md",
+  "complete_contract_preserved": true,
+  "standalone_default": "No automatic Swarm dispatch; recommendations need actual confirmation. A verifier is never promised by default.",
+  "cases": [
+    "draft-assess",
+    "draft-harden",
+    "accepted-harden",
+    "no-material-change",
+    "implementation-started",
+    "swarm-confirmation",
+    "ambiguous-target",
+    "write-denied"
+  ],
+  "no_native_or_model_authority": true,
+  "stock_installer": "Inert only; it targets three clients and can replace foreign symlinks. This owner profile publishes one absent Codex link with exact rollback instead."
+}

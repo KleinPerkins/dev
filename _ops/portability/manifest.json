@@ -1,0 +1,846 @@
+{
+  "schema": "personal-portability/manifest/v1",
+  "profile": "personal-codex",
+  "platform": {
+    "os": "Darwin",
+    "architecture": "arm64"
+  },
+  "repositories": [
+    {
+      "id": "KleinPerkins/dev",
+      "path": ".",
+      "revision": null,
+      "disposition": "blocked-review",
+      "reason": "Successor ID 1459458379 has fresh history. No predecessor Git revision is transferable authority; exact successor source selection and personal adoption remain the later G3 gate.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/skills",
+      "path": "capabilities/skills",
+      "revision": "f2301ce13d50e471ff1e8ae51fb5a41bf47eaf0a",
+      "disposition": "source-only",
+      "reason": "Pinned personal source. History scanner findings reviewed as synthetic fixtures or non-credential identifiers; runtime activation and native qualification remain separate.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/kp-mcp",
+      "path": "capabilities/mcp",
+      "revision": "a34a0f73b93650e4a6abe9c9dff9a2e3eced94cb",
+      "disposition": "source-only",
+      "reason": "Pinned personal source. History scanner findings reviewed as synthetic fixtures or non-credential identifiers; runtime activation and native qualification remain separate.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/awa",
+      "path": "capabilities/awa",
+      "revision": "61c3bf1aa0f70b73644512f2befaafc2b31a6d18",
+      "disposition": "source-only",
+      "reason": "Reconstruct pinned personal source; runtime activation and native qualification are separate.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/intent-router",
+      "path": "capabilities/intent-router",
+      "revision": "3b9df28df6780178e3e25a9743d5c592aedbd085",
+      "disposition": "source-only",
+      "reason": "Reconstruct pinned personal source; runtime activation and native qualification are separate.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/operator-voice",
+      "path": "capabilities/operator-voice",
+      "revision": "3f787926467c5e0314f21c4e6bb5d2984ac651b8",
+      "disposition": "source-only",
+      "reason": "Reconstruct pinned personal source; runtime activation and native qualification are separate.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/sterling",
+      "path": "personal/sterling",
+      "revision": "74c555d62d0eeb32edefba08dd86f33e198183ad",
+      "disposition": "source-only",
+      "reason": "Pinned personal product source. Local ignored media/outputs or release credentials are separate inventory items; no runtime/build hook execution.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/sterling.io",
+      "path": "personal/sterling.io",
+      "revision": "e83d1ecebf568ffc57602d36fd8b24c38985560f",
+      "disposition": "source-only",
+      "reason": "Pinned personal product source. Local ignored media/outputs or release credentials are separate inventory items; no runtime/build hook execution.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/local-jobs",
+      "path": "personal/local-jobs",
+      "revision": "0c106abea22cf0144d2a7959f384b2d732aff295",
+      "disposition": "source-only",
+      "reason": "Reconstruct pinned personal source; runtime activation and native qualification are separate.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/pr-automation-controller",
+      "path": "personal/pr-automation-controller",
+      "revision": "fe9a3a20073e7fd4e2fed078188f50ec4a952c2e",
+      "disposition": "source-only",
+      "reason": "Pinned personal source. History scanner findings reviewed as synthetic fixtures or non-credential identifiers; runtime activation and native qualification remain separate.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/server-guard",
+      "path": "personal/server-guard",
+      "revision": "8b364b616aa639eefdfd25dea417ddb8e150e5f8",
+      "disposition": "source-only",
+      "reason": "Reconstruct pinned personal source; runtime activation and native qualification are separate.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/chaos-labs",
+      "path": "personal/chaos-labs",
+      "revision": "9b4aaa130d39eb3eb6445f668f140b108b99a9b1",
+      "disposition": "blocked-review",
+      "reason": "Mixed work/personal repository. Full Git history is not approved for personal transfer; curated source export required.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/operator-voice-profile",
+      "path": "personal/operator-voice-profile",
+      "revision": "89c59bad19b503a7997263b6d33068c4ffd6ea23",
+      "disposition": "blocked-review",
+      "reason": "Encrypted profile replica needs personal/work classification and owner-supported recovery; do not clone or import automatically.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/doc-warden-canary",
+      "path": "personal/doc-warden-canary",
+      "revision": "e35d30f9d6dd3b004d56c5744fe6b38102d6bc7a",
+      "disposition": "source-only",
+      "reason": "Pinned personal source. History scanner findings reviewed as synthetic fixtures or non-credential identifiers; runtime activation and native qualification remain separate.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/kp-pr-bot-canary",
+      "path": "personal/kp-pr-bot-canary",
+      "revision": "1c16aeccce2de965c38ee6214daf0632554703b1",
+      "disposition": "source-only",
+      "reason": "Reconstruct pinned personal source; runtime activation and native qualification are separate.",
+      "required": true
+    },
+    {
+      "id": "KleinPerkins/ecosystem-orchestrator",
+      "path": "personal/ecosystem-orchestrator",
+      "revision": "791da21fe8620220ac41146b9f039dabec2504a7",
+      "disposition": "excluded-work",
+      "reason": "Work-owned content or work distribution bridge; no personal runtime or data migration.",
+      "required": false
+    },
+    {
+      "id": "KleinPerkins/cpp",
+      "path": "personal/cpp",
+      "revision": "ffcf827b6a87cbfb5053e2c866a51bf4ff7e695e",
+      "disposition": "excluded-work",
+      "reason": "Work-owned content or work distribution bridge; no personal runtime or data migration.",
+      "required": false
+    },
+    {
+      "id": "KleinPerkins/ai-analytics-context",
+      "path": "personal/ai-analytics-context",
+      "revision": "ff98f5a3ad40f67833241ead2cbcaa26377009af",
+      "disposition": "excluded-work",
+      "reason": "Work-owned content or work distribution bridge; no personal runtime or data migration.",
+      "required": false
+    },
+    {
+      "id": "KleinPerkins/chaos-scheduler",
+      "path": "personal/chaos-scheduler",
+      "revision": null,
+      "disposition": "blocked-protected",
+      "reason": "Held programme WIP; excluded from current G1 source execution. Accepted shared-framework convergence must preserve the public release; migration, installation and activation require their separate programme gates.",
+      "required": true
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "skills/keep-awake",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/subagent-orchestration",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/agent-route",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/algorithmic-art",
+      "owner": "KleinPerkins/skills",
+      "disposition": "source-only",
+      "reason": "Source retained; current source metadata does not expose this capability to Codex. No exposure override is implied.",
+      "required": false
+    },
+    {
+      "id": "skills/canvas-design",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/capability",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/claude-api",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/doc-coauthoring",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/frontend-design",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/internal-comms",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/local-jobs",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/mcp-builder",
+      "owner": "KleinPerkins/skills",
+      "disposition": "source-only",
+      "reason": "Source retained; current source metadata does not expose this capability to Codex. No exposure override is implied.",
+      "required": false
+    },
+    {
+      "id": "skills/pdf",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/plan-refine",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/pr-steward",
+      "owner": "KleinPerkins/skills",
+      "disposition": "source-only",
+      "reason": "Source retained; current source metadata does not expose this capability to Codex. No exposure override is implied.",
+      "required": false
+    },
+    {
+      "id": "skills/prompt-architect",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Existing bounded INT-008 preview/apply supports only an exact qualified host build and separate retained activation; fresh target evidence and operation-bound approval required.",
+      "required": true
+    },
+    {
+      "id": "skills/save-game",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/skill-creator",
+      "owner": "KleinPerkins/skills",
+      "disposition": "source-only",
+      "reason": "Source retained; current source metadata does not expose this capability to Codex. No exposure override is implied.",
+      "required": false
+    },
+    {
+      "id": "skills/slack-gif-creator",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/swarm",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/theme-factory",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/verification-before-completion",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Existing bounded INT-008 preview/apply supports only an exact qualified host build and separate retained activation; fresh target evidence and operation-bound approval required.",
+      "required": true
+    },
+    {
+      "id": "skills/web-artifacts-builder",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/webapp-testing",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/xlsx",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/swarm-probe",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/swarm-reviewer",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/swarm-verifier",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/awa",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Native Codex registration/protection unsupported by current owner identity contract; no overlay/install or authority claim.",
+      "required": true
+    },
+    {
+      "id": "skills/dev-main-sync",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/operator-voice",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Personal LOCAL_ONLY runtime candidate. Owner native doctor/install contract and profile data classification are required; existing encrypted profile is not auto-restored.",
+      "required": true
+    },
+    {
+      "id": "skills/continual-learning",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/continual-learning-consolidate",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/isokit",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/session-close",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/update-skills",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "skills/google-kit-doc-styles",
+      "owner": "KleinPerkins/skills",
+      "disposition": "blocked-owner-gate",
+      "reason": "Canonical source is Skills metadata; personal selection and destination native discovery/functional qualification are required before retained installation.",
+      "required": true
+    },
+    {
+      "id": "imported/automate",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/autopilot",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/canvas",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/create-hook",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/create-rule",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/create-skill",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/create-subagent",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/deploy-with-vercel",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/design-interface",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/goal",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/gsd-discuss-phase",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/gsd-new-project",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/gsd-plan-phase",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/gsd-validate-phase",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/latency",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/loop",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/migrate-to-skills",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/new-repo",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/onboard",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/operator-voice",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/origin",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/pr-steward-workspace",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/rename-chat",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/review",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/review-bugbot",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/review-interface",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/review-security",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/sdk",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/share",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/shell",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/split-to-prs",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/statusline",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/update-cli-config",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/update-cursor-settings",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/vision-intake",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "imported/visualize",
+      "owner": "import-owner-unresolved",
+      "disposition": "blocked-owner-gate",
+      "reason": "Installed non-work import observed. Reinstall from qualified canonical source or fresh-account host distribution; do not copy mixed host profiles.",
+      "required": true
+    },
+    {
+      "id": "dev/dev-doctor",
+      "owner": "KleinPerkins/dev",
+      "disposition": "blocked-owner-gate",
+      "reason": "Personal-safe source projection and host qualification required; legacy full dev install is not permitted.",
+      "required": true
+    },
+    {
+      "id": "dev/dev-new-repo",
+      "owner": "KleinPerkins/dev",
+      "disposition": "blocked-owner-gate",
+      "reason": "Personal-safe source projection and host qualification required; legacy full dev install is not permitted.",
+      "required": true
+    },
+    {
+      "id": "dev/dev-remove-repo",
+      "owner": "KleinPerkins/dev",
+      "disposition": "blocked-owner-gate",
+      "reason": "Personal-safe source projection and host qualification required; legacy full dev install is not permitted.",
+      "required": true
+    },
+    {
+      "id": "dev/doc-warden",
+      "owner": "KleinPerkins/dev",
+      "disposition": "blocked-owner-gate",
+      "reason": "Personal-safe source projection and host qualification required; legacy full dev install is not permitted.",
+      "required": true
+    },
+    {
+      "id": "connections/snow-kit",
+      "owner": "work-service",
+      "disposition": "excluded-work",
+      "reason": "Work connection excluded; no credentials, endpoints, or OAuth sessions transferred.",
+      "required": false
+    },
+    {
+      "id": "connections/snowflake",
+      "owner": "work-service",
+      "disposition": "excluded-work",
+      "reason": "Work connection excluded; no credentials, endpoints, or OAuth sessions transferred.",
+      "required": false
+    },
+    {
+      "id": "connections/jira",
+      "owner": "work-service",
+      "disposition": "excluded-work",
+      "reason": "Work connection excluded; no credentials, endpoints, or OAuth sessions transferred.",
+      "required": false
+    },
+    {
+      "id": "connections/statsig-us",
+      "owner": "work-service",
+      "disposition": "excluded-work",
+      "reason": "Work connection excluded; no credentials, endpoints, or OAuth sessions transferred.",
+      "required": false
+    },
+    {
+      "id": "connections/buildkite",
+      "owner": "work-service",
+      "disposition": "excluded-work",
+      "reason": "Work connection excluded; no credentials, endpoints, or OAuth sessions transferred.",
+      "required": false
+    },
+    {
+      "id": "connections/chronosphere",
+      "owner": "work-service",
+      "disposition": "excluded-work",
+      "reason": "Work connection excluded; no credentials, endpoints, or OAuth sessions transferred.",
+      "required": false
+    },
+    {
+      "id": "connections/sigma",
+      "owner": "work-service",
+      "disposition": "excluded-work",
+      "reason": "Work connection excluded; no credentials, endpoints, or OAuth sessions transferred.",
+      "required": false
+    },
+    {
+      "id": "connections/work-slack",
+      "owner": "work-service",
+      "disposition": "excluded-work",
+      "reason": "Work connection excluded; no credentials, endpoints, or OAuth sessions transferred.",
+      "required": false
+    },
+    {
+      "id": "connections/work-notion",
+      "owner": "work-service",
+      "disposition": "excluded-work",
+      "reason": "Work connection excluded; no credentials, endpoints, or OAuth sessions transferred.",
+      "required": false
+    },
+    {
+      "id": "connections/google-kit",
+      "owner": "connection-owner",
+      "disposition": "blocked-owner-gate",
+      "reason": "Determine personal need and canonical target provider; native registration/auth gates remain required. No work connector configuration copied.",
+      "required": true
+    },
+    {
+      "id": "connections/playwright",
+      "owner": "connection-owner",
+      "disposition": "blocked-owner-gate",
+      "reason": "Determine personal need and canonical target provider; native registration/auth gates remain required. No work connector configuration copied.",
+      "required": true
+    },
+    {
+      "id": "connections/figma",
+      "owner": "connection-owner",
+      "disposition": "blocked-owner-gate",
+      "reason": "Determine personal need and canonical target provider; native registration/auth gates remain required. No work connector configuration copied.",
+      "required": true
+    },
+    {
+      "id": "connections/lucid",
+      "owner": "connection-owner",
+      "disposition": "blocked-owner-gate",
+      "reason": "Determine personal need and canonical target provider; native registration/auth gates remain required. No work connector configuration copied.",
+      "required": true
+    },
+    {
+      "id": "connections/memory-bank",
+      "owner": "connection-owner",
+      "disposition": "blocked-owner-gate",
+      "reason": "Determine personal need and canonical target provider; native registration/auth gates remain required. No work connector configuration copied.",
+      "required": true
+    },
+    {
+      "id": "codex/system-and-plugins",
+      "owner": "Codex-personal-account",
+      "disposition": "account-reconnect",
+      "reason": "Discover fresh-account bundled tools, installed plugins, connections and entitlements. Reinstall eligible personal capabilities through supported owner tools; never copy account sessions or caches.",
+      "required": true
+    }
+  ],
+  "local_state": [
+    {
+      "id": "local-worktrees",
+      "disposition": "blocked-review",
+      "reason": "39 reviewed dirty-source files plus 13 files/one patch from two otherwise unshared source units were snapshotted and restore-checked. 35 of 37 unique clean checked-out heads are remotely covered. Seven mixed-work/generated-memory files and three AWA runtime rows excluded. iCloud delivery/owner-led integration and dormant-ref coverage remain unverified.",
+      "required": true
+    },
+    {
+      "id": "sterling-media-and-project-state",
+      "disposition": "blocked-review",
+      "reason": "Private project-state archive placed in source iCloud Drive and restore-byte checked with Sterling.io: 2,460 files and 9 internal links. Target availability, macOS extended attributes/ACLs and destination semantic acceptance remain unverified.",
+      "required": true
+    },
+    {
+      "id": "sterling-io-local-state",
+      "disposition": "blocked-review",
+      "reason": "Private project-state archive placed in source iCloud Drive and restore-byte checked with Sterling. Target availability, macOS metadata and app/release qualification remain separate; no certificate transfer is assumed.",
+      "required": true
+    },
+    {
+      "id": "personal-services",
+      "disposition": "blocked-review",
+      "reason": "13 ecosystem LaunchAgents observed; two work-only excluded. Six account automations observed by metadata (five active, one paused); work tasks excluded and personal Operator Voice recreation remains owner/account gated. Resolve single-writer ownership and personal-safe schedules before starting any services.",
+      "required": true
+    },
+    {
+      "id": "work-accounts-memory-and-sessions",
+      "disposition": "excluded-work",
+      "reason": "No work authentication, browser sessions, chats, generated memories or work-derived content transferred.",
+      "required": false
+    },
+    {
+      "id": "runtimes-and-caches",
+      "disposition": "recreate",
+      "reason": "Rebuild pinned dependencies/virtual environments/build products through owner contracts; no wholesale cache copies.",
+      "required": true
+    }
+  ]
+}

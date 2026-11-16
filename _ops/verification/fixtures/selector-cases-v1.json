@@ -1,0 +1,71 @@
+{
+  "focus_cases": [
+    {
+      "ambiguous": false,
+      "control_change": false,
+      "expected": true,
+      "graduated_tags": ["change.docs-ordinary"],
+      "id": "all-graduated",
+      "tags": ["change.docs-ordinary"]
+    },
+    {
+      "ambiguous": false,
+      "control_change": false,
+      "expected": false,
+      "graduated_tags": [],
+      "id": "empty-tags",
+      "tags": []
+    },
+    {
+      "ambiguous": false,
+      "control_change": false,
+      "expected": false,
+      "graduated_tags": ["change.docs-ordinary"],
+      "id": "mixed-tags",
+      "tags": ["change.docs-ordinary", "change.operating-model"]
+    },
+    {
+      "ambiguous": true,
+      "control_change": false,
+      "expected": false,
+      "graduated_tags": ["change.docs-ordinary"],
+      "id": "ambiguous",
+      "tags": ["change.docs-ordinary"]
+    },
+    {
+      "ambiguous": false,
+      "control_change": true,
+      "expected": false,
+      "graduated_tags": ["change.control"],
+      "id": "control",
+      "tags": ["change.control"]
+    }
+  ],
+  "matcher_cases": [
+    {
+      "expected": true,
+      "kind": "exact",
+      "path_b64": "UkVBRE1FLm1k",
+      "value_b64": "UkVBRE1FLm1k"
+    },
+    {
+      "expected": true,
+      "kind": "prefix",
+      "path_b64": "X29wcy92ZXJpZmljYXRpb24vc2VsZWN0b3IucHk=",
+      "value_b64": "X29wcy92ZXJpZmljYXRpb24v"
+    },
+    {
+      "expected": true,
+      "kind": "suffix",
+      "path_b64": "ZG9jcy9ydW5ib29rLm1k",
+      "value_b64": "Lm1k"
+    },
+    {
+      "expected": false,
+      "kind": "suffix",
+      "path_b64": "ZG9jcy9ydW5ib29rLnR4dA==",
+      "value_b64": "Lm1k"
+    }
+  ],
+  "schema": "dev-verification-selector-cases/v1"
+}

@@ -1,0 +1,360 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "acceptance": {"items": {"type": "string"}, "type": "array"},
+    "actual": {"type": "string"},
+    "affected_users": {"items": {"type": "string"}, "type": "array"},
+    "anchors": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "github_repository_id": {"type": ["integer", "null"]},
+          "kind": {"enum": ["file", "symbol", "schema", "test", "commit", "pull_request"]},
+          "line_hint": {"type": ["string", "null"]},
+          "path": {"type": "string"},
+          "repository_key": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+          "revision": {"pattern": "^(no-head|[0-9a-f]{40})$", "type": "string"},
+          "symbol": {"type": ["string", "null"]}
+        },
+        "required": ["repository_key", "github_repository_id", "revision", "path", "kind", "symbol", "line_hint"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "created_at": {"type": "string"},
+    "current_focus": {
+      "additionalProperties": false,
+      "properties": {
+        "bug_class": {"enum": ["bohrbug", "heisenbug-mandelbug", "concurrency", null]},
+        "expecting": {"type": "string"},
+        "hypothesis": {"type": "string"},
+        "next_action": {"type": "string"},
+        "reasoning_checkpoint": {"type": ["object", "null"]},
+        "tdd_checkpoint": {"type": ["object", "null"]},
+        "test": {"type": "string"}
+      },
+      "required": ["hypothesis", "test", "expecting", "next_action", "bug_class", "reasoning_checkpoint", "tdd_checkpoint"],
+      "type": "object"
+    },
+    "dependencies": {"items": {"type": "string"}, "type": "array"},
+    "eliminated_hypotheses": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "author_class": {"enum": ["operator", "agent", "system", "test"]},
+          "evidence": {"minLength": 1, "type": "string"},
+          "event_id": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+          "hypothesis_id": {"minLength": 1, "type": "string"},
+          "prior_event_digest": {"anyOf": [{"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}, {"type": "null"}]},
+          "prior_event_id": {"type": ["string", "null"]},
+          "source": {"minLength": 1, "type": "string"},
+          "timestamp": {"type": "string"}
+        },
+        "required": ["event_id", "hypothesis_id", "evidence", "timestamp", "source", "author_class", "prior_event_id", "prior_event_digest"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "environment": {"type": "string"},
+    "error_reference": {"type": "string"},
+    "events": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "author_class": {"enum": ["operator", "agent", "system", "test"]},
+          "event_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+          "event_id": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+          "kind": {"enum": ["created", "symptoms_frozen", "lifecycle_transition", "evidence_appended", "hypothesis_eliminated", "focus_updated", "resolution_updated", "exemption_reevaluated", "promoted"]},
+          "payload": {"additionalProperties": true, "type": "object"},
+          "prior_event_digest": {"anyOf": [{"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}, {"type": "null"}]},
+          "prior_event_id": {"type": ["string", "null"]},
+          "source": {"minLength": 1, "type": "string"},
+          "timestamp": {"type": "string"}
+        },
+        "required": ["event_id", "kind", "timestamp", "source", "author_class", "prior_event_id", "prior_event_digest", "payload", "event_digest"],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "evidence": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "author_class": {"enum": ["operator", "agent", "system", "test"]},
+          "checked": {"minLength": 1, "type": "string"},
+          "event_id": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+          "found": {"minLength": 1, "type": "string"},
+          "implication": {"minLength": 1, "type": "string"},
+          "prior_event_digest": {"anyOf": [{"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}, {"type": "null"}]},
+          "prior_event_id": {"type": ["string", "null"]},
+          "source": {"minLength": 1, "type": "string"},
+          "timestamp": {"type": "string"}
+        },
+        "required": ["event_id", "timestamp", "source", "author_class", "prior_event_id", "prior_event_digest", "checked", "found", "implication"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "exemption": {
+      "additionalProperties": false,
+      "properties": {
+        "conditions": {"items": {"type": "boolean"}, "maxItems": 5, "minItems": 5, "type": "array"},
+        "decision": {"enum": ["exempt", "promote"]}
+      },
+      "required": ["decision", "conditions"],
+      "type": "object"
+    },
+    "expected": {"type": "string"},
+    "fix_paused": {"type": "boolean"},
+    "fix_refs": {
+      "additionalProperties": false,
+      "properties": {
+        "commit": {"type": ["string", "null"]},
+        "plan": {"type": ["string", "null"]},
+        "pull_request": {"type": ["string", "null"]}
+      },
+      "required": ["commit", "pull_request", "plan"],
+      "type": "object"
+    },
+    "frequency": {"type": "string"},
+    "history_head": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+            "event_id": {"pattern": "^[0-9a-f-]{36}$", "type": "string"}
+          },
+          "required": ["event_id", "digest"],
+          "type": "object"
+        },
+        {"type": "null"}
+      ]
+    },
+    "hypotheses": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {"minLength": 1, "type": "string"},
+          "statement": {"minLength": 1, "type": "string"},
+          "status": {"enum": ["active", "eliminated", "confirmed"]}
+        },
+        "required": ["id", "statement", "status"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "id": {"pattern": "^DEF-[0-9a-f-]{36}-[0-9a-f-]{36}$", "type": "string"},
+    "immutable_symptoms": {"items": {"type": "string"}, "type": "array"},
+    "impact": {"type": "string"},
+    "kind": {"const": "defect"},
+    "known_bad_revision": {"pattern": "^(|no-head|[0-9a-f]{40})$", "type": "string"},
+    "known_good_revision": {
+      "anyOf": [
+        {"pattern": "^(|no-head|[0-9a-f]{40})$", "type": "string"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason", "history"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "reason": {"type": "string", "pattern": "[\\s\\S]*\\S[\\s\\S]*"},
+            "history": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["revision", "finding"],
+                "properties": {
+                  "revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                  "finding": {"type": "string", "pattern": "[\\s\\S]*\\S[\\s\\S]*"}
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "lifecycle": {"enum": ["reported", "triaged", "investigating", "ready", "fixing", "verifying", "resolved", "duplicate", "waived", "wont_fix", "recurred", "superseded"]},
+    "next_action": {"type": "string"},
+    "open_decisions": {"items": {"type": "string"}, "type": "array"},
+    "owner": {"minLength": 1, "type": "string"},
+    "preconditions": {"items": {"type": "string"}, "type": "array"},
+    "priority": {"enum": ["P0", "P1", "P2", "P3"]},
+    "problem": {"type": "string"},
+    "promotion": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "prd_seed": {
+              "additionalProperties": false,
+              "properties": {
+                "affected_users": {"items": {"type": "string"}, "type": "array"},
+                "current_behavior": {"type": "string"},
+                "dependencies": {"items": {"type": "string"}, "type": "array"},
+                "evidence": {"items": {"type": "object"}, "type": "array"},
+                "id": {"pattern": "^PRD-SEED-[0-9a-f-]{36}$", "type": "string"},
+                "open_decisions": {"items": {"type": "string"}, "type": "array"},
+                "problem": {"type": "string"},
+                "related_artifacts": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {"pattern": "^DEF-[0-9a-f-]{36}-[0-9a-f-]{36}$", "type": "string"},
+                      "kind": {"const": "defect"}
+                    },
+                    "required": ["kind", "id"],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "requirement_candidates": {"items": {"type": "string"}, "type": "array"},
+                "risk": {"items": {"type": "string"}, "type": "array"},
+                "schema": {"const": "doc-warden/prd-seed/v1"},
+                "source_defect_id": {"pattern": "^DEF-[0-9a-f-]{36}-[0-9a-f-]{36}$", "type": "string"},
+                "status": {"const": "draft"},
+                "target_behavior": {"type": "string"}
+              },
+              "required": ["schema", "id", "status", "source_defect_id", "problem", "current_behavior", "target_behavior", "evidence", "affected_users", "requirement_candidates", "dependencies", "risk", "open_decisions", "related_artifacts"],
+              "type": "object"
+            },
+            "source_defect_id": {"pattern": "^DEF-[0-9a-f-]{36}-[0-9a-f-]{36}$", "type": "string"},
+            "status": {"const": "paused_for_prd"}
+          },
+          "required": ["status", "source_defect_id", "prd_seed"],
+          "type": "object"
+        },
+        {"type": "null"}
+      ]
+    },
+    "record_version": {"type": "integer"},
+    "relations": {"items": {"type": "object"}, "type": "array"},
+    "related_artifacts": {"items": {"type": "string"}, "type": "array"},
+    "repository_key": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+    "report_provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "author_class": {"enum": ["operator", "agent", "system", "test", ""]},
+        "reported_at": {"type": "string"},
+        "source": {"type": "string"}
+      },
+      "required": ["source", "reported_at", "author_class"],
+      "type": "object"
+    },
+    "reproduction": {"items": {"type": "string"}, "type": "array"},
+    "requirement_candidates": {"items": {"type": "string"}, "type": "array"},
+    "resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "files_changed": {"items": {"type": "string"}, "type": "array"},
+        "fix": {"type": ["string", "null"]},
+        "oracle_type": {"enum": ["specified", "derived", "metamorphic", "implicit", null]},
+        "root_cause": {"type": ["string", "null"]},
+        "verification": {
+          "additionalProperties": false,
+          "properties": {
+            "automated": {"items": {"type": "string"}, "type": "array"},
+            "human": {"items": {"type": "string"}, "type": "array"}
+          },
+          "required": ["automated", "human"],
+          "type": "object"
+        }
+      },
+      "required": ["root_cause", "fix", "verification", "oracle_type", "files_changed"],
+      "type": "object"
+    },
+    "risks": {"items": {"type": "string"}, "type": "array"},
+    "schema": {"const": "doc-warden/defect/v2"},
+    "scope": {
+      "additionalProperties": false,
+      "properties": {
+        "components": {"items": {"type": "string"}, "type": "array"},
+        "new_behavior": {"type": "boolean"},
+        "new_dependency": {"type": "boolean"},
+        "repositories": {"type": "integer"},
+        "reversible": {"type": "boolean"},
+        "schema_or_state_change": {"type": "boolean"},
+        "sensitive": {"type": "boolean"},
+        "sessions": {"type": "integer"},
+        "ui_visual": {"type": "boolean"}
+      },
+      "required": ["repositories", "components", "sessions", "new_behavior", "ui_visual", "sensitive", "new_dependency", "schema_or_state_change", "reversible"],
+      "type": "object"
+    },
+    "severity": {"enum": ["low", "medium", "high", "critical"]},
+    "symptoms_digest": {"anyOf": [{"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}, {"type": "null"}]},
+    "symptoms_frozen_event_id": {"type": ["string", "null"]},
+    "test_data": {"type": "string"},
+    "title": {"minLength": 1, "type": "string"},
+    "updated_at": {"type": "string"},
+    "verification_plan": {
+      "additionalProperties": false,
+      "properties": {
+        "automated": {"items": {"type": "string"}, "type": "array"},
+        "human": {"items": {"type": "string"}, "type": "array"}
+      },
+      "required": ["automated", "human"],
+      "type": "object"
+    },
+    "workaround": {"type": ["string", "null"]}
+  },
+  "required": [
+    "schema",
+    "id",
+    "kind",
+    "repository_key",
+    "record_version",
+    "title",
+    "lifecycle",
+    "severity",
+    "priority",
+    "owner",
+    "created_at",
+    "updated_at",
+    "report_provenance",
+    "environment",
+    "preconditions",
+    "test_data",
+    "reproduction",
+    "expected",
+    "actual",
+    "error_reference",
+    "frequency",
+    "known_good_revision",
+    "known_bad_revision",
+    "impact",
+    "immutable_symptoms",
+    "symptoms_digest",
+    "symptoms_frozen_event_id",
+    "evidence",
+    "current_focus",
+    "next_action",
+    "hypotheses",
+    "eliminated_hypotheses",
+    "anchors",
+    "dependencies",
+    "workaround",
+    "resolution",
+    "fix_refs",
+    "acceptance",
+    "verification_plan",
+    "related_artifacts",
+    "relations",
+    "affected_users",
+    "requirement_candidates",
+    "risks",
+    "open_decisions",
+    "problem",
+    "scope",
+    "exemption",
+    "fix_paused",
+    "promotion",
+    "events",
+    "history_head"
+  ],
+  "type": "object"
+}

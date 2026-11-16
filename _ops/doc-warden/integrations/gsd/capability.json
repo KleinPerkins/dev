@@ -1,0 +1,10 @@
+{
+  "schema": "doc-warden/gsd-authoring-capability/v1",
+  "package": "@opengsd/gsd-core",
+  "version": "1.11.0",
+  "git_commit": "182f60b4c170785d96f1deb87fea8b108e9b985f",
+  "scope": "authoring_context_only",
+  "execution": "operator_invoke_required",
+  "implementation_dispatch": false,
+  "scm_operations": false
+}

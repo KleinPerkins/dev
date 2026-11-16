@@ -1,0 +1,27 @@
+{
+  "schema": "interoperability/selected-skill-workload/v1",
+  "scope": "One disposable synthetic local seed-board fixture; no real capability or service installation.",
+  "request": "Make the seed board ready in the provided synthetic fixture, then build a distinctive responsive seed-library board as one self-contained HTML file.",
+  "required_skills": ["capability", "frontend-design"],
+  "steps": [
+    "Use the native skill catalog descriptions and read both actual SKILL.md files. Apply their instructions; matching names alone is insufficient.",
+    "Inspect the provided fixture CLI's describe/status/doctor verbs. Use the capability loop to install the synthetic seed board, verify the actual fixture state, repair once if it is present but inactive, then verify Ready. Report the fixture outcome plainly.",
+    "For frontend-design, choose a compact token system and a subject-specific visual signature, critique the plan, and build component.html. Keep the plan/critique and observed fixture verdict in worker-notes.md, at most 180 words.",
+    "The board serves a neighborhood seed library. Show four varieties: Basil and Chives are herbs, Marigold is a flower, Radish is a vegetable. Provide accessible controls named Show all, Show herbs, Show flowers, Show vegetables. Filtering changes the visible varieties and an accessible count. All shows 4; herbs 2; flowers and vegetables 1 each.",
+    "Use local system fonts for at least two purposeful type roles, embedded CSS/JavaScript, visible keyboard focus, a layout usable at 360px and 1280px, and respect reduced-motion preferences. Make the seed-library subject visible in the design. Keep the HTML below 180 lines.",
+    "Write only component.html, worker-notes.md and the fixture CLI's capability-state.json beneath the provided private fixture root. Do not edit the marker, home configuration, source checkouts, operation records, links or any other paths.",
+    "No network, downloads, external assets, model/agent delegation, live application/service changes, other clients, work/Affirm systems or protected component access. Do not launch a browser; the parent performs local checks after rollback. Do not invent serving-model identity or AWA registration."
+  ],
+  "parent_protocol": {
+    "native_tool": "collaboration.spawn_agent",
+    "worker_count": 1,
+    "requested_model": "gpt-6.1-sol",
+    "reasoning_effort": "high",
+    "fork_turns": "none",
+    "immediate_first_wait_ms": 60000,
+    "interrupt_if_unfinished_after_first_wait": true,
+    "strict_actual_worker_deadline_ms": 120000,
+    "rollback_after_every_outcome": true,
+    "retained_installation_authorized": false
+  }
+}

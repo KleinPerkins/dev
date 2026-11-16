@@ -1,0 +1,146 @@
+# ~/dev/.gitignore — ALLOW-LIST policy (ignore everything, then opt files back in).
+#
+# WHY: ~/dev contains work repos (affirm/), personal repos (personal/), nested git
+# repos (capabilities/skills, capabilities/mcp), IDE workspaces, and local secrets.
+# An allow-list guarantees none of that is ever committed by accident. To track a new
+# path you must EXPLICITLY un-ignore it below. See _ops/POLICY.md for the contract.
+
+# 1) Ignore everything at the repo root.
+/*
+
+# 2) Re-include exactly what this repo tracks.
+!/.gitignore
+!/.github/
+!/README.md
+!/AGENTS.md
+!/Makefile
+!/bootstrap.sh
+!/OPERATING-MANUAL.md
+!/.doc-warden.yml
+!/_ops/
+!/docs/
+/docs/*
+!/docs/adr/
+/docs/adr/*
+!/docs/adr/*.md
+!/docs/runbooks/
+/docs/runbooks/*
+!/docs/runbooks/awa-integrity-host-wiring.md
+!/docs/runbooks/gsd-core-lock-requalification.md
+!/docs/runbooks/dev-repo-removal.md
+!/docs/runbooks/dev-successor-adoption.md
+!/docs/local-review.md
+!/docs/pr-creation.md
+!/docs/github-delivery.md
+!/docs/bootstrap-review.md
+!/scripts/
+!/tests/
+/_ops/.trash/
+# Tool-owned, source-tracked AWA per-repo modes file (materialized/edited by dev-worktree.sh /
+# the AWA MCP mode tools). Covered by the !/_ops/ re-include above; pinned explicitly so its
+# source-tracking is intentional and survives any future tightening of the _ops allow-listing.
+!/_ops/policy/worktree-modes.yml
+# ...but NEVER track the AWA modes-file atomic-write temp files (.worktree-modes.<rand>.tmp)
+# or the flock lock (.worktree-modes.yml.lock). These are hidden operational siblings the mode
+# tools create next to the modes file; ignoring them keeps `git status` clean on every write.
+/_ops/policy/.worktree-modes.*
+
+# 2b) Cursor COMMITTED project hooks. Cloud agents run ONLY committed project hooks (not the
+#     operator's user-level ~/.cursor/hooks.json), so the AWA cloud gate must be checked in here.
+#     Track ONLY the hooks manifest + the two committed wrapper scripts — never the local
+#     .cursor/hooks/state (continual-learning cache) or .cursor/plans caches.
+!/.cursor/
+/.cursor/*
+!/.cursor/hooks.json
+!/.cursor/hooks/
+/.cursor/hooks/*
+!/.cursor/hooks/awa-cloud-guard.sh
+!/.cursor/hooks/awa-cloud-session.sh
+
+# 3) capabilities/: track ONLY the bootstrap-related files. skills/ and mcp/ are
+#    their own git repos and must stay untracked here.
+!/capabilities/
+/capabilities/*
+!/capabilities/bootstrap.sh
+!/capabilities/mcp-bootstrap.sh
+!/capabilities/Makefile
+!/capabilities/verify-capabilities.sh
+
+# 4) Belt-and-suspenders: never track these anywhere in the tree.
+#    The allow-list above already ignores anything not explicitly re-included; these patterns are
+#    defense-in-depth so secrets / PII / data dumps can never slip in even under a tracked path.
+*.code-workspace
+.DS_Store
+._*
+*.swp
+# python bytecode / caches (engine is stdlib source; never track compiled artifacts)
+__pycache__/
+*.pyc
+*.pyo
+# secrets / credentials
+.env
+.env.*
+*.env
+!.env.example
+!.env.sample
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.kdbx
+id_rsa*
+id_dsa*
+id_ed25519*
+.netrc
+.pgpass
+credentials
+credentials.*
+service-account*.json
+# data / PII files + large binaries (keep data in gitignored data dirs, never in history)
+*.csv
+*.tsv
+*.parquet
+*.xlsx
+*.xls
+*.feather
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+*.sqlite
+*.sqlite3
+*.db
+# the dev-doctor gitignored matrix snapshot (B3/R14)
+/.dev-doctor/
+
+# Immutable public-safe runtime pins only; verified to contain
+# no operator values or credentials by the snow-kit host regression.
+!/capabilities/mcp-pins.env
+
+# Private work/proposals and predecessor host/runtime state must never re-enter source.
+/_ops/plans/analytics-context-proposal/
+/_ops/plans/dad-first-source/
+/_ops/plans/holistic-analytics-context-sot-curation-v1.md
+/_ops/adr/0006-local-job-triggered-analytics-context-curation.md
+/_ops/adr/0007-ai-analytics-definition-lattice.md
+/_ops/plans/template-framework/DECISIONS.md
+/_ops/plans/template-framework/ROADMAP.md
+/_ops/doc-warden/state/
+/_ops/baseline/state/
+/_ops/baseline/profiles/pr-automation/state/
+/_ops/interoperability/evidence/*
+!/_ops/interoperability/evidence/codex-work-activation-bindings.json
+/_ops/evidence/context-efficiency/
+/_ops/reorg-v2/
+
+# doc-warden v2 semantic records only; transient runtime/authoring state stays ignored.
+!/.planning/
+/.planning/*
+!/.planning/doc-warden.json
+!/.planning/artifacts/
+/.planning/artifacts/*
+!/.planning/artifacts/*.md
+!/.planning/artifacts/*.governance.json

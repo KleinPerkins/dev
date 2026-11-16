@@ -1,0 +1,9 @@
+# AWA per-repo MODE file — TOOL-OWNED, source-tracked (schema awa-modes/v1).
+# DO NOT HAND-EDIT: materialized/reconciled by install/bootstrap and edited only via
+# `dev-worktree.sh mode ...` (or the AWA MCP mode tools).
+# default_mode governs eligible repos with no explicit entry; modes is a tool-managed map.
+schema: awa-modes/v1
+default_mode: on
+modes:
+  capabilities/skills: on
+  personal/local-jobs: on

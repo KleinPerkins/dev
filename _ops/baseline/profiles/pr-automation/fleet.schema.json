@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KleinPerkins/dev/pr-automation/fleet/v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "owner", "future_repo_policy", "targets", "already_compliant", "excluded"],
+  "properties": {
+    "schema": {"const": "pr-automation-fleet/v2"},
+    "owner": {"const": "KleinPerkins"},
+    "future_repo_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["eligible_private_source_repos_default", "opt_out_flag", "excluded_classes"],
+      "properties": {
+        "eligible_private_source_repos_default": {"const": "enroll"},
+        "opt_out_flag": {"const": "--no-pr-automation"},
+        "excluded_classes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/target"}
+    },
+    "already_compliant": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/classified"}
+    },
+    "excluded": {
+      "type": "array",
+      "contains": {
+        "type": "object",
+        "properties": {"repo": {"const": "KleinPerkins/chaos-scheduler"}}
+      },
+      "items": {"$ref": "#/$defs/classified"}
+    }
+  },
+  "$defs": {
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo", "cohort", "classification"],
+      "properties": {
+        "repo": {"type": "string", "pattern": "^KleinPerkins/[A-Za-z0-9._-]+$"},
+        "cohort": {"enum": ["pilot", "leaves", "providers", "custom", "final"]},
+        "classification": {"enum": ["existing-ci", "ci-bootstrap", "custom-migration"]}
+      }
+    },
+    "classified": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo", "reason"],
+      "properties": {
+        "repo": {"type": "string", "pattern": "^KleinPerkins/[A-Za-z0-9._-]+$"},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

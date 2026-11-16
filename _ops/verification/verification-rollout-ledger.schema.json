@@ -1,0 +1,1121 @@
+{
+  "$defs": {
+    "acceptanceCriterion": {
+      "additionalProperties": false,
+      "properties": {
+        "ac_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "$ref": "#/$defs/sha256Id"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "status": {
+          "enum": [
+            "blocked",
+            "failed",
+            "passed",
+            "superseded"
+          ]
+        }
+      },
+      "required": [
+        "ac_id",
+        "status",
+        "evidence_ids"
+      ],
+      "type": "object"
+    },
+    "acceptancePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "bundle_scope": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "criteria": {
+          "items": {
+            "$ref": "#/$defs/acceptanceCriterion"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "milestone": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "bundle_scope",
+        "milestone",
+        "criteria"
+      ],
+      "type": "object"
+    },
+    "artifactDigest": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "enum": [
+            "_ops/adr/0011-manifest-driven-verification-selector.md",
+            "_ops/plans/manifest-driven-verification-execution-v1.md",
+            "_ops/plans/manifest-driven-verification-target-design-v1.md"
+          ]
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256Id"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "byte_length"
+      ],
+      "type": "object"
+    },
+    "commitSha": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "decision": {
+      "additionalProperties": false,
+      "properties": {
+        "disposition": {
+          "enum": [
+            "accept",
+            "reject",
+            "replace"
+          ]
+        },
+        "id": {
+          "enum": [
+            "D2",
+            "D3",
+            "D4",
+            "D5"
+          ]
+        },
+        "replacement_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "disposition",
+        "replacement_sha256"
+      ],
+      "type": "object"
+    },
+    "directClassification": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "enum": [
+            "_ops/adr/0011-manifest-driven-verification-selector.md",
+            "_ops/plans/manifest-driven-verification-execution-v1.md",
+            "_ops/plans/manifest-driven-verification-target-design-v1.md"
+          ]
+        },
+        "result": {
+          "enum": [
+            "conformant",
+            "nonconformant"
+          ]
+        },
+        "tool_sha256": {
+          "$ref": "#/$defs/sha256Id"
+        }
+      },
+      "required": [
+        "path",
+        "result",
+        "tool_sha256"
+      ],
+      "type": "object"
+    },
+    "event": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "authority_genesis"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "manifest_id": {
+                "type": "null"
+              },
+              "payload": {
+                "$ref": "#/$defs/genesisPayload"
+              },
+              "previous_event_id": {
+                "type": "null"
+              },
+              "receipt_ids": {
+                "maxItems": 0,
+                "type": "array"
+              },
+              "source": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "acceptance"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/acceptancePayload"
+              },
+              "previous_event_id": {
+                "$ref": "#/$defs/sha256Id"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "observation"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/observationPayload"
+              },
+              "previous_event_id": {
+                "$ref": "#/$defs/sha256Id"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "graduation"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/graduationPayload"
+              },
+              "previous_event_id": {
+                "$ref": "#/$defs/sha256Id"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "invalidation"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/invalidationPayload"
+              },
+              "previous_event_id": {
+                "$ref": "#/$defs/sha256Id"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "rollback"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/rollbackPayload"
+              },
+              "previous_event_id": {
+                "$ref": "#/$defs/sha256Id"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "restoration"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/restorationPayload"
+              },
+              "previous_event_id": {
+                "$ref": "#/$defs/sha256Id"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "acceptance_commit_sha": {
+          "const": "a99abb4fde94836e6e3f697cda8c520f3c2ae6b7"
+        },
+        "event_id": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "event_type": {
+          "enum": [
+            "acceptance",
+            "authority_genesis",
+            "graduation",
+            "invalidation",
+            "observation",
+            "restoration",
+            "rollback"
+          ]
+        },
+        "event_version": {
+          "const": 1
+        },
+        "manifest_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "occurred_at": {
+          "$ref": "#/$defs/rfc3339Utc"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/acceptancePayload"
+            },
+            {
+              "$ref": "#/$defs/genesisPayload"
+            },
+            {
+              "$ref": "#/$defs/graduationPayload"
+            },
+            {
+              "$ref": "#/$defs/invalidationPayload"
+            },
+            {
+              "$ref": "#/$defs/observationPayload"
+            },
+            {
+              "$ref": "#/$defs/restorationPayload"
+            },
+            {
+              "$ref": "#/$defs/rollbackPayload"
+            }
+          ]
+        },
+        "previous_event_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "receipt_ids": {
+          "items": {
+            "$ref": "#/$defs/sha256Id"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "repository_id": {
+          "const": "KleinPerkins/dev"
+        },
+        "schema_links": {
+          "$ref": "#/$defs/schemaLinks"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sourceBinding"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "previous_event_id",
+        "occurred_at",
+        "repository_id",
+        "acceptance_commit_sha",
+        "manifest_id",
+        "source",
+        "receipt_ids",
+        "schema_links",
+        "provenance",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "genesisEvent": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/event"
+        },
+        {
+          "properties": {
+            "event_type": {
+              "const": "authority_genesis"
+            },
+            "previous_event_id": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "event_type",
+            "previous_event_id"
+          ]
+        }
+      ]
+    },
+    "genesisPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_digests": {
+          "items": {
+            "$ref": "#/$defs/artifactDigest"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "d2_d5_decisions": {
+          "items": {
+            "$ref": "#/$defs/decision"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "direct_classifications": {
+          "items": {
+            "$ref": "#/$defs/directClassification"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "artifact_digests",
+        "d2_d5_decisions",
+        "direct_classifications"
+      ],
+      "type": "object"
+    },
+    "graduationPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "activation_generation": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "budget_digest": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "corpus_digest": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "edge_digest": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "invalidation_drill_event_ids": {
+          "items": {
+            "$ref": "#/$defs/sha256Id"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "lane": {
+          "$ref": "#/$defs/rolloutLane"
+        },
+        "required_surveillance_event_ids": {
+          "items": {
+            "$ref": "#/$defs/sha256Id"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "speed_digest": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "streak_digest": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "tags": {
+          "items": {
+            "$ref": "#/$defs/token"
+          },
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "lane",
+        "tags",
+        "activation_generation",
+        "corpus_digest",
+        "edge_digest",
+        "streak_digest",
+        "budget_digest",
+        "speed_digest",
+        "required_surveillance_event_ids",
+        "invalidation_drill_event_ids"
+      ],
+      "type": "object"
+    },
+    "invalidationPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "activation_generation": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "detected_at": {
+          "$ref": "#/$defs/rfc3339Utc"
+        },
+        "detection_evidence_id": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "lane": {
+          "$ref": "#/$defs/rolloutLane"
+        },
+        "reason": {
+          "enum": [
+            "cleanup_failed",
+            "control_drift",
+            "ledger_invalid",
+            "receipt_invalid",
+            "safety_mismatch",
+            "surveillance_invalid",
+            "surveillance_missed"
+          ]
+        }
+      },
+      "required": [
+        "lane",
+        "activation_generation",
+        "reason",
+        "detected_at",
+        "detection_evidence_id"
+      ],
+      "type": "object"
+    },
+    "int64": {
+      "maximum": 9223372036854775807,
+      "minimum": -9223372036854775808,
+      "type": "integer"
+    },
+    "nullableInteger": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/int64"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "nullableRfc3339Utc": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/rfc3339Utc"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "observationPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "bootstrap": {
+          "type": "boolean"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/token"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completed_at": {
+          "$ref": "#/$defs/nullableRfc3339Utc"
+        },
+        "current_ms": {
+          "$ref": "#/$defs/nullableInteger"
+        },
+        "deadline_at": {
+          "$ref": "#/$defs/nullableRfc3339Utc"
+        },
+        "focused_ms": {
+          "$ref": "#/$defs/nullableInteger"
+        },
+        "full_ms": {
+          "$ref": "#/$defs/nullableInteger"
+        },
+        "grace_seconds": {
+          "$ref": "#/$defs/nullableInteger"
+        },
+        "lane": {
+          "$ref": "#/$defs/rolloutLane"
+        },
+        "observation_kind": {
+          "enum": [
+            "deep_periodic_monthly",
+            "full_release_weekly",
+            "paired_speed",
+            "real_change"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "blocked",
+            "failed",
+            "passed"
+          ]
+        },
+        "period_end_at": {
+          "$ref": "#/$defs/nullableRfc3339Utc"
+        },
+        "period_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ratio_millionths": {
+          "$ref": "#/$defs/nullableInteger"
+        },
+        "schedule": {
+          "enum": [
+            "monthly_deep",
+            "weekly_full",
+            null
+          ]
+        },
+        "schedule_activated_at": {
+          "$ref": "#/$defs/nullableRfc3339Utc"
+        }
+      },
+      "required": [
+        "observation_kind",
+        "lane",
+        "category",
+        "schedule",
+        "schedule_activated_at",
+        "period_id",
+        "period_end_at",
+        "grace_seconds",
+        "deadline_at",
+        "bootstrap",
+        "completed_at",
+        "outcome",
+        "current_ms",
+        "full_ms",
+        "focused_ms",
+        "ratio_millionths"
+      ],
+      "type": "object"
+    },
+    "provenance": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "local_command",
+                  "operator_record"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reference": {
+                "$ref": "#/$defs/sha256Id"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "runnerless_check"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reference": {
+                "pattern": "^[A-Za-z0-9._-]{1,128}$",
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "pull_request"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reference": {
+                "pattern": "^pr/[0-9]+$",
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "local_command",
+            "operator_record",
+            "pull_request",
+            "runnerless_check"
+          ]
+        },
+        "reference": {
+          "type": "string"
+        },
+        "reference_sha256": {
+          "$ref": "#/$defs/sha256Id"
+        }
+      },
+      "required": [
+        "kind",
+        "reference",
+        "reference_sha256"
+      ],
+      "type": "object"
+    },
+    "restorationPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "graduation_event_id": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "invalidation_event_id": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "lane": {
+          "$ref": "#/$defs/rolloutLane"
+        },
+        "required_period_event_ids": {
+          "items": {
+            "$ref": "#/$defs/sha256Id"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "restored_generation": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lane",
+        "invalidation_event_id",
+        "required_period_event_ids",
+        "restored_generation",
+        "graduation_event_id"
+      ],
+      "type": "object"
+    },
+    "rfc3339Utc": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "type": "string"
+    },
+    "rollbackPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "from_generation": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "invalidation_event_id": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "lane": {
+          "$ref": "#/$defs/rolloutLane"
+        },
+        "to_generation": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lane",
+        "from_generation",
+        "to_generation",
+        "invalidation_event_id"
+      ],
+      "type": "object"
+    },
+    "rolloutLane": {
+      "enum": [
+        "local",
+        "runnerless_pr"
+      ]
+    },
+    "schemaLink": {
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "enum": [
+            "dev-verification-manifest",
+            "dev-verification-receipt",
+            "dev-verification-rollout-ledger"
+          ]
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256Id"
+        }
+      },
+      "required": [
+        "schema",
+        "schema_version",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "schemaLinks": {
+      "additionalProperties": false,
+      "properties": {
+        "ledger": {
+          "$ref": "#/$defs/schemaLink"
+        },
+        "manifest": {
+          "$ref": "#/$defs/schemaLink"
+        },
+        "receipt": {
+          "$ref": "#/$defs/schemaLink"
+        }
+      },
+      "required": [
+        "manifest",
+        "receipt",
+        "ledger"
+      ],
+      "type": "object"
+    },
+    "sha256Id": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "sourceBinding": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source_kind": {
+                "const": "staged_index"
+              }
+            },
+            "required": [
+              "source_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "commit_sha": {
+                "type": "null"
+              },
+              "head_commit_sha": {
+                "type": "null"
+              },
+              "index_tree_sha": {
+                "$ref": "#/$defs/commitSha"
+              },
+              "merge_base_sha": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source_kind": {
+                "const": "pull_request"
+              }
+            },
+            "required": [
+              "source_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "base_commit_sha": {
+                "$ref": "#/$defs/commitSha"
+              },
+              "commit_sha": {
+                "type": "null"
+              },
+              "head_commit_sha": {
+                "$ref": "#/$defs/commitSha"
+              },
+              "index_tree_sha": {
+                "type": "null"
+              },
+              "merge_base_sha": {
+                "$ref": "#/$defs/commitSha"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source_kind": {
+                "const": "commit"
+              }
+            },
+            "required": [
+              "source_kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "base_commit_sha": {
+                "type": "null"
+              },
+              "commit_sha": {
+                "$ref": "#/$defs/commitSha"
+              },
+              "head_commit_sha": {
+                "type": "null"
+              },
+              "index_tree_sha": {
+                "type": "null"
+              },
+              "merge_base_sha": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "base_commit_sha": {
+          "$ref": "#/$defs/nullableCommitSha"
+        },
+        "candidate_tree_sha256": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "commit_sha": {
+          "$ref": "#/$defs/nullableCommitSha"
+        },
+        "head_commit_sha": {
+          "$ref": "#/$defs/nullableCommitSha"
+        },
+        "index_tree_sha": {
+          "$ref": "#/$defs/nullableCommitSha"
+        },
+        "manifest_id": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "merge_base_sha": {
+          "$ref": "#/$defs/nullableCommitSha"
+        },
+        "repository_id": {
+          "const": "KleinPerkins/dev"
+        },
+        "selector_version": {
+          "const": "1"
+        },
+        "source_kind": {
+          "enum": [
+            "commit",
+            "pull_request",
+            "staged_index"
+          ]
+        }
+      },
+      "required": [
+        "repository_id",
+        "source_kind",
+        "candidate_tree_sha256",
+        "manifest_id",
+        "selector_version",
+        "base_commit_sha",
+        "head_commit_sha",
+        "merge_base_sha",
+        "index_tree_sha",
+        "commit_sha"
+      ],
+      "type": "object"
+    },
+    "nullableCommitSha": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/commitSha"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "token": {
+      "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "acceptance_commit_sha": {
+      "const": "a99abb4fde94836e6e3f697cda8c520f3c2ae6b7"
+    },
+    "created_at": {
+      "$ref": "#/$defs/rfc3339Utc"
+    },
+    "events": {
+      "items": {
+        "$ref": "#/$defs/event"
+      },
+      "minItems": 1,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/genesisEvent"
+        }
+      ],
+      "type": "array"
+    },
+    "repository_id": {
+      "const": "KleinPerkins/dev"
+    },
+    "schema": {
+      "const": "dev-verification-rollout-ledger"
+    },
+    "schema_version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "repository_id",
+    "acceptance_commit_sha",
+    "created_at",
+    "events"
+  ],
+  "type": "object"
+}

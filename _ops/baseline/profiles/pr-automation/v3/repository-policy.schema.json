@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "activation_generation": {"format": "uint64", "minimum": 0, "type": "integer"},
+    "check_name": {"const": "pr-automation / verify", "type": "string"},
+    "controller_release_digest": {
+      "pattern": "^sha256:[0-9A-Fa-f]{64}$",
+      "type": "string"
+    },
+    "default_branch": {"type": "string"},
+    "max_changed_files": {"format": "uint32", "minimum": 0, "type": "integer"},
+    "max_total_patch_bytes": {"format": "uint64", "minimum": 0, "type": "integer"},
+    "name": {"type": "string"},
+    "owner": {"type": "string"},
+    "protected_paths": {"items": {"type": "string"}, "type": "array"},
+    "repository_id": {"format": "uint64", "minimum": 0, "type": "integer"},
+    "reviewer_app_id": {"format": "uint64", "minimum": 0, "type": "integer"},
+    "reviewer_integration_id": {"format": "uint64", "minimum": 0, "type": "integer"},
+    "ruleset_fingerprints": {
+      "items": {"pattern": "^sha256:[0-9A-Fa-f]{64}$", "type": "string"},
+      "type": "array"
+    },
+    "verifier_app_id": {"format": "uint64", "minimum": 0, "type": "integer"},
+    "verifier_integration_id": {"format": "uint64", "minimum": 0, "type": "integer"},
+    "version": {"const": "pr-automation/v3", "type": "string"}
+  },
+  "required": [
+    "version",
+    "repository_id",
+    "owner",
+    "name",
+    "default_branch",
+    "activation_generation",
+    "check_name",
+    "verifier_app_id",
+    "verifier_integration_id",
+    "reviewer_app_id",
+    "reviewer_integration_id",
+    "protected_paths",
+    "ruleset_fingerprints",
+    "max_changed_files",
+    "max_total_patch_bytes",
+    "controller_release_digest"
+  ],
+  "title": "RepositoryPolicyDocument",
+  "type": "object"
+}

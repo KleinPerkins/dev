@@ -1,0 +1,33 @@
+{
+  "schema": "pr-automation-fleet/v2",
+  "owner": "KleinPerkins",
+  "future_repo_policy": {
+    "eligible_private_source_repos_default": "enroll",
+    "opt_out_flag": "--no-pr-automation",
+    "excluded_classes": ["archived", "fork", "generated-output", "reference", "hard-excluded"]
+  },
+  "targets": [
+    {"repo": "KleinPerkins/kp-mcp", "cohort": "providers", "classification": "existing-ci"},
+    {"repo": "KleinPerkins/dev", "cohort": "final", "classification": "ci-bootstrap"},
+    {"repo": "KleinPerkins/ecosystem-orchestrator", "cohort": "providers", "classification": "ci-bootstrap"},
+    {"repo": "KleinPerkins/awa", "cohort": "providers", "classification": "ci-bootstrap"},
+    {"repo": "KleinPerkins/intent-router", "cohort": "providers", "classification": "ci-bootstrap"},
+    {"repo": "KleinPerkins/chaos-session-system", "cohort": "pilot", "classification": "ci-bootstrap"},
+    {"repo": "KleinPerkins/duggan-bach-source", "cohort": "leaves", "classification": "ci-bootstrap"},
+    {"repo": "KleinPerkins/app-ux", "cohort": "leaves", "classification": "ci-bootstrap"},
+    {"repo": "KleinPerkins/local-jobs", "cohort": "providers", "classification": "ci-bootstrap"},
+    {"repo": "KleinPerkins/sterling", "cohort": "leaves", "classification": "ci-bootstrap"},
+    {"repo": "KleinPerkins/skills", "cohort": "custom", "classification": "custom-migration"},
+    {"repo": "KleinPerkins/chaos-labs", "cohort": "custom", "classification": "custom-migration"}
+  ],
+  "already_compliant": [
+    {"repo": "KleinPerkins/kp-pr-bot-canary", "reason": "disposable validation reference"}
+  ],
+  "excluded": [
+    {"repo": "KleinPerkins/chaos-scheduler", "reason": "hard exclusion; independently governed automation"},
+    {"repo": "KleinPerkins/cpp", "reason": "functional archive/reference"},
+    {"repo": "KleinPerkins/duggan-bach", "reason": "generated Pages output"},
+    {"repo": "KleinPerkins/snowflake-permission-specs", "reason": "fork/reference"},
+    {"repo": "KleinPerkins/archive-repos", "reason": "cold-storage monorepo for retired personal projects"}
+  ]
+}

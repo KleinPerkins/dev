@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "assignments"],
+  "properties": {
+    "schema": {"type": "string", "const": "pr-automation-coverage-assignments/v2"},
+    "assignments": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["repo", "coverage_mode", "catalog_repository_id", "profile_ref"],
+        "properties": {
+          "repo": {"type": "string", "pattern": "^KleinPerkins/[A-Za-z0-9._-]+$"},
+          "coverage_mode": {
+            "type": "string",
+            "enum": ["manual_only", "shadow", "local"]
+          },
+          "catalog_repository_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "profile_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "digest"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9A-Fa-f]{64}$"
+              }
+            }
+          },
+          "required_checks": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["schema", "job_id"],
+            "properties": {
+              "schema": {
+                "type": "string",
+                "const": "pr-automation-required-checks/v1"
+              },
+              "job_id": {
+                "type": "string",
+                "pattern": "^repo\\.[a-z0-9._-]+$",
+                "maxLength": 80
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": ["required_checks"],
+              "properties": {"required_checks": {"type": "object"}}
+            },
+            "then": {"properties": {"coverage_mode": {"const": "local"}}}
+          }
+        ]
+      }
+    }
+  }
+}

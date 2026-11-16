@@ -1,0 +1,101 @@
+{
+  "schema": "dev/mcp-migration-preview-request/v1",
+  "fixture_id": "int014-mcp-migration-v1",
+  "catalog": [
+    {
+      "connection_id": "kp-mcp:fixture-stdio",
+      "native_name": "fixture-stdio",
+      "owner": "KleinPerkins/kp-mcp",
+      "management": "registrar-owned",
+      "source_revision": "a34a0f73b93650e4a6abe9c9dff9a2e3eced94cb",
+      "transport": {
+        "kind": "stdio",
+        "command": "/opt/fixtures/never-executed",
+        "args": [
+          "mcp"
+        ],
+        "env": {
+          "INT014_PROFILE": "synthetic-profile"
+        }
+      },
+      "targets": [
+        "cursor",
+        "codex",
+        "claude"
+      ]
+    },
+    {
+      "connection_id": "kp-mcp:fixture-remote",
+      "native_name": "fixture-remote",
+      "owner": "KleinPerkins/kp-mcp",
+      "management": "registrar-owned",
+      "source_revision": "a34a0f73b93650e4a6abe9c9dff9a2e3eced94cb",
+      "transport": {
+        "kind": "streamable-http",
+        "url": "https://mcp.example.invalid/mcp"
+      },
+      "targets": [
+        "cursor",
+        "codex",
+        "claude"
+      ]
+    },
+    {
+      "connection_id": "kp-mcp:fixture-notion-local",
+      "native_name": "notion",
+      "owner": "KleinPerkins/kp-mcp",
+      "management": "registrar-owned",
+      "source_revision": "a34a0f73b93650e4a6abe9c9dff9a2e3eced94cb",
+      "transport": {
+        "kind": "stdio",
+        "command": "/opt/fixtures/never-executed",
+        "args": [
+          "mcp"
+        ],
+        "env": {}
+      },
+      "targets": [
+        "codex"
+      ]
+    },
+    {
+      "connection_id": "app:notion",
+      "native_name": "notion",
+      "owner": "native-app-connector",
+      "management": "external-app",
+      "targets": [
+        "codex"
+      ]
+    }
+  ],
+  "selection": [
+    {
+      "connection_id": "kp-mcp:fixture-stdio",
+      "targets": [
+        "cursor",
+        "codex",
+        "claude"
+      ]
+    },
+    {
+      "connection_id": "kp-mcp:fixture-remote",
+      "targets": [
+        "cursor",
+        "codex",
+        "claude"
+      ]
+    },
+    {
+      "connection_id": "kp-mcp:fixture-notion-local",
+      "targets": [
+        "codex"
+      ]
+    },
+    {
+      "connection_id": "app:notion",
+      "targets": [
+        "codex"
+      ]
+    }
+  ]
+}

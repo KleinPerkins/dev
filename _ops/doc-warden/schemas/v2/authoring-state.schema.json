@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "active_artifact_id": {"type": ["string", "null"]},
+    "active_plan_id": {"type": ["string", "null"]},
+    "blocker_ids": {"items": {"type": "string"}, "type": "array"},
+    "lifecycle": {"enum": ["planned", "preflight", "running", "verifying", "uat", "release_ready", "complete", "paused", "waiting", "blocked"]},
+    "next_action_code": {"enum": ["author", "review", "validate", "reconcile", "wait", "complete"]},
+    "operation_id": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+    "repository_key": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+    "save_game_pointer": {"type": ["object", "null"]},
+    "schema": {"const": "doc-warden/authoring-state/v2"},
+    "source_revision": {"pattern": "^(no-head|[0-9a-f]{40})$", "type": "string"}
+  },
+  "required": ["schema", "repository_key", "operation_id", "active_artifact_id", "active_plan_id", "lifecycle", "next_action_code", "blocker_ids", "source_revision", "save_game_pointer"],
+  "type": "object"
+}

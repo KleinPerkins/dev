@@ -1,0 +1,55 @@
+{
+  "schema": "awa-hook-owner/v2",
+  "version": 2,
+  "successor_of": "awa-hook-owner/v1",
+  "v1_contract": "contracts/awa-contract.v1.json#hook_ownership",
+  "modes": [
+    "direct",
+    "external"
+  ],
+  "default_mode": "direct",
+  "selection_env": "AWA_HOOK_OWNER",
+  "selection_schema": "awa-hook-owner-selection/v1",
+  "external_real_hook_file_writes": false,
+  "supersedes_roles": [
+    "worktree.shell-guard"
+  ],
+  "composition_rule": "The effective direct projection is the frozen awa-hook-owner/v1 role set with every supersedes_roles id removed, plus the three roles declared here. The composite is the sole direct beforeShellExecution guard row.",
+  "external_rule": "The external host owns the complete selected hook file. AWA may validate this product contract but must not read, stat, create, back up, chmod, rewrite, remove, or render rows for the selected external hook file.",
+  "roles": [
+    {
+      "id": "worktree.shell-guard-composite",
+      "event": "beforeShellExecution",
+      "direct_command_role": "kernel/hooks/worktree-guard-with-integrity.sh",
+      "external_command_path_class": "host-policy-delegator",
+      "entry": {
+        "type": "command",
+        "timeout": 20,
+        "failClosed": false
+      }
+    },
+    {
+      "id": "worktree.stop-observer",
+      "event": "stop",
+      "direct_command_role": "kernel/hooks/awa-integrity-observer.sh",
+      "external_command_path_class": "host-policy-delegator",
+      "entry": {
+        "type": "command",
+        "timeout": 5,
+        "failClosed": false
+      }
+    },
+    {
+      "id": "worktree.session-handoff",
+      "event": "sessionStart",
+      "direct_command_role": "kernel/hooks/awa-session-handoff.sh",
+      "external_command_path_class": "host-policy-delegator",
+      "dormant_until_milestone": "M2.4",
+      "entry": {
+        "type": "command",
+        "timeout": 5,
+        "failClosed": false
+      }
+    }
+  ]
+}

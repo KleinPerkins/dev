@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "actions": {"items": {"additionalProperties": false, "properties": {"content_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}, "kind": {"enum": ["create", "replace", "append", "adopt"]}, "path": {"minLength": 1, "type": "string"}}, "required": ["kind", "path", "content_digest"], "type": "object"}, "type": "array"},
+    "bindings": {
+      "additionalProperties": false,
+      "properties": {
+        "approved_plan_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "design_authority": {
+          "additionalProperties": false,
+          "properties": {
+            "design_digests": {"additionalProperties": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}, "type": "object"},
+            "design_ids": {"items": {"pattern": "^DESIGN-[0-9a-f-]{36}-[0-9a-f-]{36}$", "type": "string"}, "type": "array", "uniqueItems": true},
+            "design_versions": {"additionalProperties": {"minimum": 1, "type": "integer"}, "type": "object"}
+          },
+          "required": ["design_ids", "design_versions", "design_digests"],
+          "type": "object"
+        },
+        "defect_authority": {
+          "additionalProperties": false,
+          "properties": {
+            "defect_id": {"pattern": "^DEF-[0-9a-f-]{36}-[0-9a-f-]{36}$", "type": "string"},
+            "defect_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+            "event_id": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+            "record_version": {"minimum": 1, "type": "integer"}
+          },
+          "required": ["defect_id", "record_version", "event_id", "defect_digest"],
+          "type": "object"
+        },
+        "gsd_interface_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "gsd_pin_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "policy_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "policy_version": {"minLength": 1, "type": "string"},
+        "repository_identity": {"additionalProperties": false, "properties": {"github_repository": {"pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "type": "string"}, "github_repository_id": {"minimum": 1, "type": "integer"}}, "required": ["github_repository", "github_repository_id"], "type": "object"},
+        "schema_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "template_digests": {"additionalProperties": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}, "type": "object"},
+        "trigger_catalog_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}
+      },
+      "required": ["policy_version", "policy_digest", "schema_digest", "trigger_catalog_digest", "template_digests", "gsd_pin_digest", "approved_plan_digest"],
+      "type": "object"
+    },
+    "canonical_root": {"const": "$REPOSITORY_ROOT", "type": "string"},
+    "confirmation_digest": {"anyOf": [{"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}, {"type": "null"}]},
+    "delivery_commit": {"anyOf": [{"pattern": "^[0-9a-f]{40}$", "type": "string"}, {"type": "null"}]},
+    "event_id": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+    "github_repository_id": {"type": ["integer", "null"]},
+    "observed_input_digests": {
+      "items": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+      "type": "array"
+    },
+    "operation_id": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+    "outcome": {"enum": ["applied", "refused", "partial"]},
+    "postimages": {"additionalProperties": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}, "type": "object"},
+    "preimages": {"additionalProperties": {"anyOf": [{"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}, {"type": "null"}]}, "type": "object"},
+    "prior_event_digest": {"anyOf": [{"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}, {"type": "null"}]},
+    "repository_key": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+    "result_tree_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "schema": {"const": "doc-warden/receipt/v2"},
+    "source_revision": {"pattern": "^(no-head|[0-9a-f]{40})$", "type": "string"},
+    "transition": {"enum": ["creation_snapshot", "draft_update", "accepted_freeze", "roadmap_update", "projection_update", "migration_adoption", "supersession"]},
+    "verification": {"items": {"type": "object"}, "type": "array"}
+  },
+  "required": ["schema", "repository_key", "github_repository_id", "canonical_root", "operation_id", "event_id", "prior_event_digest", "source_revision", "action_digest", "preimages", "postimages", "result_tree_digest", "delivery_commit", "transition", "bindings", "actions", "verification", "outcome", "confirmation_digest"],
+  "type": "object"
+}

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authority": {"enum": ["planned", "observed"]},
+    "assumption": {"type": ["object", "null"]},
+    "lifecycle": {"enum": ["active", "stale", "unmapped", "superseded", "removed", "unavailable"]},
+    "match_evidence": {"type": ["object", "null"]},
+    "observed_at": {"pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$", "type": "string"},
+    "observed_revision": {"pattern": "^(no-head|[0-9a-f]{40})$", "type": "string"},
+    "provider_revision": {"type": ["string", "null"]},
+    "provenance": {"items": {"type": "object"}, "type": "array"},
+    "relation": {"enum": ["contains", "derives_from", "satisfies", "implements", "verifies", "depends_on_planned", "depends_on_observed", "blocks", "supersedes", "invalidates", "references_asset", "affects_code", "released_by", "duplicates", "recurs_as", "waives"]},
+    "schema": {"const": "doc-warden/relation/v2"},
+    "source_id": {"minLength": 1, "type": "string"},
+    "source_kind": {"enum": ["project", "prd", "requirement", "spec", "uxr", "design", "asset", "prototype", "sketch", "spike", "adr", "plan", "summary", "verification", "uat", "release", "defect", "file", "symbol", "schema", "test", "repository", "external_asset", "roadmap", "milestone", "task", "decision"]},
+    "source_version": {"type": ["integer", "null"]},
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "anyOf": [
+            {"type": "null"},
+            {
+              "additionalProperties": false,
+              "properties": {
+                "github_repository_id": {"type": ["integer", "null"]},
+                "kind": {"enum": ["file", "symbol", "schema", "test"]},
+                "line_hint": {"type": ["integer", "null"]},
+                "path": {"minLength": 1, "type": "string"},
+                "repository_key": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+                "revision": {"pattern": "^(no-head|[0-9a-f]{40})$", "type": "string"},
+                "symbol": {"type": ["string", "null"]}
+              },
+              "required": ["repository_key", "github_repository_id", "revision", "path", "kind", "symbol", "line_hint"],
+              "type": "object"
+            }
+          ]
+        },
+        "id": {"minLength": 1, "type": "string"},
+        "kind": {"enum": ["project", "prd", "requirement", "spec", "uxr", "design", "asset", "prototype", "sketch", "spike", "adr", "plan", "summary", "verification", "uat", "release", "defect", "file", "symbol", "schema", "test", "repository", "external_asset", "roadmap", "milestone", "task", "decision"]},
+        "version": {"type": ["integer", "null"]}
+      },
+      "required": ["kind", "id", "version"],
+      "type": "object"
+    }
+  },
+  "required": ["schema", "relation", "source_id", "source_version", "target", "authority", "provenance", "observed_revision", "observed_at", "lifecycle"],
+  "type": "object"
+}

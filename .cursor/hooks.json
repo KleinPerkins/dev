@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "bash .cursor/hooks/awa-cloud-guard.sh",
+        "timeout": 20,
+        "failClosed": false
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": "bash .cursor/hooks/awa-cloud-guard.sh",
+        "timeout": 20
+      }
+    ],
+    "sessionStart": [
+      {
+        "command": "bash .cursor/hooks/awa-cloud-session.sh",
+        "timeout": 5,
+        "failClosed": false
+      }
+    ]
+  }
+}

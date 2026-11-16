@@ -1,0 +1,36 @@
+{
+  "schema": "interoperability/canvas-design-workload/v1",
+  "required_skills": [
+    "canvas-design"
+  ],
+  "scope": "One fictional static local artwork. No real project, reference image, biography or owner decision.",
+  "outputs": [
+    "philosophy.md",
+    "artwork.pdf",
+    "worker-notes.md"
+  ],
+  "request": "Use the actual native Canvas Design instructions for a philosophical, original single-page seed-exchange artwork.",
+  "steps": [
+    "Read the actual native catalog-selected canvas-design/SKILL.md, then source-notes.json. Actual discovery and source-read trace evidence are required; a manually injected copy is not a native discovery claim.",
+    "Write philosophy.md: a one- or two-word movement name followed by four to six substantial paragraphs explaining spatial form, material, color, scale, rhythm and restraint. The seed-exchange topic should guide a subtle conceptual thread, not literal copied art or a dense report. Preserve original instruction fidelity, including explicit craftsmanship and a second refinement pass.",
+    "Write artwork.pdf as one original 600x800-point, portrait, static page. Use exactly the supplied title and subtitle, sparse reference markers if useful, repeated geometric forms and intentional negative space. Keep all visible content within36-point margins, legible and without unintended overlaps or clipping.",
+    "Use the two distinct supplied Instrument Sans and Geist Mono fonts from fonts/. Preserve their complete OFL files. Embed both fonts in the PDF. Do not download, alter or install fonts. Use only the existing local PDF tooling; no package installation, network, external images or external data. Use only the compiled existing bundled Python3.12 backend, ReportLab for authoring and pypdfium2/Pillow for local rendering; their exact package-tree and interpreter bindings are in the owner preview.",
+    "Use no PDF actions, JavaScript, forms, attachments, encryption, external references or annotations. Keep the PDF below2MiB. This is a static original artwork, not an interactive or browser artifact.",
+    "Render and visually inspect the actual saved PDF locally using the existing runtime, refine spacing and coherence once, then remove only the render temporaries you created. Explain that local review in worker-notes.md, at most180words, naming the actual skill read, movement, two fonts and revision. Do not claim serving-model identity, native acceptance, retained installation or migration completion.",
+    "Write only the three outputs, each mode0600, in the supplied private fixture root. Preserve fixture-owner.json, source-notes.json and fonts/. Temporary authoring/render files may be created only under the supplied fixture scratch/ directory and must be absent before completion.",
+    "No nested workers, extra roots, external requests, services, other clients, actual repository changes, protected-component or Affirm access. The parent must verify the terminal original worker handle and strict actual timing, then perform exact inode-owned rollback after every outcome before inspecting retained artifacts.",
+    "The parent independently parses, renders and visually reviews the saved PDF and checks original font/license/source evidence after rollback. Automated shape or PDF checks alone are not native evidence acceptance. Retention requires a separately accepted owner workflow and fresh exact decision."
+  ],
+  "parent_protocol": {
+    "native_tool": "collaboration.spawn_agent",
+    "worker_count": 1,
+    "requested_model": "gpt-6.1-sol",
+    "reasoning_effort": "high",
+    "fork_turns": "none",
+    "immediate_first_wait_ms": 60000,
+    "interrupt_if_unfinished_after_first_wait": true,
+    "strict_actual_worker_deadline_ms": 120000,
+    "rollback_after_every_outcome": true,
+    "retained_installation_authorized": false
+  }
+}

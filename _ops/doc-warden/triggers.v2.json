@@ -1,0 +1,184 @@
+{
+  "schema": "doc-warden/triggers/v2",
+  "version": "2.1.0",
+  "triggers": [
+    {
+      "schema": "doc-warden/trigger/v2",
+      "id": "artifact-transition",
+      "event": "artifact_transition",
+      "detector": "detect_artifact_transition",
+      "action": "preview_artifact_transition",
+      "template": "artifact",
+      "verifier": "verify_artifact",
+      "capability": "preview",
+      "semantic_mutation": false
+    },
+    {
+      "schema": "doc-warden/trigger/v2",
+      "id": "pre-import",
+      "event": "authoring_pre_import",
+      "detector": "detect_authoring_pre_import",
+      "action": "prepare_authoring_import",
+      "template": "authoring_import",
+      "verifier": "verify_runtime_binding",
+      "capability": "preview",
+      "semantic_mutation": false
+    },
+    {
+      "schema": "doc-warden/trigger/v2",
+      "id": "authoring-result-import",
+      "event": "authoring_result_import",
+      "detector": "detect_authoring_result_import",
+      "action": "validate_authoring_result",
+      "template": "authoring_result",
+      "verifier": "verify_authoring_result",
+      "capability": "preview",
+      "semantic_mutation": false
+    },
+    {
+      "schema": "doc-warden/trigger/v2",
+      "id": "completion",
+      "event": "artifact_completion",
+      "detector": "detect_artifact_completion",
+      "action": "preview_completion",
+      "template": "completion",
+      "verifier": "verify_completion_evidence",
+      "capability": "preview",
+      "semantic_mutation": false
+    },
+    {
+      "schema": "doc-warden/trigger/v2",
+      "id": "defect-transition",
+      "event": "defect_transition",
+      "detector": "detect_defect_transition",
+      "action": "preview_defect_transition",
+      "template": "defect",
+      "verifier": "verify_defect",
+      "capability": "preview",
+      "semantic_mutation": false
+    },
+    {
+      "schema": "doc-warden/trigger/v2",
+      "id": "reconciliation-preview",
+      "event": "reconciliation_preview",
+      "detector": "detect_reconciliation_preview",
+      "action": "reconcile",
+      "template": "reconciliation",
+      "verifier": "verify_reconciliation",
+      "capability": "read_only",
+      "semantic_mutation": false
+    },
+    {
+      "schema": "doc-warden/trigger/v2",
+      "id": "session-start",
+      "event": "session_start",
+      "detector": "detect_session_start",
+      "action": "report_session_context",
+      "template": "none",
+      "verifier": "verify_hook_report",
+      "capability": "read_only",
+      "semantic_mutation": false
+    },
+    {
+      "schema": "doc-warden/trigger/v2",
+      "id": "significant-file-edit",
+      "event": "significant_file_edit",
+      "detector": "detect_significant_file_edit",
+      "action": "mark_projection_stale",
+      "template": "none",
+      "verifier": "verify_freshness_marker",
+      "capability": "preview",
+      "semantic_mutation": false
+    },
+    {
+      "schema": "doc-warden/trigger/v2",
+      "id": "external-design-refresh",
+      "event": "external_design_refresh",
+      "detector": "detect_external_design_refresh",
+      "action": "compare_external_revision",
+      "template": "none",
+      "verifier": "verify_external_revision",
+      "capability": "read_only",
+      "semantic_mutation": false
+    },
+    {
+      "schema": "doc-warden/trigger/v2",
+      "id": "repository-dependency-observation",
+      "event": "repository_dependency_change",
+      "detector": "detect_repository_dependency_change",
+      "action": "observe_repository_dependency",
+      "template": "none",
+      "verifier": "verify_repository_dependency",
+      "capability": "read_only",
+      "semantic_mutation": false
+    },
+    {
+      "schema": "doc-warden/trigger/v2",
+      "id": "routine-maintenance",
+      "event": "routine_maintenance",
+      "detector": "detect_routine_maintenance",
+      "action": "doctor_refresh_projections",
+      "template": "canvas",
+      "verifier": "verify_job_report",
+      "capability": "read_only",
+      "semantic_mutation": false
+    }
+  ],
+  "legacy_v1_migration": [
+    {
+      "legacy_id": 1,
+      "v2_trigger_id": "artifact-transition",
+      "incompatibilities": [
+        "creation_snapshot_is_not_freeze",
+        "heuristic_detection_requires_operator",
+        "legacy_verifier_not_imported"
+      ]
+    },
+    {
+      "legacy_id": 2,
+      "v2_trigger_id": "artifact-transition",
+      "incompatibilities": [
+        "creation_snapshot_is_not_freeze",
+        "heuristic_detection_requires_operator",
+        "legacy_verifier_not_imported"
+      ]
+    },
+    {
+      "legacy_id": 3,
+      "v2_trigger_id": "artifact-transition",
+      "incompatibilities": [
+        "creation_snapshot_is_not_freeze",
+        "heuristic_detection_requires_operator",
+        "legacy_verifier_not_imported"
+      ]
+    },
+    {
+      "legacy_id": 4,
+      "v2_trigger_id": "artifact-transition",
+      "incompatibilities": [
+        "creation_snapshot_is_not_freeze",
+        "heuristic_detection_requires_operator",
+        "legacy_verifier_not_imported"
+      ]
+    },
+    {
+      "legacy_id": 6,
+      "v2_trigger_id": "reconciliation-preview",
+      "incompatibilities": [
+        "creation_snapshot_is_not_freeze",
+        "heuristic_detection_requires_operator",
+        "legacy_verifier_not_imported",
+        "cross_repository_writes_require_separate_operations"
+      ]
+    },
+    {
+      "legacy_id": 7,
+      "v2_trigger_id": "artifact-transition",
+      "incompatibilities": [
+        "creation_snapshot_is_not_freeze",
+        "heuristic_detection_requires_operator",
+        "legacy_verifier_not_imported"
+      ]
+    }
+  ]
+}

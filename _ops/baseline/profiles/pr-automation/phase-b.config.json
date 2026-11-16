@@ -1,0 +1,47 @@
+{
+  "schema": "pr-automation/v2",
+  "profile": "pr-automation",
+  "controller": {
+    "workflow_name": "controller",
+    "workflow_path": ".github/workflows/controller.yml",
+    "activation_variable": "AUTOMERGE_ENABLED",
+    "app_id_variable": "AUTOMERGE_APP_ID",
+    "app_id": 4269364,
+    "private_key_secret": "AUTOMERGE_APP_PRIVATE_KEY",
+    "app_slug": "kleinperkins-review-bot",
+    "bot_login": "kleinperkins-review-bot[bot]",
+    "author_allowlist": ["KleinPerkins"]
+  },
+  "required_workflow": {
+    "name": "required",
+    "path": ".github/workflows/required.yml",
+    "context": "required / ci",
+    "integration_id": 15368
+  },
+  "rulesets": {
+    "merge_safety": "kleinperkins-merge-safety",
+    "review_gate": "kleinperkins-review-gate"
+  },
+  "settings": {
+    "allow_auto_merge": true,
+    "delete_branch_on_merge": true,
+    "allow_update_branch": false,
+    "allow_squash_merge": true,
+    "allow_merge_commit": false,
+    "allow_rebase_merge": false
+  },
+  "protected_paths": [
+    ".github/workflows/**",
+    ".github/actions/**",
+    ".github/scripts/**",
+    ".github/CODEOWNERS",
+    ".github/dependabot.yml",
+    ".github/pr-automation.json",
+    "_ops/baseline/profiles/pr-automation/**",
+    "_ops/bin/repo-baseline.sh",
+    "_ops/bin/dev-new-repo.sh",
+    "_ops/checks/verify-operating-model.sh"
+  ],
+  "self_enrollment": ["KleinPerkins/dev"],
+  "hard_exclusions": ["KleinPerkins/chaos-scheduler"]
+}

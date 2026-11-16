@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KleinPerkins/dev/pr-automation/v1",
+  "title": "KleinPerkins PR automation profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "profile",
+    "ruleset_name",
+    "required_check",
+    "settings",
+    "merge_method",
+    "protected_paths"
+  ],
+  "properties": {
+    "schema": { "const": "pr-automation/v1" },
+    "profile": { "const": "pr-automation" },
+    "ruleset_name": { "const": "kleinperkins-pr-automation" },
+    "required_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context", "integration_id"],
+      "properties": {
+        "context": { "const": "required / ci" },
+        "integration_id": { "const": 15368 }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allow_auto_merge",
+        "delete_branch_on_merge",
+        "allow_update_branch"
+      ],
+      "properties": {
+        "allow_auto_merge": { "const": true },
+        "delete_branch_on_merge": { "const": true },
+        "allow_update_branch": { "const": true }
+      }
+    },
+    "merge_method": { "const": "squash" },
+    "protected_paths": {
+      "type": "array",
+      "minItems": 6,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

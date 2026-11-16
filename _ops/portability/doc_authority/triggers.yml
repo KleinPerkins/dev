@@ -1,0 +1,170 @@
+# doc-warden trigger catalog — M1
+#
+# Source of truth: _ops/plans/doc-warden-execution-plan-v1.md §9
+# Policy: _ops/doc-warden/POLICY.md §5
+#
+# Closed catalog: only entries here are auto-appliable. Any observed condition that does not
+# match an entry (and is not CONFORMANT) produces NEEDS_OPERATOR output with zero writes.
+#
+# Each entry schema:
+#   id:           integer (from execution plan trigger table)
+#   label:        short human-readable label
+#   detect:       heuristic description (may require agent/operator judgment to recognize)
+#   action:       what the engine does once the trigger is approved
+#   template:     filename(s) in _ops/doc-warden/templates/ to render (list or single)
+#   target:       path pattern — {plans_dir} and {adr_dir} are substituted at render time
+#   index_update: which index file gets a new row
+#   owner:        approval authority (always repo-owner for M1)
+#   verify:       shell-checkable assertion run after repair to confirm the action succeeded
+#
+# Deliberately excluded from M1 (reserved for POC 3a's NEEDS_OPERATOR exercise):
+#   trigger #1: "first architectural decision → Create ADR"
+#
+# M2+ triggers (#5, #8) ship in later milestones.
+# M4 adds trigger #6 (cross-repo authority boundary — POC 3d).
+
+schema: doc-warden-triggers/v1
+policy_version: "1.1.0"
+
+triggers:
+  - id: 1
+    label: first-architectural-decision
+    detect: >
+      A first architectural decision exists — a material, durable choice about the system's
+      design, structure, or external contracts that has consequences for future work and would
+      benefit from a written record of why it was made. Heuristic: agent or operator identifies
+      that a design decision has been made (or needs to be made) that would be costly to reverse
+      without understanding the original reasoning, and no ADR file exists in <adr_dir>/.
+    action: >
+      Create an ADR skeleton at <adr_dir>/<NNNN>-<slug>-v1.md rendered from the adr-entry
+      template. NNNN is the next sequential 4-digit number (starting from 0001). Add an index
+      row to <adr_dir>/README.md with status "DRAFT — needs authoring".
+      Classify the result NEEDS_AUTHORING; the ADR's Decision/Why/Consequences prose is a
+      separate human-authored follow-up.
+    template:
+      - adr-entry.md
+    target: "{adr_dir}/{NNNN}-{slug}-v1.md"
+    index_update: "{adr_dir}/README.md"
+    owner: repo-owner
+    verify: >
+      test -f "{adr_dir}/{NNNN}-{slug}-v1.md" &&
+      grep -qF "DRAFT" "{adr_dir}/README.md"
+
+  - id: 2
+    label: first-multi-session-plan
+    detect: >
+      A multi-session plan exists (an artifact capturing a non-trivial, multi-phase,
+      multi-session effort — typically recognized by the presence of a document with a
+      milestone/phase breakdown, operator gates, and a defined acceptance-test set),
+      but no corresponding plan file exists in <plans_dir>/.
+      Heuristic: agent or operator identifies an artifact that would take ≥2 sessions,
+      has a defined end state, and is not already captured in the plans index.
+    action: >
+      Create a plan skeleton at <plans_dir>/<slug>-v1.md rendered from the plan-header
+      template. Add an index row to <plans_dir>/README.md with status "DRAFT — needs authoring".
+      Classify the result NEEDS_AUTHORING; prose content is a separate human-authored follow-up.
+    template:
+      - plan-header.md
+    target: "{plans_dir}/{slug}-v1.md"
+    index_update: "{plans_dir}/README.md"
+    owner: repo-owner
+    verify: >
+      test -f "{plans_dir}/{slug}-v1.md" &&
+      grep -qF "DRAFT" "{plans_dir}/README.md"
+
+  - id: 3
+    label: first-operator-runbook
+    detect: >
+      An operator-facing procedure exists (a step-by-step runbook that an operator or
+      agent would follow to perform a repeated operational task — e.g. deployment, recovery,
+      onboarding, key rotation, incident response), but no corresponding runbook file exists
+      in docs/runbooks/.
+      Heuristic: the procedure is documented informally (in a chat, a PR description,
+      a README section) but not in a canonical, governed runbook location.
+    action: >
+      Create a runbook skeleton at docs/runbooks/<slug>.md rendered from the runbook template.
+      Classify the result NEEDS_AUTHORING; the actual procedure steps are a separate
+      human-authored follow-up.
+    template:
+      - runbook.md
+    target: "docs/runbooks/{slug}.md"
+    index_update: null
+    owner: repo-owner
+    verify: >
+      test -f "docs/runbooks/{slug}.md"
+
+  - id: 4
+    label: first-incident-remediation
+    detect: >
+      A significant incident or remediation event occurred — a production failure, unexpected data
+      loss, security event, or sustained degradation that required investigation and corrective
+      action — but no incident record exists in the repo's governed incidents directory.
+      Heuristic: agent or operator identifies a past event that had material impact (service
+      outage, data integrity issue, failed deployment requiring rollback, or policy/security breach)
+      and whose root cause, impact, and corrective actions have not been documented in a canonical,
+      governed incident record. The event is significant enough that omitting its record would make
+      similar future events harder to diagnose or prevent. A runbook covering incident-response
+      procedure (trigger #3) is a distinct artifact; this trigger fires on the first post-incident
+      narrative record for a specific event, not on the procedure itself.
+    action: >
+      Create an incident record skeleton at <incidents_dir>/<slug>.md rendered from the
+      incident-record template. Create <incidents_dir>/README.md (an index of all incident records,
+      with one row per record) if it does not already exist. Classify the result NEEDS_AUTHORING;
+      the prose narrative (What Happened, Impact, Root Cause, What We Changed) is a separate
+      human-authored follow-up. When a repo's local convention already keeps both plans and ADRs
+      under docs/, use docs/incidents/; otherwise use _ops/incidents/.
+    template:
+      - incident-record.md
+    target: "{incidents_dir}/{slug}.md"
+    index_update: "{incidents_dir}/README.md"
+    owner: repo-owner
+    verify: >
+      test -f "{incidents_dir}/{slug}.md" &&
+      grep -qF "DRAFT" "{incidents_dir}/README.md"
+
+  - id: 7
+    label: first-terminology-ambiguity
+    detect: >
+      Genuine terminology ambiguity exists across two or more documents or conversations
+      (the same term is used with materially different meanings, or two different terms are
+      used for the same concept, creating real confusion that would affect a reader or agent
+      consuming the repo's documentation without prior context).
+      Heuristic: agent or operator observes a term collision or definition gap that has caused
+      or could cause a misunderstanding; the ambiguity is not already resolved in an existing
+      glossary.
+    action: >
+      Create a glossary skeleton at docs/GLOSSARY.md rendered from the glossary template
+      (or append a new entry if docs/GLOSSARY.md already exists).
+      Classify the result NEEDS_AUTHORING; the actual definitions are a separate
+      human-authored follow-up.
+    template:
+      - glossary.md
+    target: "docs/GLOSSARY.md"
+    index_update: null
+    owner: repo-owner
+    verify: >
+      test -f "docs/GLOSSARY.md"
+
+  - id: 6
+    label: first-cross-repo-authority-boundary
+    detect: >
+      A durable authority boundary spans two repositories — canonical product/architecture facts
+      documented in both an owning standalone repo (e.g. KleinPerkins/awa) and a dependent host
+      overlay or consumer (e.g. ~/dev OPERATING-MANUAL §11 + agent rules). Heuristic: agent or
+      operator identifies agreeing or contradicting canonical statements in both repos for the same
+      topic (see cross-repo-profiles.yml).
+    action: >
+      In the owning repo: create an ADR skeleton at <adr_dir>/<NNNN>-<slug>.md from
+      cross-repo-authority-adr.md and add an index row. In each dependent repo: append a
+      cross-repo-pointer-block (marker-delimited) at the governed path, replacing duplicate prose
+      only after operator-approved repair — never delete without review. Classify duplicate copies
+      DUPLICATE_AUTHORITY until repaired. Each repo's change ships as its own PR.
+    template:
+      - cross-repo-authority-adr.md
+      - cross-repo-pointer-block.md
+    target: "{adr_dir}/{NNNN}-{slug}.md"
+    index_update: "{adr_dir}/README.md"
+    owner: repo-owner
+    verify: >
+      test -f "{adr_dir}/{NNNN}-{slug}.md" &&
+      grep -qF "doc-warden:cross-repo-authority:begin" "{dependent_pointer_path}"

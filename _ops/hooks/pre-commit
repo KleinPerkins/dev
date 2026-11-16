@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# _ops/hooks/pre-commit — local gate for KleinPerkins/dev.
+#
+# Runs (1) the working-tree session-lock check (R1 concurrency guard — block a commit when a
+# different live session is mutating this tree), (2) the data-guard (T5 — block likely secrets /
+# PII / oversized data), and (3) deterministic staged-path verification. One isolated mapped area
+# runs only its attributable checks; unknown, mixed, verifier, and high-risk changes run the
+# repo-only full gate. The emitted selection receipt explains both outcomes.
+# Install with: bash _ops/bin/install-hooks.sh   (symlinks .git/hooks/pre-commit here)
+#
+# There is intentionally no bypass baked in; if you must skip in an emergency, git's
+# native `--no-verify` exists, but prefer fixing the failure (run `make verify`).
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+# (1) Working-tree session lock (R1): block if a DIFFERENT live session is editing this tree.
+bash "$ROOT/_ops/hooks/session-lock" check || exit $?
+# (2) Data/PII guard (T5): block likely secrets / PII / oversized-data commits.
+[ -x "$ROOT/_ops/hooks/data-guard" ] && { bash "$ROOT/_ops/hooks/data-guard" || exit $?; }
+# (3) Staged-path selection and execution. The full fallback remains --ci/repo-only.
+exec env PYTHONDONTWRITEBYTECODE=1 \
+  python3 "$ROOT/_ops/verification/path_gate.py" --repo "$ROOT"

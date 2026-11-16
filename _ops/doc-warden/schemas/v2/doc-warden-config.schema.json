@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "dynamic_defaults": {"additionalProperties": false, "properties": {"rigor": {"enum": ["auto", "trivial_maintenance", "hotfix_defect", "small_change", "standard_feature", "multi_session_cross_component", "foundational_cross_repo"]}}, "required": ["rigor"], "type": "object"},
+    "enabled": {"type": "boolean"},
+    "github_repository_id": {"type": ["integer", "null"]},
+    "gsd_interface_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "gsd_pin_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "legacy_roots": {"items": {"type": "string"}, "type": "array"},
+    "maintenance": {"additionalProperties": false, "properties": {"last_checked_revision": {"type": ["string", "null"]}, "status": {"enum": ["current", "due", "blocked"]}}, "required": ["status", "last_checked_revision"], "type": "object"},
+    "repository_key": {"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "type": "string"},
+    "schema": {"const": "doc-warden/config/v2"},
+    "schema_version": {"const": 2}
+  },
+  "required": ["schema", "schema_version", "repository_key", "github_repository_id", "enabled", "dynamic_defaults", "legacy_roots", "gsd_pin_digest", "gsd_interface_digest", "maintenance"],
+  "type": "object"
+}

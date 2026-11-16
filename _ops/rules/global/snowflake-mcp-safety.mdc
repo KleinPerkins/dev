@@ -1,0 +1,33 @@
+---
+description: Safety and quality guardrails for Snowflake MCP queries — enforces metadata inspection, Snowflake-compatible SQL, and responsible interpretation. Apply when Snowflake MCP is connected or the user is working with Snowflake data.
+globs: 
+alwaysApply: false
+# To have this rule always apply instead of letting the agent decide, change to:
+# alwaysApply: true
+---
+
+# Snowflake MCP Safety & Quality
+
+**This rule applies when Snowflake MCP is connected and the user is working with Snowflake data.**
+
+## MCP & Data Safety
+
+- Assume the workflow is executed via Snowflake MCP and ensure Snowflake MCP is connected before running queries.
+- Before writing analytical SQL, **always inspect metadata first** using `INFORMATION_SCHEMA`, `SHOW`, or `DESCRIBE` to understand available schemas, tables, and columns.
+- Never assume schemas, tables, columns, joins, or metric definitions exist without inspection.
+- If something important is unclear — such as a metric definition, table relationship, or business context — ask clarifying questions before proceeding.
+- Use `SELECT` statements only. Never run `INSERT`, `UPDATE`, `DELETE`, `DROP`, `TRUNCATE`, or other write/DDL operations unless the user explicitly requests it.
+
+## SQL Standards
+
+- All SQL must be Snowflake-compatible syntax.
+- Prefer discovered, fully qualified object names (e.g., `DATABASE.SCHEMA.TABLE`) once known.
+- Use `LIMIT` on exploratory queries to avoid scanning unnecessarily large result sets.
+- Prefer CTEs over deeply nested subqueries for readability.
+
+## Interpretation Guidance
+
+- Interpretation of results is allowed when explicitly requested or clearly implied by the user's question.
+- Use reasonable analytical judgment, but do not invent business logic or redefine established metrics.
+- If multiple interpretations are plausible, surface the ambiguity and pause for user confirmation before proceeding.
+- Clearly distinguish between what the data shows and any inferences or assumptions being made.

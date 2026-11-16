@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# registration-guard — ADVISORY commit-time regenerator for a capability repo's .eco-registry.lock
+# (WF1/B2, Decision D1=keep). Source of truth: KleinPerkins/dev _ops/hooks/registration-guard.
+# SELF-CONTAINED so the installer (_ops/bin/install-identity-guard.sh) can COPY it into any sibling
+# repo's active hooks dir; it ships harmlessly to EVERY KleinPerkins repo via the shared dispatcher.
+#
+# WHAT IT DOES: when a meta.yml is staged in a repo that uses the lock paradigm (a committed
+# .eco-registry.lock + an executable .github/scripts/eco-lock.sh), it regenerates the lock and stages
+# it, so the committer doesn't have to remember. eco-lock.sh is the SINGLE normalization algorithm for
+# the repo — this guard never reimplements it, so there is no lockstep drift between guard and CI.
+#
+# ADVISORY BY CONTRACT: it ALWAYS exits 0 (never blocks a commit) and SELF-DISABLES (no-op) in any
+# repo without a .eco-registry.lock — i.e. virtually all KleinPerkins repos. CI lock-parity is the
+# REQUIRED gate of record; this is only fast feedback. --no-verify / fresh-clone / web edits bypass it
+# (fine — CI is the backstop). Disable entirely with ECO_REG_GUARD=0.
+set -uo pipefail
+
+case "${ECO_REG_GUARD:-1}" in 0|no|off|false) exit 0 ;; esac
+git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+TOP="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+LOCK="$TOP/.eco-registry.lock"
+LW="$TOP/.github/scripts/eco-lock.sh"
+
+# Self-disable: repos that don't use the lock paradigm have no lock + no writer.
+[ -f "$LOCK" ] && [ -x "$LW" ] || exit 0
+
+# Only act when a meta.yml is part of this commit (cheap; avoids churn on unrelated commits).
+if git diff --cached --name-only --diff-filter=ACMR -z 2>/dev/null | tr '\0' '\n' | grep -qE '(^|/)meta\.yml$'; then
+  if ( cd "$TOP" && bash "$LW" write ) >/dev/null 2>&1; then
+    git add "$LOCK" >/dev/null 2>&1 || true
+    printf '[registration-guard] regenerated + staged .eco-registry.lock\n' >&2
+  else
+    printf '[registration-guard] eco-lock regen failed (advisory; CI will catch parity)\n' >&2
+  fi
+fi
+exit 0

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "accessibility": {
+      "additionalProperties": false,
+      "properties": {
+        "contrast": {"minLength": 1, "type": "string"},
+        "focus": {"minLength": 1, "type": "string"},
+        "keyboard": {"minLength": 1, "type": "string"},
+        "motion": {"minLength": 1, "type": "string"},
+        "screen_reader": {"minLength": 1, "type": "string"}
+      },
+      "type": "object"
+    },
+    "design_system": {
+      "additionalProperties": false,
+      "properties": {
+        "components": {"items": {"minLength": 1, "type": "string"}, "type": "array", "uniqueItems": true},
+        "tokens": {"items": {"minLength": 1, "type": "string"}, "type": "array", "uniqueItems": true}
+      },
+      "type": "object"
+    },
+    "information_hierarchy": {"items": {"minLength": 1, "type": "string"}, "type": "array", "uniqueItems": true},
+    "interaction_copy": {"items": {"minLength": 1, "type": "string"}, "type": "array", "uniqueItems": true},
+    "journeys": {"items": {"minLength": 1, "type": "string"}, "type": "array", "uniqueItems": true},
+    "prototypes": {"items": {"pattern": "^PROTO-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$", "type": "string"}, "type": "array", "uniqueItems": true},
+    "requirements": {"items": {"minLength": 1, "type": "string"}, "type": "array", "uniqueItems": true},
+    "responsive": {
+      "additionalProperties": false,
+      "properties": {
+        "desktop": {"minLength": 1, "type": "string"},
+        "phone": {"minLength": 1, "type": "string"},
+        "tablet": {"minLength": 1, "type": "string"},
+        "web_responsive": {"type": "boolean"}
+      },
+      "type": "object"
+    },
+    "schema": {"const": "doc-warden/design-contract/v1"},
+    "states": {
+      "additionalProperties": false,
+      "properties": {
+        "disabled": {"minLength": 1, "type": "string"},
+        "empty": {"minLength": 1, "type": "string"},
+        "error": {"minLength": 1, "type": "string"},
+        "loading": {"minLength": 1, "type": "string"},
+        "recovery": {"minLength": 1, "type": "string"},
+        "success": {"minLength": 1, "type": "string"}
+      },
+      "type": "object"
+    },
+    "unresolved_interactions": {"items": {"minLength": 1, "type": "string"}, "type": "array", "uniqueItems": true},
+    "verification_rubric": {
+      "additionalProperties": false,
+      "properties": {
+        "accessibility": {"minLength": 1, "type": "string"},
+        "responsive": {"minLength": 1, "type": "string"},
+        "state_matrix": {"minLength": 1, "type": "string"}
+      },
+      "type": "object"
+    },
+    "visual_assets": {"items": {"minLength": 1, "type": "string"}, "type": "array", "uniqueItems": true}
+  },
+  "required": ["schema"],
+  "type": "object"
+}

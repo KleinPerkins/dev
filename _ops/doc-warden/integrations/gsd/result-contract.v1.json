@@ -1,0 +1,31 @@
+{
+  "schema": "doc-warden/gsd-authoring-result/v1",
+  "additional_properties": false,
+  "required": [
+    "source_revision",
+    "pin_digest",
+    "changed_file_digests",
+    "checker_passed",
+    "commands",
+    "assumptions_changed"
+  ],
+  "commands_policy": "empty_array_only",
+  "prohibited_outputs": [
+    "prompt",
+    "transcript",
+    "source_body",
+    "diff",
+    "log",
+    "credential",
+    "token",
+    "auth_state",
+    "customer_data"
+  ],
+  "prohibited_scm": [
+    "merge",
+    "auto-merge",
+    "tag",
+    "push",
+    "ship"
+  ]
+}

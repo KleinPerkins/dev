@@ -1,0 +1,62 @@
+{
+  "Affirm_or_work_access": false,
+  "credentials_sessions_or_old_profiles_copied": false,
+  "functional_observation": {
+    "console_warnings_errors": 0,
+    "control_sequence": [
+      "pointer click",
+      "Enter",
+      "Space"
+    ],
+    "counter_result": 3,
+    "external_resource_elements": 0,
+    "fixture_CSP_blocks_external_connections": true,
+    "fixture_files": {
+      "_ops/portability/fixtures/native-browser/index.html": "a1b34e781ba57638e67fb185dad86f2d0b232750cb74c8ee38df8c90345c2434",
+      "_ops/portability/fixtures/native-browser/serve.py": "57684a09d3ce55950092541c5fb9d8920f22ab098c6833787bbc3bd1171b5a8e"
+    },
+    "native_DOM_readback_exact": true,
+    "native_screenshot_visually_inspected": true,
+    "owned_loopback_port_closed": true,
+    "owned_loopback_process_stopped": true,
+    "test_tab_closed": true,
+    "text_echo_exact": true,
+    "text_entered": "Personal migration canary"
+  },
+  "host": {
+    "architecture": "arm64",
+    "build": "23880",
+    "product": "Codex",
+    "surface": "local-macos-desktop"
+  },
+  "limitations": [
+    "This accepts the native browser provider for the personal migration browser-automation requirement, not an asserted installation of the old standalone Playwright MCP server.",
+    "No arbitrary external-site, sign-in, account scope, work identity or other connector is qualified by the synthetic test.",
+    "Native app automation is outside this browser qualification; the product refused Codex-app UI control and no bypass was attempted.",
+    "Requalify when the host/browser provider or required functional contract changes.",
+    "Raw private traces and account pages remain local; this source record contains synthetic observations only."
+  ],
+  "model_worker_or_route_override": false,
+  "new_downloads": false,
+  "observed_at": "2026-11-02T10:20:31.787008+00:00",
+  "outcome": "pass",
+  "owner": "KleinPerkins/dev",
+  "registration_or_installation_changes": false,
+  "replacement_scope": [
+    "Browser-tab navigation and page inspection",
+    "Text entry and pointer/keyboard interaction",
+    "Rendered screenshot and console diagnostics",
+    "Exact owned temporary-tab and loopback-process cleanup"
+  ],
+  "requirement": "connections/playwright",
+  "schema": "personal-portability/native-browser-provider-observation/v1",
+  "selected_provider": {
+    "installation": "Already supplied by the current personal Codex host; actual tool use observed",
+    "interface": "Host-supplied cua_repl browser control and documented Playwright locators/read-only DOM API",
+    "name": "Codex native browser automation",
+    "personal_account_connection_required_for_local_fixture": false,
+    "standalone_MCP_registration_claimed": false
+  },
+  "source_acceptance_required_before_requirement_closure": true,
+  "source_checkout_or_original_manifest_changed": false
+}

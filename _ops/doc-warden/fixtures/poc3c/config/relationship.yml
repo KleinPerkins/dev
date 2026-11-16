@@ -1,0 +1,3 @@
+# config/relationship.yml — THE ld<->cpp relationship (INV-zero-link: defined ONLY here).
+schema: orchestrator-relationship/v1
+cpp_repo: Affirm/card-platform-product

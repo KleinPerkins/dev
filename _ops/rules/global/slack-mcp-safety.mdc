@@ -1,0 +1,65 @@
+---
+description: Safety and quality guardrails for Slack MCP operations — enforces channel and user ID discovery before writes, explicit confirmation before mutating tools, privacy awareness on scheduled messages, and graceful degradation. Apply when Slack MCP is connected or the user is working with Slack channels, threads, users, messages, or canvases.
+globs: 
+alwaysApply: false
+# To have this rule always apply instead of letting the agent decide, change to:
+# alwaysApply: true
+---
+
+# Slack MCP Safety & Quality
+
+**This rule applies when Slack MCP is connected and the user is working with Slack channels, threads, users, messages, or canvases.**
+
+## MCP & Data Safety
+
+- Assume the workflow is executed via Slack MCP (`user-slack`) and ensure the MCP is connected before running operations.
+- Before posting content or scheduling messages, **always resolve channels and users by ID**, not by name. Display names are mutable and ambiguous; IDs (`C…` for channels, `U…` for users) are stable. Use `slack_search_channels` and `slack_search_users` for resolution.
+- Privacy awareness: posts and canvases in public channels are searchable by every workspace member. Confirm the channel's privacy posture (public vs private) before posting anything the user would not want in a future search result.
+- Never post the same content twice without first calling `slack_search_public_and_private` or `slack_read_channel` to confirm it isn't already there.
+
+## Tool Surface
+
+**Read-only tools (`posture: fail-open`)** — safe to invoke without confirmation:
+
+| Tool | Purpose |
+|---|---|
+| `slack_read_channel` | Read channel messages (recent or by time range) |
+| `slack_read_thread` | Read a specific thread |
+| `slack_read_user_profile` | Fetch a user's profile (display name, email, timezone) |
+| `slack_read_canvas` | Read an existing Slack Canvas |
+| `slack_search_channels` | Search channels by name or topic (resolve to channel IDs) |
+| `slack_search_users` | Search users by name or email (resolve to user IDs) |
+| `slack_search_public` | Search public-channel messages |
+| `slack_search_public_and_private` | Search public + private channels the authenticated user is a member of |
+
+**Mutating tools (`posture: fail-closed`)** — require explicit user confirmation of payload before invocation:
+
+| Tool | Mutation | Confirmation payload MUST include |
+|---|---|---|
+| `slack_create_canvas` | Creates a new Slack Canvas | title, full canvas content (rendered as Canvas-flavored Markdown), target workspace location. Canvases are persistent and workspace-visible — confirmation is MANDATORY. |
+| `slack_schedule_message` | Schedules a message for future delivery | target channel ID, post_at timestamp (ISO 8601 in user's timezone, verified), full message body, thread parent (if replying in-thread). |
+
+A mutating call executed without the user's prior review of the payload is a safety violation. Scheduled messages in particular deserve extra care — they may deliver hours or days after confirmation when the user's intent may have changed.
+
+## Usage Guidance
+
+- **Canvas formatting is NOT standard Markdown.** Canvas-flavored Markdown has specific rules (user profile cards as `![](@U…)`, channel references as `![](#C…)`, no deep headings beyond `###`, restricted nesting of lists and code blocks, callouts via `::: {.callout}` fences). Always follow the `slack_create_canvas` tool description exactly; do not apply standard Markdown instincts.
+- **Never use `<@U…>` or `<#C…>` in canvases.** Those are chat-message mention formats and render as raw text in canvases. Use `![](@U…)` and `![](#C…)` in canvases.
+- **Channel + user resolution before composition.** If the user references "@jane" or "#eng-infra", resolve to IDs via `slack_search_users` / `slack_search_channels` BEFORE composing the message. Posting to the wrong channel or @-ing the wrong user is difficult to retract.
+- **Scheduled message timezone.** `slack_schedule_message` accepts a Unix timestamp for `post_at`; compute from the user's local timezone, and surface the local-time equivalent in the confirmation payload (not just the Unix epoch).
+- **Thread replies.** When replying to an existing thread, always pass the thread's root message `ts` as `thread_ts`; otherwise the reply lands at channel level instead of in the thread.
+- **Search scope.** Prefer `slack_search_public_and_private` over `slack_search_public` when the target conversation might be in a private channel the user is a member of; the authenticated user's access is respected automatically.
+
+## Graceful Degradation
+
+When a Slack tool is unavailable (network, auth, rate limit, permission denied):
+
+- **Read-only tool failure** (`fail-open`): log the failure, surface the error, continue with already-known context. Do not block.
+- **Mutating tool failure** (`fail-closed`): abort the containing turn. Do NOT retry automatically; surface the error and ask the user how to proceed. A canvas creation failure may leave a partially-composed draft in the user's workspace — on failure, surface the workspace URL so the user can check for drafts manually.
+- **`not_in_channel`** on post attempts: report that the authenticated user is not a member of the target channel; do not attempt to join silently.
+- **Rate limit (`ratelimited`)**: respect Slack's `Retry-After`; do not aggressively retry.
+- **Scheduled message posting failure**: if the scheduled delivery time has already passed when the error surfaces, treat as a hard failure and ask the user whether to resend immediately or cancel.
+
+## Boundary
+
+This rule governs Slack MCP only. Slack webhooks, the classic Slack API, and unofficial wrappers have distinct surfaces and require their own safety treatment if consumed. Slack canvases created via `slack_create_canvas` are a workspace-level Slack feature and not available on free teams.

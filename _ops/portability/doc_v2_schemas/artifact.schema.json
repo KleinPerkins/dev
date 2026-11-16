@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "approval": {"type": ["object", "null"]},
+    "authority": {"enum": ["semantic", "evidence", "projection"]},
+    "github_repository_id": {"type": ["integer", "null"]},
+    "id": {"pattern": "^[A-Z_]+-[0-9a-f-]{36}-[0-9a-f-]{36}$", "type": "string"},
+    "lifecycle": {"enum": ["draft", "in_review", "approved", "superseded", "rejected", "cancelled"]},
+    "mutability": {"enum": ["mutable", "frozen_after_approval", "immutable", "append_only", "generated"]},
+    "provenance": {"items": {"type": "object"}, "type": "array"},
+    "relations": {"items": {"type": "object"}, "type": "array"},
+    "repository_key": {"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "type": "string"},
+    "schema": {"const": "doc-warden/artifact/v2"},
+    "supersedes": {"type": ["string", "null"]},
+    "type": {"enum": ["project", "prd", "requirement", "spec", "uxr", "design", "asset", "prototype", "sketch", "spike", "adr", "plan", "summary", "verification", "uat", "release", "defect"]},
+    "version": {"type": "integer"}
+  },
+  "required": ["schema", "id", "type", "version", "repository_key", "github_repository_id", "authority", "mutability", "lifecycle", "supersedes", "relations", "provenance", "approval"],
+  "type": "object"
+}

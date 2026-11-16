@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Personal migration browser canary</title>
+<style>
+body{font:18px system-ui;background:#f3f5ef;color:#18291d;margin:0;padding:48px}
+main{max-width:580px;margin:auto;border:1px solid #78917d;border-radius:16px;padding:28px;background:white}
+button,input{font:inherit;padding:12px;margin:8px 0;display:block}
+button{cursor:pointer}output{display:block;font-size:32px;margin:16px 0}
+</style>
+<main><h1>Personal migration browser canary</h1>
+<p>Synthetic local test. No accounts or external resources.</p>
+<label for="note">Canary note</label><input id="note" autocomplete="off">
+<p id="echo" aria-live="polite">No note</p>
+<button id="add" type="button">Add seed</button>
+<output id="count" aria-live="polite">0</output>
+<p id="result">Ready</p></main>
+<script>
+let count=0;
+document.querySelector('#note').addEventListener('input',e=>{
+ document.querySelector('#echo').textContent=e.target.value||'No note';
+});
+document.querySelector('#add').addEventListener('click',()=>{
+ document.querySelector('#count').textContent=String(++count);
+ document.querySelector('#result').textContent=count===3?'Pointer, Enter and Space passed':'Interaction observed';
+});
+</script></html>

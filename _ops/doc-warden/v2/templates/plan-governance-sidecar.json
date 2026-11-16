@@ -1,0 +1,13 @@
+{
+  "schema": "doc-warden/plan-governance-sidecar/v2",
+  "artifact_id": "{{artifact_id}}",
+  "artifact_version": "{{artifact_version}}",
+  "canonical_plan_digest": "{{canonical_plan_digest}}",
+  "requirement_ids": [],
+  "design_ids": [],
+  "design_versions": {},
+  "design_digests": {},
+  "task_ids": [],
+  "assumptions": [],
+  "accepted": false
+}

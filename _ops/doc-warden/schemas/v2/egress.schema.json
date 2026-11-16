@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "payload": {"additionalProperties": {"anyOf": [{"type": "string"}, {"type": "integer"}, {"type": "boolean"}, {"type": "null"}, {"type": "array"}, {"type": "object"}]}, "type": "object"},
+    "schema": {"const": "doc-warden/egress/v1"},
+    "sink": {"enum": ["receipt", "event", "save_game", "canvas", "hook", "job", "external_asset"]}
+  },
+  "required": ["schema", "sink", "payload"],
+  "type": "object"
+}

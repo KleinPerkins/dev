@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_id": {"type": ["string", "null"]},
+    "operation": {"enum": ["view", "draft", "log", "update", "prioritize", "sequence", "apply", "doctor", "reconcile", "run", "pause", "resume", "verify"]},
+    "repository_key": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},
+    "schema": {"const": "doc-warden/intent/v2"},
+    "target_kind": {"enum": ["repo", "fleet", "project", "prd", "spec", "uxr", "design", "adr", "plan", "defect", "roadmap"]}
+  },
+  "required": ["schema", "operation", "target_kind", "repository_key", "artifact_id"],
+  "type": "object"
+}
