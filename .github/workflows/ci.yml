@@ -165,8 +165,8 @@
           "run": "python3 -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r .github/ci-requirements.txt"
         },
         {
-          "name": "Install scanner parity dependency",
-          "run": "sudo apt-get update -qq\nsudo apt-get install --no-install-recommends -y ripgrep\nrg --version"
+          "name": "Install pinned scanner parity dependency",
+          "run": "set -euo pipefail\nscanner_package=\"$(mktemp \"$RUNNER_TEMP/ripgrep.XXXXXX.deb\")\"\ntrap 'rm -f \"$scanner_package\"' EXIT\ncurl --fail --location --proto '=https' --tlsv1.2 --max-time 60 https://archive.ubuntu.com/ubuntu/pool/universe/r/rust-ripgrep/ripgrep_14.1.0-1_amd64.deb --output \"$scanner_package\"\nprintf '%s  %s\\n' 'c5ae63c7bee915b1cfc9f0bd07c55b4ce7f2bcd1133cba4da56719aac26101a4' \"$scanner_package\" | sha256sum --check --strict\nsudo dpkg --install \"$scanner_package\"\ntest \"$(dpkg-query --show --showformat='${Version}' ripgrep)\" = '14.1.0-1'\nrg --version"
         },
         {
           "name": "Run host-overlay-lifecycle",

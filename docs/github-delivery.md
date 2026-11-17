@@ -24,7 +24,10 @@ transport tests; it does not qualify an installed capability or account.
 
 Source workflows use contents-read only, pinned checkout/setup actions, no
 credential persistence, full ancestry, bounded standard hosted jobs and a hashed
-PyYAML dependency lock. The always-run `ci-required` aggregator rejects missing,
+PyYAML dependency lock. The host-overlay scanner parity lane installs the exact
+Ubuntu Noble `ripgrep` package `14.1.0-1` only after verifying its published SHA-256
+([package integrity](https://packages.ubuntu.com/noble/amd64/ripgrep/download)); it
+does not resolve a mutable package candidate. The always-run `ci-required` aggregator rejects missing,
 extra, failed, skipped, cancelled and stale shard evidence. Each receipt binds
 repository/name, merge parents, revision, workflow, run/attempt, command inventory,
 contract digest, measured case count/ID digest and explicit skips. A green local
