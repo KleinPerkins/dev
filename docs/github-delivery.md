@@ -19,7 +19,7 @@ overlay lifecycle, binding-refusal, degraded-guard and copy-contract checks stil
 run, while installed kernel UATs, live engine smoke and sibling-backed proof are
 withheld. Runtime roots are disposable and absent; source success cannot qualify
 an installed release. Default `worktree-verify.sh` keeps release-binding validation
-and host checks, including failure on an invalid installed binding. Standard `macos-14` executes the Darwin synthetic
+and host checks, including failure on an invalid installed binding. Standard `macos-15` executes the Darwin synthetic
 transport tests; it does not qualify an installed capability or account.
 
 Source workflows use contents-read only, pinned checkout/setup actions, no

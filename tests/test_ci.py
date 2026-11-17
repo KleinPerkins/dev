@@ -172,6 +172,11 @@ class IdentityAndBounds(unittest.TestCase):
         with self.assertRaises(ci.ContractError):ci.bounded([sys.executable,'-c','import time;time.sleep(10)'],.1)
         with self.assertRaises(ci.ContractError):ci.bounded([sys.executable,'-c','raise SystemExit(2)'],5)
         self.assertEqual(ci.bounded([sys.executable,'-c','print(42)'],5).strip(),b'42')
+    def test_failed_command_preserves_early_diagnostic_within_output_bound(self):
+        with self.assertRaises(ci.ContractError) as error:
+            ci.bounded([sys.executable,'-c','print("EARLY_FAILURE");print("x"*15000);raise SystemExit(1)'],5)
+        self.assertIn('EARLY_FAILURE',str(error.exception))
+        self.assertIn('x'*15000,str(error.exception))
 class Inventory(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup);self.root=Path(self.temp.name);policy_fixture(self.root)

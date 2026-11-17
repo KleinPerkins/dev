@@ -690,7 +690,7 @@ class StagedSourceTests(unittest.TestCase):
             )
             result = selector.select(
                 manifest,
-                source,
+                replace(source, _platform="darwin"),
                 changes,
                 "local",
                 "focused_local",
@@ -702,6 +702,15 @@ class StagedSourceTests(unittest.TestCase):
             self.assertIn(
                 "doc.full-compat", result.focused_obligation_ids
             )
+
+            linux = selector.select(
+                manifest, replace(source, _platform="linux"), changes,
+                "local", "focused_local",
+            )
+            self.assertFalse(linux.selector_control_ok)
+            self.assertFalse(linux.focus_eligible)
+            self.assertEqual(linux.effective_mode, "full")
+            self.assertEqual(linux.fallback_executor, "preserved.full")
 
     def test_candidate_bound_validation_refusals_preserve_source_and_reason(
         self,

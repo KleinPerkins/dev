@@ -305,6 +305,18 @@ class DeliveryTests(unittest.TestCase):
             with self.subTest(count=count),self.assertRaisesRegex(gate.Rejected,'review controls missing'):
                 gate.validate_controls(repo,rules,sets)
 
+    def test_all_applicable_approval_rules_preserve_effective_one(self):
+        for count in (0, 1, 2, 3, True, None):
+            repo,rules,sets=APIAndControlsTests().controls()
+            rules.append(dict(type='pull_request',ruleset_id=1,
+                              parameters={'required_approving_review_count':count}))
+            with self.subTest(count=count):
+                if type(count) is int and count in (0,1):
+                    gate.validate_controls(repo,rules,sets)
+                else:
+                    with self.assertRaisesRegex(gate.Rejected,'review controls missing'):
+                        gate.validate_controls(repo,rules,sets)
+
     def test_lost_approval_response_reuses_current_app_review_without_duplicate_post(self):
         read,write=self.fake_apis();proof=self.proof();writes=[];original=read.request
         current={'id':77,'commit_id':'a'*40,'state':'APPROVED',
@@ -438,6 +450,38 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn('mergePullRequest(input:$input)',writes[1][2]['query'])
         self.assertNotIn('enablePullRequestAutoMerge',writes[1][2]['query'])
         self.assertEqual(writes[1][2]['variables']['input'],{'pullRequestId':'PR_node','expectedHeadOid':'a'*40,'mergeMethod':'SQUASH'})
+    def test_fast_auto_merge_confirms_exact_native_outcome_without_retry(self):
+        for confirmation in (None, {'mergeMethod':'SQUASH','enabledBy':{'login':gate.APP_SLUG+'[bot]'}}):
+            for defect in (None,'foreign_actor','wrong_parent','wrong_tree','wrong_head'):
+                read,write,writes=self.clean_apis();original_read=read.request;original_write=write.request
+                def request(path):
+                    value=original_read(path)
+                    if path.endswith('/pulls/1'):
+                        value['mergeable_state']='blocked'
+                        if len(writes)==2:
+                            if defect=='foreign_actor':value['merged_by']['id']=gate.OWNER_ID
+                            if defect=='wrong_head':value['head']['sha']='f'*40
+                    if len(writes)==2 and path.endswith('/git/commits/'+'d'*40):
+                        if defect=='wrong_parent':value['parents']=[{'sha':'f'*40}]
+                        if defect=='wrong_tree':value['tree']['sha']='f'*40
+                    return value
+                def mutate(path,method,data):
+                    if path=='/graphql':
+                        writes.append((path,method,data))
+                        self.assertIn('enablePullRequestAutoMerge',data['query'])
+                        return {'data':{'enablePullRequestAutoMerge':{'pullRequest':{'autoMergeRequest':confirmation}}}}
+                    return original_write(path,method,data)
+                read.request=request;write.request=mutate
+                with self.subTest(confirmation=confirmation,defect=defect),patch.object(gate,'snapshot',return_value=self.proof()):
+                    if defect:
+                        with self.assertRaisesRegex(gate.Rejected,'read-only reconciliation'):
+                            gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
+                    else:
+                        result=gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
+                        self.assertEqual(result['status'],'merged')
+                        self.assertEqual(result['merge_sha'],'d'*40)
+                    self.assertEqual(len(writes),2)
+
     def test_clean_error_never_falls_back_to_arm_or_retries(self):
         for response in ({'errors':[{'type':'UNPROCESSABLE','message':'private arbitrary text'}]}, {},
                          {'data':{'mergePullRequest':{'pullRequest':None}}}):

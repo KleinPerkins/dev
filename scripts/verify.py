@@ -107,7 +107,7 @@ def bounded(argv,timeout,cwd=ROOT):
                 if not data:selector.unregister(key.fileobj);continue
                 out.extend(data);require(len(out)<=MAX_OUTPUT,'command output exceeded bound')
         p.wait(timeout=max(.1,deadline-time.monotonic()))
-        require(p.returncode==0,'command failed: '+str(argv)+'\n'+out.decode(errors='replace')[-12000:])
+        require(p.returncode==0,'command failed: '+str(argv)+'\n'+out.decode(errors='replace'))
         return bytes(out)
     finally:
         try:os.killpg(p.pid,signal.SIGTERM)

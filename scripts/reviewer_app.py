@@ -144,9 +144,13 @@ def validate_controls(repo, rules, rulesets, *, require_legacy=False, require_su
     require(any(r.get('strict_required_status_checks_policy') is True and
                 any(c.get('context') == 'ci-required' and c.get('integration_id') == CI_APP_ID
                     for c in r.get('required_status_checks', [])) for r in required), 'strict CI15368 required')
+    reviews = by_type.get('pull_request', [])
+    require(all(type(r.get('required_approving_review_count')) is int
+                and 0 <= r['required_approving_review_count'] <= 1 for r in reviews),
+            'review controls missing: incompatible applicable approval requirement')
     require(any(r.get('required_approving_review_count', 0) == 1 and r.get('dismiss_stale_reviews_on_push') is True
                 and r.get('required_review_thread_resolution') is True and r.get('allowed_merge_methods') == ['squash']
-                for r in by_type.get('pull_request', [])), 'review controls missing')
+                for r in reviews), 'review controls missing')
     require(all(name in by_type for name in ('required_linear_history', 'deletion', 'non_fast_forward')), 'history protection missing')
     # Preserve distinct owner/admin history-only and PR-only exceptions. App-scoped reads
     # may redact bypass_actors; absence is unknown, never evidence of emptiness.
@@ -605,12 +609,20 @@ def deliver(read_api, write_api, number, policy, policy_hash, now, app_slug, ins
         'variables': {'input': inputs}})
     response = mutation_result(result, 'enablePullRequestAutoMerge', 'native auto-merge not confirmed')
     confirmation = response.get('autoMergeRequest')
-    require(isinstance(confirmation, dict), 'native auto-merge not confirmed')
-    actor = confirmation.get('enabledBy')
-    require(confirmation.get('mergeMethod') == 'SQUASH'
-            and isinstance(actor, dict) and actor.get('login') == app_slug + '[bot]',
-            'native auto-merge not confirmed')
+    if confirmation is not None:
+        require(isinstance(confirmation, dict), 'native auto-merge not confirmed')
+        actor = confirmation.get('enabledBy')
+        require(confirmation.get('mergeMethod') == 'SQUASH'
+                and isinstance(actor, dict) and actor.get('login') == app_slug + '[bot]',
+                'native auto-merge not confirmed')
     observed = read_api.request(prefix + f'/pulls/{number}')
+    # Native auto-merge can complete before either mutation or REST readback.
+    # Reuse the exact actor/parent/tree/main confirmation without another write.
+    if observed.get('merged') is True:
+        return confirm_native_merge(read_api, number, first, {
+            'id': observed.get('node_id'), 'merged': True,
+            'mergeCommit': {'oid': observed.get('merge_commit_sha')}})
+    require(isinstance(confirmation, dict), 'native auto-merge not confirmed')
     armed = observed.get('auto_merge')
     actor = armed.get('enabled_by') if isinstance(armed, dict) else None
     require(isinstance(armed, dict) and isinstance(actor, dict) and armed.get('merge_method') == 'squash'
