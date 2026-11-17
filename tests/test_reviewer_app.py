@@ -232,7 +232,7 @@ class DeliveryTests(unittest.TestCase):
         return {'node_id':'PR_node','number':1,'state':'open','merged':False,'draft':False,
                 'head':{'sha':'a'*40,'repo':{'id':gate.REPOSITORY_ID}},
                 'base':{'sha':'b'*40,'ref':'main','repo':{'id':gate.REPOSITORY_ID}},
-                'mergeable':True,'mergeable_state':state}
+                'mergeable':True,'mergeable_state':state,'auto_merge':None}
     def fake_apis(self):
         read=gate.API('fake');write=gate.API('fake',writable=True)
         read.request=lambda path: ({'id':gate.BOT_ID,'type':'Bot','login':gate.APP_SLUG+'[bot]'} if path.startswith('/users/') else
@@ -288,6 +288,22 @@ class DeliveryTests(unittest.TestCase):
                     with self.assertRaisesRegex(gate.Rejected,'native auto-merge not confirmed'):
                         gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
                     self.assertEqual(request.call_count,2)
+    def test_preexisting_or_unknown_auto_merge_blocks_before_approval(self):
+        for value in (None, {}, {'merge_method':'squash','enabled_by':{'id':gate.OWNER_ID}},
+                      {'merge_method':'squash','enabled_by':{'id':gate.BOT_ID}}):
+            read,write=self.fake_apis();original=read.request
+            def observed(path):
+                pr=original(path)
+                if path.endswith('/pulls/1'):
+                    if value is None:pr.pop('auto_merge')
+                    else:pr['auto_merge']=value
+                return pr
+            read.request=observed
+            with patch.object(gate,'snapshot',return_value=self.proof()),patch.object(write,'request') as request:
+                with self.assertRaisesRegex(gate.Rejected,'existing or unknown native auto-merge'):
+                    gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
+                request.assert_not_called()
+
     def clean_apis(self):
         read,write=self.fake_apis();original=read.request;writes=[]
         def request(path):
