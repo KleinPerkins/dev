@@ -406,11 +406,20 @@ def validate_ci_jobs(api, prefix, pr, merge_sha, run):
         if name == 'ci-required':
             validate_ci_log(api.job_log(job['id']), pr, merge_sha, run, ci_contract_hash(api, prefix, merge_sha))
 
+def require_unarmed(pr):
+    # This read observes current state; it cannot atomically exclude another
+    # actor arming native auto-merge before a later approval. It does not by
+    # itself establish an App-only delivery authority guarantee.
+    require('auto_merge' in pr and pr['auto_merge'] is None,
+            'existing or unknown native auto-merge request; read-only reconciliation required')
+
+
 def snapshot(api, number, policy, policy_hash, now):
     prefix = '/repos/' + REPOSITORY
     repo = repository_snapshot(api)
     pr = api.request(prefix + '/pulls/' + str(number))
     require(pr['state'] == 'open' and not pr['draft'] and not pr.get('merged'), 'PR is not open ready')
+    require_unarmed(pr)
     require(pr['user']['id'] == OWNER_ID and pr['user']['type'] == 'User', 'author policy')
     require(pr['head']['repo']['id'] == REPOSITORY_ID and pr['base']['repo']['id'] == REPOSITORY_ID
             and pr['base']['ref'] == 'main', 'fork/base repository mismatch')
@@ -536,6 +545,7 @@ def deliver(read_api, write_api, number, policy, policy_hash, now, app_slug, ins
     # required checks and stale-approval dismissal arbitrate races after this read.
     require(snapshot(read_api, number, policy, policy_hash, now) == first, 'admission drift before approval')
     head = first['tuple']['head_sha']
+    require_unarmed(read_api.request('/repos/' + REPOSITORY + f'/pulls/{number}'))
     approval = write_api.request('/repos/' + REPOSITORY + f'/pulls/{number}/reviews', 'POST',
         {'event': 'APPROVE', 'commit_id': head, 'body': 'G1: completed enrolled local review and current CI/control gates verified. Q16 operational trust applies.'})
     require(approval['state'] == 'APPROVED' and approval['commit_id'] == head
@@ -546,6 +556,7 @@ def deliver(read_api, write_api, number, policy, policy_hash, now, app_slug, ins
     # mutation. Like gh --auto, a ready PR uses native merge; a blocked PR is armed.
     prefix = '/repos/' + REPOSITORY
     latest = read_api.request(prefix + f'/pulls/{number}')
+    require_unarmed(latest)
     require(latest.get('node_id') == first['node_id'] and latest.get('state') == 'open'
             and latest.get('merged') is False and latest.get('draft') is False
             and latest.get('head', {}).get('sha') == head

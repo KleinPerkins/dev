@@ -107,7 +107,7 @@ def bounded(argv,timeout,cwd=ROOT):
                 if not data:selector.unregister(key.fileobj);continue
                 out.extend(data);require(len(out)<=MAX_OUTPUT,'command output exceeded bound')
         p.wait(timeout=max(.1,deadline-time.monotonic()))
-        require(p.returncode==0,'command failed: '+str(argv)+'\n'+out.decode(errors='replace')[-12000:])
+        require(p.returncode==0,'command failed: '+str(argv)+'\n'+out.decode(errors='replace'))
         return bytes(out)
     finally:
         try:os.killpg(p.pid,signal.SIGTERM)
@@ -133,7 +133,14 @@ def run_test_module(path, output):
         def __init__(self,*a,**k):super().__init__(*a,**k);self.ids=[]
         def startTest(self,test):self.ids.append(test.id());super().startTest(test)
     result=unittest.TextTestRunner(verbosity=2,resultclass=Result).run(suite)
-    value={'module':path,'cases':result.ids,'skips':[{'case':t.id(),'reason':reason} for t,reason in result.skipped]}
+    skips={}
+    for test,reason in result.skipped:
+        # A subTest skip leaves its registered parent only partly exercised.
+        # Report that whole parent unqualified; never invent an executed child ID.
+        case=getattr(test,'test_case',test).id()
+        require(case in result.ids and isinstance(reason,str),'skip lacks registered parent/reason')
+        skips[(case,reason)]={'case':case,'reason':reason}
+    value={'module':path,'cases':result.ids,'skips':list(skips.values())}
     Path(output).write_bytes(canonical(value))
     require(result.testsRun>0 and result.wasSuccessful(),'module has no tests or failed: '+path)
 
