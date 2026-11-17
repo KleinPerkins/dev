@@ -20,7 +20,14 @@ run, while installed kernel UATs, live engine smoke and sibling-backed proof are
 withheld. Runtime roots are disposable and absent; source success cannot qualify
 an installed release. Default `worktree-verify.sh` keeps release-binding validation
 and host checks, including failure on an invalid installed binding. Standard `macos-15` executes the Darwin synthetic
-transport tests; it does not qualify an installed capability or account.
+transport tests; it does not qualify an installed capability or account. That lane
+uses the exact integrity-checked Python `3.12.12` Darwin standalone build `20260127`
+(the same build used for local source verification), because `actions/python-versions` provides
+no Darwin artifact for that patch. The standalone build/hash is fixed by the
+[UV release metadata](https://github.com/astral-sh/uv/blob/0.9.28/crates/uv-python/download-metadata.json). The Doc-Warden lane pins Node `v24.22.3`
+with its [published SHA-256](https://nodejs.org/dist/v24.22.3/SHASUMS256.txt)
+so the isolated GSD lifecycle fixture exercises its
+required Node 24 runtime. Both runtimes are job-local; no host installation is claimed.
 
 Source workflows use contents-read only, pinned checkout/setup actions, no
 credential persistence, full ancestry, bounded standard hosted jobs and a hashed

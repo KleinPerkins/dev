@@ -317,8 +317,16 @@ class ContractTests(unittest.TestCase):
         for shard in source_contract["shards"]:
             steps = workflow["jobs"][shard]["steps"]
             setup = [s for s in steps if s.get("uses", "").startswith("actions/setup-python@")]
-            self.assertEqual(len(setup), 1)
-            self.assertEqual(setup[0]["with"]["python-version"], "3.12.12")
+            if shard == "interop-portability":
+                self.assertEqual(setup, [])
+                runtime = [s for s in steps if s.get("name") == "Install pinned Darwin Python 3.12.12"]
+                self.assertEqual(len(runtime), 1)
+                self.assertIn("cpython-3.12.12%2B20260127-aarch64-apple-darwin-install_only_stripped.tar.gz", runtime[0]["run"])
+                self.assertIn("ce209e54ac17f731b5f257ff419b55a445fcf65035e303bbbc5708d67dfe59d8", runtime[0]["run"])
+                self.assertIn("sys.version_info[:3] == (3, 12, 12)", runtime[0]["run"])
+            else:
+                self.assertEqual(len(setup), 1)
+                self.assertEqual(setup[0]["with"]["python-version"], "3.12.12")
             self.assertTrue(any("--require-hashes" in s.get("run", "") for s in steps))
         self.assertFalse((REPO_ROOT / ".github/pr-automation.lock.json").exists())
         for path in PYTHON_GOVERNANCE_PATHS:
