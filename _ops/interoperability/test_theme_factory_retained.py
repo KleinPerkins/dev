@@ -257,7 +257,11 @@ class Transport(unittest.TestCase):
     def exchange(self,kind,interrupt=False,hard_boundary=False,lost_custody=False):
         with tempfile.TemporaryDirectory(prefix='theme-retained-transport-') as tmp:
             root=Path(tmp).resolve();operation=root/'catalog';cwd=root/'scope';cwd.mkdir()
-            command=[sys.executable,'-I','-B',str(Path(__file__).parent/'fixtures/theme-factory-retained/catalog_peer.py'),kind,str(operation)]
+            # The real HOME deny rule also covers hosted checkouts under ~/work.
+            # Run the identical inert peer bytes from the already allowed scope.
+            peer=cwd/'catalog_peer.py'
+            peer.write_bytes((Path(__file__).parent/'fixtures/theme-factory-retained/catalog_peer.py').read_bytes())
+            command=[sys.executable,'-I','-B',str(peer),kind,str(operation)]
             executables=[Path(sys.executable).resolve(),(Path(sys.prefix)/'Resources/Python.app/Contents/MacOS/Python').resolve()]
             limits={**r.native.PROTOCOL,'work_seconds':.35,'term_seconds':.5,'kill_seconds':.65,'hard_seconds':1.5}
             mask=r.native.signal.pthread_sigmask

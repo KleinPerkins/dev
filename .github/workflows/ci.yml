@@ -202,7 +202,7 @@
         },
         {
           "name": "Install pinned Darwin Python 3.12.12",
-          "run": "set -euo pipefail\ntest \"$(uname -m)\" = arm64\nruntime_root=\"$(mktemp -d \"$RUNNER_TEMP/dev-python.XXXXXX\")\"\narchive=\"$runtime_root/archive.tar.gz\"\ntrap 'rm -f \"$archive\"' EXIT\ncurl --fail --location --proto '=https' --tlsv1.2 --max-time 120 https://github.com/astral-sh/python-build-standalone/releases/download/20260127/cpython-3.12.12%2B20260127-aarch64-apple-darwin-install_only_stripped.tar.gz --output \"$archive\"\nprintf '%s  %s\\n' 'ce209e54ac17f731b5f257ff419b55a445fcf65035e303bbbc5708d67dfe59d8' \"$archive\" | shasum -a 256 --check\ntar -xzf \"$archive\" -C \"$runtime_root\"\n\"$runtime_root/python/bin/python3\" -I -c 'import sys; assert sys.version_info[:3] == (3, 12, 12)'\nprintf '%s\\n' \"$runtime_root/python/bin\" >> \"$GITHUB_PATH\""
+          "run": "set -euo pipefail\ntest \"$(uname -m)\" = arm64\nruntime_root=\"$(mktemp -d \"/private/tmp/dev-python.XXXXXX\")\"\narchive=\"$runtime_root/archive.tar.gz\"\ntrap 'rm -f \"$archive\"' EXIT\ncurl --fail --location --proto '=https' --tlsv1.2 --max-time 120 https://github.com/astral-sh/python-build-standalone/releases/download/20260127/cpython-3.12.12%2B20260127-aarch64-apple-darwin-install_only_stripped.tar.gz --output \"$archive\"\nprintf '%s  %s\\n' 'ce209e54ac17f731b5f257ff419b55a445fcf65035e303bbbc5708d67dfe59d8' \"$archive\" | shasum -a 256 --check\ntar -xzf \"$archive\" -C \"$runtime_root\"\n\"$runtime_root/python/bin/python3\" -I -c 'import sys; assert sys.version_info[:3] == (3, 12, 12)'\nprintf '%s\\n' \"$runtime_root/python/bin\" >> \"$GITHUB_PATH\""
         },
         {
           "name": "Install locked source test dependency",

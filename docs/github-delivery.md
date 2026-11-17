@@ -27,7 +27,9 @@ no Darwin artifact for that patch. The standalone build/hash is fixed by the
 [UV release metadata](https://github.com/astral-sh/uv/blob/0.9.28/crates/uv-python/download-metadata.json). The Doc-Warden lane pins Node `v24.22.3`
 with its [published SHA-256](https://nodejs.org/dist/v24.22.3/SHASUMS256.txt)
 so the isolated GSD lifecycle fixture exercises its
-required Node 24 runtime. Both runtimes are job-local; no host installation is claimed.
+required Node 24 runtime. Both runtimes are job-local; no host installation is claimed. The Darwin runtime
+is outside actual HOME, and the inert transport peer is copied byte-for-byte into
+its allowed scope; the production HOME/network/fork/write deny rules stay active.
 
 Source workflows use contents-read only, pinned checkout/setup actions, no
 credential persistence, full ancestry, bounded standard hosted jobs and a hashed
