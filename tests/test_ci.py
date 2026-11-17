@@ -104,6 +104,26 @@ class IdentityAndBounds(unittest.TestCase):
             self.assertTrue(any('test_policy_runtime_schema_catalog_and_dispatch_activate_atomically' in case
                 for case in measured['cases']))
             self.assertEqual(measured['skips'],[])
+    def test_subtest_skips_conservatively_bind_registered_parent_without_count_inflation(self):
+        policy=ci.policy()[0];reason=policy['allowed_skip_reasons'][0]
+        protected=policy['nonpassing_runtime_cases'][0]
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);module=root/'tests/test_cli.py';module.parent.mkdir()
+            module.write_text("import unittest\nclass Cases(unittest.TestCase):\n"
+                " def test_children(self):\n  for value in (1,2):\n   with self.subTest(value=value):self.skipTest("+repr(reason)+")\n"
+                "class CliTests(unittest.TestCase):\n def test_runtime_install_requires_digest_bound_generic_apply(self):\n"
+                "  with self.subTest(runtime='required'):self.skipTest("+repr(reason)+")\n")
+            output=root/'result.json'
+            with patch.object(ci,'ROOT',root),patch.object(ci.sys,'path',list(sys.path)),patch.dict(ci.sys.modules):
+                ci.run_test_module('tests/test_cli.py',output)
+            result=ci.parse(output.read_bytes())
+            self.assertEqual(set(result['cases']),{'test_cli.Cases.test_children',protected})
+            self.assertEqual(len(result['cases']),2,'subcases must not inflate executed case IDs')
+            self.assertEqual(result['skips'],[
+                {'case':'test_cli.Cases.test_children','reason':reason},
+                {'case':protected,'reason':reason}])
+            self.assertIn(protected,{row['case'] for row in result['skips']},
+                'required-runtime refusal must still match its canonical parent')
     def test_doc_warden_runner_refuses_installed_package_fallback(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary);test=root/'_ops/doc-warden/v2/tests/fallback_probe.py'
