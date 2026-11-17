@@ -108,3 +108,28 @@ checks do not transfer. Initial full-tree review uses the separate bootstrap
 capture described in `bootstrap-review.md`; it is never an ordinary PR receipt.
 No source upload, publication, settings change, activation, host installation or
 rename is authorized by these source files.
+
+## Evidence ladder and the ordinary delivery trigger
+
+Use the smallest claim supported by the observed operation:
+
+| Observation | Claim supported | Still required |
+|---|---|---|
+| Exact current-main CI run and aggregate pass | That main revision passed source CI | Actual PR CI, creation/review admission and ordinary delivery |
+| Successful read-only `receipt` dispatch for an actual PR | The observed PR tuple passed receipt/CI/control admission | A permitted ordinary event and actual App-owned merge |
+| `REVIEWER_APP_ENABLED=true` read back | Ordinary writer configuration is enabled | A triggering event, fresh mutable gates and observed merge outcome |
+| Actual App review and native squash merge observed | That specific PR was delivered | Fresh qualification for later changed tuples |
+
+A variable update is not an event subscribed to by this workflow. After a
+separately authorized writer enablement, the coordinator uses a fresh passing
+receipt for the current originating-account/head/base/policy tuple and publishes
+its unedited authenticated receipt comment. That `issue_comment:created` event
+is an explicit ordinary trigger; a later successful PR CI `workflow_run` can
+also trigger admission. `workflow_dispatch` remains read-only even when the
+writer variable is true. Never replay the unique creation witness or operate
+auto-merge to compensate for a missing ordinary trigger.
+
+Turning the writer OFF inhibits the later write path; it is not cancellation
+or proof that already queued/in-flight App work and native merge requests have
+settled. Any separately released rename or host transition must observe that
+settlement under its owner procedure before proceeding.

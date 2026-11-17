@@ -238,6 +238,7 @@ class DeliveryTests(unittest.TestCase):
         read.request=lambda path: ({'id':gate.BOT_ID,'type':'Bot','login':gate.APP_SLUG+'[bot]'} if path.startswith('/users/') else
                                   {'object':{'sha':'b'*40}} if path.endswith('/git/ref/heads/main') else self.live_pr())
         write.pages=lambda *args:[{'id':gate.REPOSITORY_ID,'full_name':gate.REPOSITORY}]
+        read.pages=lambda *args:[]
         return read,write
     def test_disabled_means_no_mutation(self):
         read,write=self.fake_apis()
@@ -258,17 +259,145 @@ class DeliveryTests(unittest.TestCase):
     def test_success_writes_exact_head_then_native_squash_only(self):
         read,write=self.fake_apis();proof=self.proof()
         replies=[{'state':'APPROVED','commit_id':'a'*40,'user':{'login':gate.APP_SLUG+'[bot]','id':gate.BOT_ID,'type':'Bot'}},
-                 {'data':{'enablePullRequestAutoMerge':{'pullRequest':{'autoMergeRequest':{'mergeMethod':'SQUASH'}}}}}]
+                 {'data':{'enablePullRequestAutoMerge':{'pullRequest':{'autoMergeRequest':{'mergeMethod':'SQUASH','enabledBy':{'login':gate.APP_SLUG+'[bot]'}}}}}}]
+        original=read.request
+        def observed(path):
+            value=original(path)
+            if path.endswith('/pulls/1') and request.call_count==2:
+                value['auto_merge']={'merge_method':'squash','enabled_by':{'id':gate.BOT_ID,'type':'Bot','login':gate.APP_SLUG+'[bot]'}}
+            return value
+        read.request=observed
         with patch.object(gate,'snapshot',return_value=proof) as snapshot,patch.object(write,'request',side_effect=replies) as request:
             result=gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
             self.assertEqual(result,{'status':'armed','head_sha':'a'*40,'merged':False})
             self.assertEqual(snapshot.call_count,3)
+            self.assertTrue(all(call.kwargs.get('require_successor_only') is True for call in snapshot.call_args_list))
             self.assertEqual(request.call_count,2)
             self.assertEqual(request.call_args_list[0].args[2]['commit_id'],'a'*40)
             payload=request.call_args_list[1].args[2]
             self.assertIn('$input:EnablePullRequestAutoMergeInput!',payload['query'])
             self.assertIn('enablePullRequestAutoMerge(input:$input)',payload['query'])
             self.assertEqual(payload['variables'],{'input':{'pullRequestId':'PR_node','expectedHeadOid':'a'*40,'mergeMethod':'SQUASH'}})
+    def test_ordinary_write_snapshots_enforce_successor_only_controls(self):
+        repo,rules,sets=APIAndControlsTests().controls()
+        checks=next(row['parameters']['required_status_checks'] for row in rules if row['type']=='required_status_checks')
+        checks.append({'context':'pr-automation / verify','integration_id':4274739})
+        pr=self.live_pr();pr['user']={'id':gate.OWNER_ID,'type':'User'}
+        read=gate.API('fake')
+        def request(path):
+            if path.endswith('/pulls/1'):return pr
+            if path.endswith('/git/ref/heads/main'):return {'object':{'sha':'b'*40}}
+            if path.endswith('/rules/branches/main'):return rules
+            if '/rulesets/' in path:return sets[0]
+            raise AssertionError('retired control must reject before further admission')
+        read.request=request;read.pages=lambda *args:[{'id':sets[0]['id']}]
+        with patch.object(gate,'repository_snapshot',return_value=repo),self.assertRaisesRegex(gate.Rejected,'retired controller blockers'):
+            gate.snapshot(read,1,{'enabled':True},'hash',NOW,require_successor_only=True)
+        read,write=self.fake_apis()
+        with patch.object(gate,'snapshot',side_effect=gate.Rejected('stop at first fresh admission')) as snapshots,patch.object(write,'request') as writes:
+            with self.assertRaises(gate.Rejected):gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
+            self.assertIs(snapshots.call_args.kwargs['require_successor_only'],True)
+            writes.assert_not_called()
+    def test_more_than_one_required_approval_is_not_qualified(self):
+        for count in (0,2,3):
+            repo,rules,sets=APIAndControlsTests().controls()
+            next(row['parameters'] for row in rules if row['type']=='pull_request')['required_approving_review_count']=count
+            with self.subTest(count=count),self.assertRaisesRegex(gate.Rejected,'review controls missing'):
+                gate.validate_controls(repo,rules,sets)
+
+    def test_all_applicable_approval_rules_preserve_effective_one(self):
+        for count in (0, 1, 2, 3, True, None):
+            repo,rules,sets=APIAndControlsTests().controls()
+            rules.append(dict(type='pull_request',ruleset_id=1,
+                              parameters={'required_approving_review_count':count}))
+            with self.subTest(count=count):
+                if type(count) is int and count in (0,1):
+                    gate.validate_controls(repo,rules,sets)
+                else:
+                    with self.assertRaisesRegex(gate.Rejected,'review controls missing'):
+                        gate.validate_controls(repo,rules,sets)
+
+    def test_lost_approval_response_reuses_current_app_review_without_duplicate_post(self):
+        read,write=self.fake_apis();proof=self.proof();writes=[];original=read.request
+        current={'id':77,'commit_id':'a'*40,'state':'APPROVED',
+                 'user':{'id':gate.BOT_ID,'type':'Bot','login':gate.APP_SLUG+'[bot]'}}
+        read.pages=lambda *args:[current]
+        def mutate(path,method,data):
+            writes.append((path,method,data))
+            self.assertEqual(path,'/graphql','reconciled approval must not be posted again')
+            return {'data':{'enablePullRequestAutoMerge':{'pullRequest':{'autoMergeRequest':{'mergeMethod':'SQUASH','enabledBy':{'login':gate.APP_SLUG+'[bot]'}}}}}}
+        def observed(path):
+            value=original(path)
+            if path.endswith('/pulls/1') and writes:
+                value['auto_merge']={'merge_method':'squash','enabled_by':{'id':gate.BOT_ID,'type':'Bot','login':gate.APP_SLUG+'[bot]'}}
+            return value
+        read.request=observed;write.request=mutate
+        with patch.object(gate,'snapshot',return_value=proof) as snapshots:
+            self.assertEqual(gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')['status'],'armed')
+        self.assertEqual(snapshots.call_count,3,'prior approval does not replace fresh complete admission')
+        self.assertEqual(len(writes),1)
+
+    def test_existing_app_review_unknown_or_changed_state_fails_without_approval_retry(self):
+        approved={'id':77,'commit_id':'a'*40,'state':'APPROVED',
+                  'user':{'id':gate.BOT_ID,'type':'Bot','login':gate.APP_SLUG+'[bot]'}}
+        for state in ('PENDING','DISMISSED','CHANGES_REQUESTED','COMMENTED',None):
+            read,write=self.fake_apis();read.pages=lambda *args:[dict(approved,state=state)]
+            with patch.object(gate,'snapshot',return_value=self.proof()),patch.object(write,'request') as request:
+                with self.assertRaisesRegex(gate.Rejected,'existing App review'):
+                    gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
+                request.assert_not_called()
+        read,write=self.fake_apis();read.pages=lambda *args:[approved,approved]
+        with patch.object(gate,'snapshot',return_value=self.proof()),patch.object(write,'request') as request:
+            with self.assertRaisesRegex(gate.Rejected,'multiple existing App reviews'):
+                gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
+            request.assert_not_called()
+        read,write=self.fake_apis()
+        with patch.object(read,'pages',side_effect=[[approved],[]]),patch.object(gate,'snapshot',return_value=self.proof()),patch.object(write,'request') as request:
+            with self.assertRaisesRegex(gate.Rejected,'existing App approval changed'):
+                gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
+            request.assert_not_called()
+
+
+    def test_preexisting_or_unknown_auto_merge_blocks_before_approval(self):
+        for value in (None, {}, {'merge_method':'squash','enabled_by':{'id':gate.OWNER_ID}},
+                      {'merge_method':'squash','enabled_by':{'id':gate.BOT_ID}}):
+            read,write=self.fake_apis();original=read.request
+            def observed(path):
+                pr=original(path)
+                if path.endswith('/pulls/1'):
+                    if value is None:pr.pop('auto_merge')
+                    else:pr['auto_merge']=value
+                return pr
+            read.request=observed
+            with patch.object(gate,'snapshot',return_value=self.proof()),patch.object(write,'request') as request:
+                with self.assertRaisesRegex(gate.Rejected,'existing or unknown native auto-merge'):
+                    gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
+                request.assert_not_called()
+    def test_auto_merge_actor_and_readback_state_must_match(self):
+        cases=('response_actor','response_actor_null','readback_actor','readback_actor_null','readback_method','readback_head','missing_readback')
+        for defect in cases:
+            read,write=self.fake_apis();original=read.request;writes=[]
+            def mutate(path,method,data):
+                writes.append((path,method,data))
+                if path=='/graphql':
+                    actor='foreign[bot]' if defect=='response_actor' else gate.APP_SLUG+'[bot]'
+                    return {'data':{'enablePullRequestAutoMerge':{'pullRequest':{'autoMergeRequest':{'mergeMethod':'SQUASH','enabledBy':None if defect=='response_actor_null' else {'login':actor}}}}}}
+                return {'state':'APPROVED','commit_id':'a'*40,'user':{'login':gate.APP_SLUG+'[bot]','id':gate.BOT_ID,'type':'Bot'}}
+            def observed(path):
+                pr=original(path)
+                if path.endswith('/pulls/1') and len(writes)==2:
+                    armed={'merge_method':'squash','enabled_by':{'id':gate.BOT_ID,'type':'Bot','login':gate.APP_SLUG+'[bot]'}}
+                    if defect=='readback_actor':armed['enabled_by']['id']=gate.OWNER_ID
+                    if defect=='readback_actor_null':armed['enabled_by']=None
+                    if defect=='readback_method':armed['merge_method']='merge'
+                    if defect=='readback_head':pr['head']['sha']='f'*40
+                    pr['auto_merge']=None if defect=='missing_readback' else armed
+                return pr
+            read.request=observed;write.request=mutate
+            with patch.object(gate,'snapshot',return_value=self.proof()),self.assertRaisesRegex(gate.Rejected,'native auto-merge not confirmed'):
+                gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
+            self.assertEqual(len(writes),2,'ambiguous result must not trigger another write')
+
     def test_head_mismatch_and_graphql_errors_never_report_armed_or_retry(self):
         proof=self.proof()
         approved={'state':'APPROVED','commit_id':'a'*40,'user':{'login':gate.APP_SLUG+'[bot]','id':gate.BOT_ID,'type':'Bot'}}
@@ -288,22 +417,6 @@ class DeliveryTests(unittest.TestCase):
                     with self.assertRaisesRegex(gate.Rejected,'native auto-merge not confirmed'):
                         gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
                     self.assertEqual(request.call_count,2)
-    def test_preexisting_or_unknown_auto_merge_blocks_before_approval(self):
-        for value in (None, {}, {'merge_method':'squash','enabled_by':{'id':gate.OWNER_ID}},
-                      {'merge_method':'squash','enabled_by':{'id':gate.BOT_ID}}):
-            read,write=self.fake_apis();original=read.request
-            def observed(path):
-                pr=original(path)
-                if path.endswith('/pulls/1'):
-                    if value is None:pr.pop('auto_merge')
-                    else:pr['auto_merge']=value
-                return pr
-            read.request=observed
-            with patch.object(gate,'snapshot',return_value=self.proof()),patch.object(write,'request') as request:
-                with self.assertRaisesRegex(gate.Rejected,'existing or unknown native auto-merge'):
-                    gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
-                request.assert_not_called()
-
     def clean_apis(self):
         read,write=self.fake_apis();original=read.request;writes=[]
         def request(path):
@@ -337,6 +450,38 @@ class DeliveryTests(unittest.TestCase):
         self.assertIn('mergePullRequest(input:$input)',writes[1][2]['query'])
         self.assertNotIn('enablePullRequestAutoMerge',writes[1][2]['query'])
         self.assertEqual(writes[1][2]['variables']['input'],{'pullRequestId':'PR_node','expectedHeadOid':'a'*40,'mergeMethod':'SQUASH'})
+    def test_fast_auto_merge_confirms_exact_native_outcome_without_retry(self):
+        for confirmation in (None, {'mergeMethod':'SQUASH','enabledBy':{'login':gate.APP_SLUG+'[bot]'}}):
+            for defect in (None,'foreign_actor','wrong_parent','wrong_tree','wrong_head'):
+                read,write,writes=self.clean_apis();original_read=read.request;original_write=write.request
+                def request(path):
+                    value=original_read(path)
+                    if path.endswith('/pulls/1'):
+                        value['mergeable_state']='blocked'
+                        if len(writes)==2:
+                            if defect=='foreign_actor':value['merged_by']['id']=gate.OWNER_ID
+                            if defect=='wrong_head':value['head']['sha']='f'*40
+                    if len(writes)==2 and path.endswith('/git/commits/'+'d'*40):
+                        if defect=='wrong_parent':value['parents']=[{'sha':'f'*40}]
+                        if defect=='wrong_tree':value['tree']['sha']='f'*40
+                    return value
+                def mutate(path,method,data):
+                    if path=='/graphql':
+                        writes.append((path,method,data))
+                        self.assertIn('enablePullRequestAutoMerge',data['query'])
+                        return {'data':{'enablePullRequestAutoMerge':{'pullRequest':{'autoMergeRequest':confirmation}}}}
+                    return original_write(path,method,data)
+                read.request=request;write.request=mutate
+                with self.subTest(confirmation=confirmation,defect=defect),patch.object(gate,'snapshot',return_value=self.proof()):
+                    if defect:
+                        with self.assertRaisesRegex(gate.Rejected,'read-only reconciliation'):
+                            gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
+                    else:
+                        result=gate.deliver(read,write,1,{'enabled':True},'hash',NOW,gate.APP_SLUG,'123')
+                        self.assertEqual(result['status'],'merged')
+                        self.assertEqual(result['merge_sha'],'d'*40)
+                    self.assertEqual(len(writes),2)
+
     def test_clean_error_never_falls_back_to_arm_or_retries(self):
         for response in ({'errors':[{'type':'UNPROCESSABLE','message':'private arbitrary text'}]}, {},
                          {'data':{'mergePullRequest':{'pullRequest':None}}}):
