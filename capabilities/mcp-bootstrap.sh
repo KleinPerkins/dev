@@ -8,6 +8,10 @@
 #   rollback snow-kit                   uninstall snow-kit
 set -euo pipefail
 
+# Source verification refuses untracked executable inputs; do not create new
+# Python bytecode caches in an otherwise reviewed source checkout.
+export PYTHONDONTWRITEBYTECODE=1
+
 CAP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 MCP_DIR="${KP_MCP_DIR_OVERRIDE:-$CAP_ROOT/mcp}"
 PIN_FILE="${SNOW_KIT_PIN_FILE:-$CAP_ROOT/mcp-pins.env}"
@@ -580,7 +584,7 @@ uninstall_snow_kit() {
 full_bootstrap() {
   load_pin
   if [ -e "$MCP_DIR/.git" ]; then
-    python3 "$SOURCE_IDENTITY" KleinPerkins/kp-mcp --repository "$MCP_DIR" --revision "$SNOW_SHA" >/dev/null
+    python3 "$SOURCE_IDENTITY" KleinPerkins/kp-mcp --checkout "$MCP_DIR" >/dev/null
     log "kp-mcp present at $MCP_DIR (leaving checkout as-is)"
   elif [ -e "$MCP_DIR" ]; then
     die "$MCP_DIR exists but is not a git repo"
@@ -592,7 +596,7 @@ full_bootstrap() {
     fi
     log "cloning kp-mcp capability source"
     "$GIT_BIN" clone "$MCP_REPO_URL" "$MCP_DIR"
-    python3 "$SOURCE_IDENTITY" KleinPerkins/kp-mcp --repository "$MCP_DIR" --revision "$SNOW_SHA" >/dev/null
+    python3 "$SOURCE_IDENTITY" KleinPerkins/kp-mcp --checkout "$MCP_DIR" >/dev/null
   fi
 
   if command -v "$UV_BIN" >/dev/null 2>&1; then

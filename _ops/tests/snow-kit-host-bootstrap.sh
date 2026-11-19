@@ -30,6 +30,24 @@ SHA1="$(git -C "$SOURCE" rev-parse HEAD)"
 git -C "$SOURCE" tag snow-kit-v0.1.0
 git -C "$SOURCE" remote add origin git@github.com:KleinPerkins/kp-mcp.git
 
+# Exercise production source verification against a real synthetic original
+# history. Only the disposable helper's identity anchor is replaced; runtime
+# release pins remain separate inputs and cannot replace this source anchor.
+FIXTURE_DEV="$TMP/dev"
+mkdir -p "$FIXTURE_DEV/capabilities" "$FIXTURE_DEV/_ops/interoperability"
+cp "$ROOT/capabilities/mcp-bootstrap.sh" "$FIXTURE_DEV/capabilities/"
+cp "$ROOT/capabilities/mcp-pins.env" "$FIXTURE_DEV/capabilities/"
+for helper in original_sources.py inventory.py mcp_maintenance.py; do
+  cp "$ROOT/_ops/interoperability/$helper" "$FIXTURE_DEV/_ops/interoperability/"
+done
+python3 - "$FIXTURE_DEV/_ops/interoperability/original_sources.py" "$SHA1" <<'PY_SOURCE'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+path.write_text(path.read_text().replace('7594346fbb09161749d21624b35cf5a173c84958', sys.argv[2]))
+PY_SOURCE
+SUT="$FIXTURE_DEV/capabilities/mcp-bootstrap.sh"
+
 FAKE="$TMP/fake"
 mkdir -p "$FAKE"
 cat >"$FAKE/tomli_w.py" <<'PY'

@@ -116,13 +116,26 @@ repository pin is translated only within this fixed original-ID mapping; its
 `snow-kit-v0.2.0` tag and `7594346fbb09161749d21624b35cf5a173c84958` commit stay fixed.
 No old tag is recreated in clean history.
 
-Existing local bootstrap, migration and native dispatch source consumption stays
+Existing local bootstrap, migration and native dispatch source verification stays
 offline. It accepts only exact original/retained endpoints, checks configured fetch
 and push URLs, rejects effective origin URL rewrites to other identities, and
 requires the original Git object. The migration's existing tree, package, payload,
 primary/worktree and qualification checks still apply. Local object checks are
 history continuity evidence, not fresh proof of GitHub metadata or permission to
-push. The released name transaction must independently read back all immutable
+push. Bootstrap execution additionally requires an original-history relationship
+between HEAD and the fixed original anchor, plus exact raw HEAD blobs, executable
+modes and index state for every consumed source file. Skills covers `bootstrap.sh`,
+`scripts/`, `global/` and `local/`; MCP covers its workspace and kit source tree.
+Modified, staged, missing, untracked, ignored or linked source is preserved and
+refused before use, including unverified code caches and virtual environments in
+that source closure. Source bootstrap suppresses new Python bytecode caches.
+Runtime pin overrides cannot become repository-history anchors. A pre-use Skills
+source refusal also stops the root bootstrap before it could execute the rejected
+AWA installer. The root validates an explicit overlay source override before any
+capability runs and rechecks the actual source before overlay use. Ordinary
+post-use reconcile failures, including a child status 78, keep their repair barrier.
+Exact-object migration and dispatch readers continue to consume only their old
+verified objects, without authorizing a checkout merely because it imported them. The released name transaction must independently read back all immutable
 IDs and rewrite original remotes before reusing any slug; source compatibility
 never performs that host transaction.
 

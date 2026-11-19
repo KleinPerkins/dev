@@ -210,6 +210,93 @@ class FrozenWorkloadAndCatalog(unittest.TestCase):
 
 
 class OriginalSourceContinuity(unittest.TestCase):
+    def test_bootstrap_requires_original_history_and_exact_consumed_source(self):
+        sources = module('original_sources')
+        for owner in sources.ORIGINALS:
+            with self.subTest(owner=owner), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw)
+                original = root / 'original'
+                original.mkdir()
+                def git(where, *args):
+                    return subprocess.check_output(['git', '-C', str(where), *args], stderr=subprocess.PIPE).decode().strip()
+                def commit(where, text):
+                    git(where, 'add', '.')
+                    git(where, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', text)
+                git(original, 'init', '-q')
+                (original / 'bootstrap.sh').write_text('echo original\n')
+                (original / '.gitignore').write_text('global/ignored.py\n')
+                (original / 'global').mkdir()
+                (original / 'global/source.py').write_text('original = True\n')
+                commit(original, 'original history')
+                anchor = git(original, 'rev-parse', 'HEAD')
+                git(original, 'remote', 'add', 'origin', f'git@github.com:{owner}.git')
+                with mock.patch.dict(sources.ANCHORS, {owner: anchor}), \
+                     mock.patch.object(sources, 'endpoint', side_effect=AssertionError('offline verifier used API')):
+                    self.assertEqual(sources.verify_checkout(original, owner), owner)
+                    # Established older detached source remains valid on the
+                    # same original history without a live API lookup.
+                    (original / 'README.md').write_text('later original snapshot\n')
+                    commit(original, 'later original snapshot')
+                    later = git(original, 'rev-parse', 'HEAD')
+                    with mock.patch.dict(sources.ANCHORS, {owner: later}):
+                        git(original, 'checkout', '-q', '--detach', anchor)
+                        self.assertEqual(sources.verify_checkout(original, owner), owner)
+                        git(original, 'checkout', '-q', '--detach', later)
+                    # A successor imports the object, but its actual HEAD belongs
+                    # to independent clean history and must never authorize use.
+                    successor = root / 'successor'
+                    successor.mkdir()
+                    git(successor, 'init', '-q')
+                    (successor / 'bootstrap.sh').write_text('echo successor-controlled\n')
+                    commit(successor, 'independent clean root')
+                    git(successor, 'remote', 'add', 'origin', f'git@github.com:{owner}.git')
+                    git(successor, 'fetch', '-q', str(original), anchor)
+                    self.assertEqual(sources.verify_repository(successor, owner), owner)
+                    before = (successor / 'bootstrap.sh').read_bytes()
+                    with self.assertRaisesRegex(ValueError, 'original history'):
+                        sources.verify_checkout(successor, owner)
+                    self.assertEqual((successor / 'bootstrap.sh').read_bytes(), before)
+                    # Local replace refs and legacy grafts cannot fabricate the
+                    # original ancestry of an independent successor root.
+                    bad_head = git(successor, 'rev-parse', 'HEAD')
+                    git(successor, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test',
+                        'replace', '--graft', bad_head, anchor)
+                    with self.assertRaisesRegex(ValueError, 'original history'):
+                        sources.verify_checkout(successor, owner)
+                    git(successor, 'replace', '-d', bad_head)
+                    grafts = successor / '.git/info/grafts'
+                    grafts.write_text(bad_head + ' ' + anchor + '\n')
+                    with self.assertRaisesRegex(ValueError, 'original history'):
+                        sources.verify_checkout(successor, owner)
+                    self.assertEqual(grafts.read_text(), bad_head + ' ' + anchor + '\n')
+                    grafts.unlink()
+                    # Existing original code remains offline, but modified,
+                    # staged, untracked and ignored consumed inputs refuse.
+                    source = original / 'global/source.py'
+                    source.write_text('modified = True\n')
+                    with self.assertRaisesRegex(ValueError, 'modified'):
+                        sources.verify_checkout(original, owner)
+                    git(original, 'add', 'global/source.py')
+                    source.write_text('original = True\n')
+                    with self.assertRaisesRegex(ValueError, 'staged'):
+                        sources.verify_checkout(original, owner)
+                    git(original, 'reset', '-q', 'HEAD', '--', 'global/source.py')
+                    for relative in ('global/extra.py', 'global/ignored.py', 'global/__pycache__/source.pyc'):
+                        extra = original / relative
+                        extra.parent.mkdir(parents=True, exist_ok=True)
+                        extra.write_bytes(b'unverified source')
+                        with self.assertRaisesRegex(ValueError, 'untracked or ignored'):
+                            sources.verify_checkout(original, owner)
+                        self.assertEqual(extra.read_bytes(), b'unverified source')
+                        extra.unlink()
+                    link = original / 'global/linked.py'
+                    link.symlink_to(root / 'outside-source')
+                    with self.assertRaisesRegex(ValueError, 'linked'):
+                        sources.verify_checkout(original, owner)
+                    self.assertTrue(link.is_symlink())
+                    link.unlink()
+                    self.assertEqual(sources.verify_checkout(original, owner), owner)
+
     def test_rejected_clone_cannot_be_used_on_a_second_bootstrap_attempt(self):
         import os
         import shutil
@@ -262,6 +349,14 @@ class OriginalSourceContinuity(unittest.TestCase):
                 env.update(HOME=str(home), XDG_STATE_HOME=str(home / '.local/state'),
                            XDG_DATA_HOME=str(home / '.local/share'), XDG_CONFIG_HOME=str(home / '.config'),
                            PATH=str(fake) + os.pathsep + str(Path(sys.executable).parent) + os.pathsep + os.environ['PATH'])
+                if owner == 'kp-mcp':
+                    # An override may select a runtime pin; it must never turn
+                    # a successor HEAD into the original-history source anchor.
+                    forged_pin = root / 'runtime-pin.env'
+                    bad_head = subprocess.check_output(['git', '-C', str(checkout), 'rev-parse', 'HEAD'], text=True).strip()
+                    forged_pin.write_text('SNOW_KIT_REPO=git@github.com:KleinPerkins/kp-mcp.git\n'
+                                          'SNOW_KIT_TAG=snow-kit-v0.2.0\nSNOW_KIT_SHA=' + bad_head + '\n')
+                    env['SNOW_KIT_PIN_FILE'] = str(forged_pin)
                 for attempt in range(2):
                     result = subprocess.run(['bash', str(cap / script)], env=env,
                                             capture_output=True, text=True, timeout=20)
