@@ -116,6 +116,15 @@ repository pin is translated only within this fixed original-ID mapping; its
 `snow-kit-v0.2.0` tag and `7594346fbb09161749d21624b35cf5a173c84958` commit stay fixed.
 No old tag is recreated in clean history.
 
+General bootstrap already consumed the existing local checkout without selecting
+a new HEAD or ref. This compatibility change adds original-source continuity and
+consumed-source preflight; it keeps the already owner-selected source/version in
+place. The anchors witness history continuity, not execution-version approval.
+Preserving an older checkout does not activate it or approve its revision,
+vulnerability level or runtime. Existing exact-pin consumers below keep their
+stronger operation-specific admission; the general bootstrap predicate does not
+replace any exact revision, tree, package, payload or qualification check.
+
 Existing local bootstrap, migration and native dispatch source verification stays
 offline. It accepts only exact original/retained endpoints, checks configured fetch
 and push URLs, rejects effective origin URL rewrites to other identities, and

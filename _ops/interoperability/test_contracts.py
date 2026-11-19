@@ -310,6 +310,15 @@ class OriginalSourceContinuity(unittest.TestCase):
                     self.assertTrue(link.is_symlink())
                     link.unlink()
                     self.assertEqual(sources.verify_checkout(original, owner), owner)
+                    # The original source owner selected a clean maintenance
+                    # snapshot. Continuity does not itself approve this version
+                    # or move HEAD to the anchor; exact-pin callers are separate.
+                    source.write_text('owner_selected_maintenance = True\n')
+                    commit(original, 'owner-selected original maintenance fixture')
+                    selected_head = git(original, 'rev-parse', 'HEAD')
+                    self.assertEqual(sources.verify_checkout(original, owner), owner)
+                    self.assertEqual(git(original, 'rev-parse', 'HEAD'), selected_head)
+                    self.assertEqual(git(original, 'status', '--porcelain'), '')
 
     def test_local_jobs_runtime_state_is_data_not_a_source_escape(self):
         import stat
@@ -428,6 +437,18 @@ class OriginalSourceContinuity(unittest.TestCase):
                         with self.assertRaisesRegex(ValueError, 'redirection'):
                             sources.verify_checkout(root, owner)
                     self.assertEqual((runtime.read_bytes(), runtime.stat().st_mode), initial)
+                # Python3.12 resolve() reports a cyclic external override as
+                # RuntimeError; refuse through the same public error channel.
+                cycle = root.parent / (root.name + '-cyclic-environment')
+                try:
+                    cycle.symlink_to(cycle)
+                    with mock.patch.dict(os.environ, {'UV_PROJECT_ENVIRONMENT': str(cycle)}):
+                        with self.assertRaisesRegex(ValueError, 'verification unavailable; source preserved'):
+                            sources.verify_checkout(root, owner)
+                    self.assertTrue(cycle.is_symlink())
+                    self.assertEqual((runtime.read_bytes(), runtime.stat().st_mode), initial)
+                finally:
+                    cycle.unlink(missing_ok=True)
                 # A symlink cannot redirect the environment root outside this contract.
                 moved = root / '.environment-fixture'
                 environment.rename(moved)

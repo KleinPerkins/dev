@@ -19,7 +19,8 @@ import subprocess
 
 import inventory
 
-# These existing object pins identify the retained history during offline use.
+# These existing object pins witness retained history during offline use.
+# They are not a general-bootstrap execution-version approval list.
 ANCHORS = {
     'KleinPerkins/skills': 'bc58eb77f442307ab4f124ab5aeec3f99571cb21',
     'KleinPerkins/kp-mcp': '7594346fbb09161749d21624b35cf5a173c84958',
@@ -37,7 +38,7 @@ def source_errors(function):
     def checked(*args, **kwargs):
         try:
             return function(*args, **kwargs)
-        except (OSError, subprocess.SubprocessError, UnicodeError, IndexError):
+        except (OSError, subprocess.SubprocessError, UnicodeError, IndexError, RuntimeError):
             raise ValueError('original source verification unavailable; source preserved') from None
     return checked
 
@@ -188,6 +189,9 @@ def verify_mcp_runtime_contract(root, project_bytes, lock_bytes):
 def verify_checkout(root, owner):
     """Refuse a foreign-history or modified source before executing its checkout.
 
+    General bootstrap consumes the already owner-selected original checkout;
+    these anchors witness continuity, not approval of HEAD or activation of an
+    older preserved version. Exact-pin consumers retain stronger admission.
     This checks accidental substitution and WIP against trusted local Git, not
     GitHub-ID authenticity against deliberate local-history/source fabrication.
     The caller must honor the existing one-writer rule and keep the checkout/path
