@@ -2,8 +2,9 @@
 
 This directory owns the shared local-file floor. [_ops/POLICY.md](../POLICY.md)
 owns current delivery policy; `delivery-policy.json` records the explicit cohort.
-The installed PR controller is abandoned. PAC mini actions is planned development,
-not an operational prerequisite or a reason to defer lasting CI/App delivery.
+The legacy PR controller is permanently offline. Its repository remains private
+with no CI; publication and a new CI/release process belong to PAC Mini Actions
+development after migration. Other public targets retain lasting CI/App delivery.
 
 ## Local floor
 
@@ -23,7 +24,7 @@ installers only against explicit disposable fixture roots.
 
 ## Dispositions and delivery
 
-The exact public CI/App cohort contains 14 KleinPerkins repositories. Five remain
+The exact public CI/App cohort contains 13 KleinPerkins repositories. Six remain
 private with no CI; Sterling's retired video project remains excluded. Names route
 classification; live mutation must verify the immutable repository ID and approved
 name. Unknown repositories remain unenrolled and never default to controller use.

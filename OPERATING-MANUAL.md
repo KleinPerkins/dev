@@ -788,9 +788,12 @@ installed host context. The lasting public-cohort delivery path is substantive
 sharded GitHub Actions CI, one automatic independent review from the originating
 Codex account, and approval/native squash by the qualified Chaos Scheduler App.
 There is no human technical-review requirement. The old controller is abandoned;
-PAC mini actions is planned work with no current delivery role or assumed launch date.
+PAC Mini Actions is planned work with no current delivery role or assumed launch date.
+Its repository remains private with no CI. Retire legacy delivery scaffolding before
+migration, preserving source, held WIP and historical evidence. New CI, publication
+and release design belong to PAC Mini Actions development after migration.
 
-The 14 public targets, five private/no-CI exceptions and retirement disposition are
+The 13 public targets, six private/no-CI exceptions and retirement disposition are
 owned by `_ops/baseline/delivery-policy.json` and `_ops/POLICY.md` §6. Inclusion is
 not publication or activation. Sensitive policy/workflow changes use the same
 qualified agent-review/check path. Initial seed admission and external settings

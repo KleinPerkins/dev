@@ -252,14 +252,19 @@ schemas and tests may remain inert; legacy mutation paths must refuse restoratio
 
 The exact cohort is declared in `_ops/baseline/delivery-policy.json`. Public CI/App
 targets are `kp-pr-bot-canary`, `kp-mcp`, `intent-router`, `awa`, `local-jobs`,
-`ecosystem-orchestrator`, `skills`, `pr-automation-controller`, `dev`,
+`ecosystem-orchestrator`, `skills`, `dev`,
 `operator-voice`, `sterling.io`, `machine-monitor`, `shadow-sync`, and
 `doc-warden-canary`, all owned by KleinPerkins. Publication of each repository
 requires its accepted content/history checks and admission gates; inclusion alone
 never changes visibility or installs controls.
 
-`chaos-labs`, `ai-analytics-context`, `server-guard`, `operator-voice-profile`, and
-`cpp` remain private with no CI. `sterling` is excluded and its obsolete controller
+`chaos-labs`, `ai-analytics-context`, `server-guard`, `operator-voice-profile`,
+`cpp`, and `pr-automation-controller` remain private with no CI. The legacy
+controller stays permanently offline. Before migration, retire its active CI/release
+scaffolding and operational instructions while preserving product source, held WIP
+and historical evidence. Publication and new CI/release machinery belong to the
+post-migration PAC Mini Actions development effort; do not recreate them for the
+legacy controller. `sterling` is excluded and its obsolete controller
 enrollment is retired through the accepted preservation/retirement procedure.
 Unknown repositories remain unenrolled; creating a private repository must never
 silently enroll it with the retired controller. A pending scaffold is not CI-ready.

@@ -77,7 +77,7 @@
     {
       "repository": "KleinPerkins/pr-automation-controller",
       "repository_id": 1297666445,
-      "disposition": "actions-app"
+      "disposition": "private-no-ci"
     },
     {
       "repository": "KleinPerkins/server-guard",

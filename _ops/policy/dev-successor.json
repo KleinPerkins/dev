@@ -238,12 +238,12 @@
     {
       "git_mode": "100644",
       "path": "OPERATING-MANUAL.md",
-      "sha256": "ad9182a4c514e3c6366b8a0eb356195fb2cef3acac4bf7a5fb6798830c66511f"
+      "sha256": "a09f02289ffe871908d81654f5d481fada043ddb31de787e35dfef19e6128b90"
     },
     {
       "git_mode": "100644",
       "path": "_ops/POLICY.md",
-      "sha256": "7439b66bde5e9a2142a38148fc5cab8d52b627b4b19563ff744cb3d4fb2d1371"
+      "sha256": "7825047d66d80d805f7bedca4abd1e1fef462f4772128cd869e42cb7cfc941c1"
     },
     {
       "git_mode": "100644",

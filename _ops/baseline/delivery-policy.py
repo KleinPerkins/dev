@@ -47,7 +47,7 @@ def load_policy():
             raise ValueError('invalid cohort identity')
         seen.add(name); ids.add(identity)
         counts[disposition] = counts.get(disposition, 0) + 1
-    if counts != {'actions-app': 14, 'private-no-ci': 5, 'retired': 1}:
+    if counts != {'actions-app': 13, 'private-no-ci': 6, 'retired': 1}:
         raise ValueError('cohort disposition mismatch')
     dev = next(row for row in rows if row['repository'] == 'KleinPerkins/dev')
     if dev != {'repository': 'KleinPerkins/dev', 'repository_id': 1459458379,
