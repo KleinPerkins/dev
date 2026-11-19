@@ -283,6 +283,10 @@ class OriginalSourceContinuity(unittest.TestCase):
                     # Existing original code remains offline, but modified,
                     # staged, untracked and ignored consumed inputs refuse.
                     source = original / 'global/source.py'
+                    with mock.patch.object(Path, 'read_bytes', side_effect=PermissionError('synthetic unreadable source')):
+                        with self.assertRaisesRegex(ValueError, 'verification unavailable; source preserved'):
+                            sources.verify_checkout(original, owner)
+                    self.assertEqual(source.read_text(), 'original = True\n')
                     source.write_text('modified = True\n')
                     with self.assertRaisesRegex(ValueError, 'modified'):
                         sources.verify_checkout(original, owner)
@@ -513,6 +517,34 @@ class OriginalSourceContinuity(unittest.TestCase):
                     self.assertFalse(marker.exists())
                 self.assertEqual(clone_log.read_text(), 'clone\n')
 
+    def test_verifier_operational_and_malformed_output_failures_are_bounded(self):
+        import io
+        sources = module('original_sources')
+        owner = 'KleinPerkins/skills'
+        errors = (OSError('synthetic Git unavailable'), subprocess.TimeoutExpired('git', 15),
+                  UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'synthetic invalid output'))
+        for verify in (sources.verify_repository, sources.verify_checkout):
+            for error in errors:
+                with self.subTest(api=verify.__name__, error=type(error).__name__), \
+                     mock.patch.object(sources, 'git_result', side_effect=error), \
+                     mock.patch.object(sources, 'endpoint', side_effect=AssertionError('unexpected API')):
+                    with self.assertRaisesRegex(ValueError, 'verification unavailable; source preserved'):
+                        verify(Path('/synthetic-unavailable-source'), owner)
+        # A valid origin plus an empty secondary URL produces a malformed local
+        # config row; parsing must use the same bounded refusal channel.
+        with mock.patch.object(sources, 'local_git', side_effect=[
+                'git@github.com:KleinPerkins/skills.git', '/synthetic-source', 'remote.empty.url']):
+            with self.assertRaisesRegex(ValueError, 'verification unavailable; source preserved'):
+                sources.verify_repository(Path('/synthetic-source'), owner)
+        with mock.patch('sys.argv', ['original_sources.py', owner, '--repository', '/synthetic-source']), \
+             mock.patch('sys.stderr', new_callable=io.StringIO) as errors, \
+             mock.patch.object(sources, 'git_result', side_effect=subprocess.TimeoutExpired('git', 15)):
+            with self.assertRaises(SystemExit) as caught:
+                sources.main()
+            self.assertEqual(caught.exception.code, 1)
+            self.assertIn('verification unavailable; source preserved', errors.getvalue())
+            self.assertNotIn('Traceback', errors.getvalue())
+
     @mock.patch.dict('os.environ', {'GH_HOST': 'untrusted-host.invalid'})
     def test_original_id_routes_current_and_retained_endpoints_only(self):
         sources = module('original_sources')
@@ -572,6 +604,11 @@ class OriginalSourceContinuity(unittest.TestCase):
                     git('remote', 'set-url', 'origin', 'git@github.com:KleinPerkins/' + name + '.git')
                     self.assertEqual(sources.verify_repository(root, 'KleinPerkins/skills', revision=original),
                                      'KleinPerkins/' + name)
+                git('config', 'remote.empty.url', '')
+                with self.assertRaisesRegex(ValueError, 'verification unavailable; source preserved'):
+                    sources.verify_repository(root, 'KleinPerkins/skills', revision=original)
+                self.assertEqual(git('config', '--get', 'remote.empty.url'), '')
+                git('config', '--unset', 'remote.empty.url')
                 with self.assertRaisesRegex(ValueError, 'pinned object'):
                     sources.verify_repository(root, 'KleinPerkins/skills', revision='0' * 40)
                 git('config', 'remote.origin.pushurl', 'git@github.com:KleinPerkins/skills.git')

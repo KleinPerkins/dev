@@ -24,6 +24,16 @@ sys.modules[SPEC.name] = migration
 SPEC.loader.exec_module(migration)
 
 
+class OriginalSourceErrors(unittest.TestCase):
+    def test_git_operational_failures_preserve_migration_error_channel(self):
+        for error in (OSError('synthetic unavailable'), migration.subprocess.TimeoutExpired('git', 15)):
+            with self.subTest(error=type(error).__name__), \
+                 mock.patch.object(migration.original_sources, 'git_result', side_effect=error):
+                with self.assertRaises(migration.MigrationError) as caught:
+                    migration._verify_original_source(Path('/synthetic-unavailable-source'))
+                self.assertEqual(str(caught.exception), 'mcp-migration:source_identity_mismatch')
+
+
 class FakeReason(StrEnum):
     OWNERSHIP_UNKNOWN = "ownership_unknown"
     UNSUPPORTED_TRANSPORT = "unsupported_transport"

@@ -20,8 +20,8 @@ import uuid
 
 HERE = Path(__file__).absolute().parent
 HELPERS = {
-    "original_sources.py": "3869c5ce48eb2a43f52b480df5a69ecd4d59f9962b8771b38daebfdbc6979c9b",
-    "isokit_migration.py": "38c4bf742565a94b98823c0d8fb2683e832958e955abc7275f4897734bb6908b",
+    "original_sources.py": "286ade1301deb5506f6a5dbd9101b930116aa62de2d6020d5cbb1e9c769a693f",
+    "isokit_migration.py": "878ad35c858e0d0b04fd421e16a4b1df6ae6e2fccabb382977d26b9bf10f362e",
     "skill_migration.py": "63338247bd1af57f492a46a1d8a20fc2585ecf826da0a37b3ac1bfe553300b11",
     "inventory.py": "5414d384788924f66f7ed324aa2c0092c5367a58ac914c36532c85a5fcd9f64e",
 }

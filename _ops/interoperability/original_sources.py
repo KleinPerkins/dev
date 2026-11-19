@@ -8,6 +8,7 @@ its endpoint, object and ancestry checks do not authenticate a GitHub repository
 against an actor deliberately rewriting that trusted local history or source.
 """
 import argparse
+import functools
 import hashlib
 import os
 import stat
@@ -28,6 +29,17 @@ ORIGINALS = {
     'KleinPerkins/skills': (1275604090, 'KleinPerkins/skills-private-original'),
     'KleinPerkins/kp-mcp': (1271164179, 'KleinPerkins/kp-mcp-private-original'),
 }
+
+
+def source_errors(function):
+    """Keep operational failures in the public verifier's fail-closed channel."""
+    @functools.wraps(function)
+    def checked(*args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        except (OSError, subprocess.SubprocessError, UnicodeError, IndexError):
+            raise ValueError('original source verification unavailable; source preserved') from None
+    return checked
 
 
 def git_result(root, *args):
@@ -72,6 +84,7 @@ def verify_url(remote, owner):
     return name
 
 
+@source_errors
 def verify_repository(root, owner, *, revision=None):
     """Check trusted-local endpoint/object continuity, without a remote-ID claim.
 
@@ -171,6 +184,7 @@ def verify_mcp_runtime_contract(root, project_bytes, lock_bytes):
                 raise ValueError('uv project/environment redirection refused; runtime preserved')
 
 
+@source_errors
 def verify_checkout(root, owner):
     """Refuse a foreign-history or modified source before executing its checkout.
 
