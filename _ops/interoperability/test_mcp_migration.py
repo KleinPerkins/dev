@@ -305,7 +305,8 @@ class CatalogAndBindingTests(unittest.TestCase):
                         return ("0" * 40 + "\n").encode()
                     raise AssertionError(args)
 
-                with mock.patch.object(migration, "_git", side_effect=drifted_git):
+                with mock.patch.object(migration, "_git", side_effect=drifted_git), \
+                     mock.patch.object(migration, "_verify_original_source"):
                     with self.assertRaises(migration.MigrationError) as caught:
                         migration._verify_source_and_wheel(wheel.resolve(), root.resolve())
                 self.assertEqual(caught.exception.reason_codes, ("source_drift",))

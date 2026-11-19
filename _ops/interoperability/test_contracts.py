@@ -209,5 +209,136 @@ class FrozenWorkloadAndCatalog(unittest.TestCase):
 
 
 
+class OriginalSourceContinuity(unittest.TestCase):
+    def test_rejected_clone_cannot_be_used_on_a_second_bootstrap_attempt(self):
+        import os
+        import shutil
+        import sys
+        for script, owner, identity, destination in (
+                ('bootstrap.sh', 'skills', 1275604090, 'skills'),
+                ('mcp-bootstrap.sh', 'kp-mcp', 1271164179, 'mcp')):
+            with self.subTest(script=script), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw)
+                dev = root / 'dev'
+                cap = dev / 'capabilities'
+                helpers = dev / '_ops/interoperability'
+                cap.mkdir(parents=True)
+                helpers.mkdir(parents=True)
+                checkout = root / 'wrong-history'
+                checkout.mkdir()
+                marker = root / 'source-was-used'
+                (checkout / 'bootstrap.sh').write_text('touch ' + str(marker) + '\n')
+                for args in (('init', '-q'), ('config', 'user.name', 'Fixture'),
+                             ('config', 'user.email', 'fixture@example.test'),
+                             ('add', '.'), ('commit', '-qm', 'wrong history'),
+                             ('remote', 'add', 'origin', f'git@github.com:KleinPerkins/{owner}.git')):
+                    subprocess.run(['git', '-C', str(checkout), *args], check=True, capture_output=True)
+                source = ROOT.parent.parent
+                shutil.copyfile(source / 'capabilities' / script, cap / script)
+                shutil.copyfile(source / 'capabilities/mcp-pins.env', cap / 'mcp-pins.env')
+                for name in ('original_sources.py', 'inventory.py', 'mcp_maintenance.py'):
+                    shutil.copyfile(ROOT / name, helpers / name)
+                fake = root / 'tools'
+                fake.mkdir()
+                real_git = shutil.which('git')
+                clone_log = root / 'clones'
+                (fake / 'git').write_text('#!' + sys.executable + '\n' +
+                    'import os,shutil,sys\n'
+                    'if sys.argv[1] == "clone":\n'
+                    ' shutil.copytree(' + repr(str(checkout)) + ',sys.argv[-1])\n'
+                    ' with open(' + repr(str(clone_log)) + ',"a") as f:f.write("clone\\n")\n'
+                    'else:os.execv(' + repr(real_git) + ',[' + repr(real_git) + ']+sys.argv[1:])\n')
+                (fake / 'gh').write_text('#!' + sys.executable + '\nimport json,sys\n' +
+                    'assert sys.argv[1:] == ["api","/repositories/' + str(identity) + '"]\n' +
+                    'print(json.dumps(' + repr(dict(id=identity, full_name='KleinPerkins/' + owner, private=True)) + '))\n')
+                (fake / 'uv').write_text('#!/bin/sh\ntouch ' + str(marker) + '\n')
+                for tool in fake.iterdir():
+                    tool.chmod(0o700)
+                home = root / 'home'
+                home.mkdir()
+                env = {key: value for key, value in os.environ.items()
+                       if not key.startswith(('GIT_', 'SNOW_KIT_', 'KP_MCP_', 'DEV_MCP_'))
+                       and key not in ('BASH_ENV', 'ENV', 'CAP_SKILLS_REPO_URL')}
+                env.update(HOME=str(home), XDG_STATE_HOME=str(home / '.local/state'),
+                           XDG_DATA_HOME=str(home / '.local/share'), XDG_CONFIG_HOME=str(home / '.config'),
+                           PATH=str(fake) + os.pathsep + str(Path(sys.executable).parent) + os.pathsep + os.environ['PATH'])
+                for attempt in range(2):
+                    result = subprocess.run(['bash', str(cap / script)], env=env,
+                                            capture_output=True, text=True, timeout=20)
+                    self.assertNotEqual(result.returncode, 0, (attempt, result.stdout, result.stderr))
+                    self.assertIn('pinned object unavailable', result.stderr)
+                    self.assertTrue((cap / destination / '.git').is_dir())
+                    self.assertFalse(marker.exists())
+                self.assertEqual(clone_log.read_text(), 'clone\n')
+
+    def test_original_id_routes_current_and_retained_endpoints_only(self):
+        sources = module('original_sources')
+        for owner, (identity, retained) in sources.ORIGINALS.items():
+            for name in (owner, retained):
+                with self.subTest(owner=owner, name=name), mock.patch.object(
+                        sources.subprocess, 'run', return_value=mock.Mock(
+                            stdout=json.dumps(dict(id=identity, full_name=name, private=True)))) as request:
+                    self.assertEqual(sources.endpoint(owner), name)
+                    self.assertEqual(request.call_args.args[0], ['gh', 'api', f'/repositories/{identity}'])
+                    self.assertEqual(sources.verify_url('git@github.com:' + name + '.git', owner), name)
+
+    def test_clean_successor_ids_and_unexpected_names_or_visibility_refuse(self):
+        sources = module('original_sources')
+        for owner, clean_id in (('KleinPerkins/skills', 1461925043), ('KleinPerkins/kp-mcp', 1460922143)):
+            identity, retained = sources.ORIGINALS[owner]
+            for row in (dict(id=clean_id, full_name=owner, private=True),
+                        dict(id=identity, full_name='other/' + retained.split('/')[1], private=True),
+                        dict(id=identity, full_name=retained, private=False),
+                        dict(id=str(identity), full_name=owner, private=True)):
+                with self.subTest(row=row), mock.patch.object(sources.subprocess, 'run',
+                        return_value=mock.Mock(stdout=json.dumps(row))):
+                    with self.assertRaisesRegex(ValueError, 'identity mismatched'):
+                        sources.endpoint(owner)
+
+    def test_unknown_endpoint_and_rename_redirect_do_not_qualify(self):
+        sources = module('original_sources')
+        with mock.patch.object(sources, 'endpoint', return_value='KleinPerkins/skills-private-original') as request:
+            with self.assertRaisesRegex(ValueError, 'endpoint mismatched'):
+                sources.verify_url('git@github.com:other/skills.git', 'KleinPerkins/skills')
+            request.assert_not_called()
+            with self.assertRaisesRegex(ValueError, 'stale'):
+                sources.verify_url('git@github.com:KleinPerkins/skills.git', 'KleinPerkins/skills')
+
+    def test_unavailable_live_identity_fails_closed(self):
+        sources = module('original_sources')
+        for error in (OSError(), subprocess.TimeoutExpired('gh', 30), subprocess.CalledProcessError(1, 'gh')):
+            with mock.patch.object(sources.subprocess, 'run', side_effect=error):
+                with self.assertRaisesRegex(ValueError, 'unavailable'):
+                    sources.endpoint('KleinPerkins/skills')
+
+    def test_local_old_objects_survive_rename_without_network_or_receipt_edits(self):
+        sources = module('original_sources')
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], stderr=subprocess.PIPE).decode().strip()
+            git('init', '-q')
+            (root / 'payload').write_text('original history')
+            git('add', 'payload')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'original')
+            original = git('rev-parse', 'HEAD')
+            git('remote', 'add', 'origin', 'git@github.com:KleinPerkins/skills.git')
+            with mock.patch.object(sources, 'endpoint', side_effect=AssertionError('local operation attempted API')):
+                for name in ('skills', 'skills-private-original'):
+                    git('remote', 'set-url', 'origin', 'git@github.com:KleinPerkins/' + name + '.git')
+                    self.assertEqual(sources.verify_repository(root, 'KleinPerkins/skills', revision=original),
+                                     'KleinPerkins/' + name)
+                with self.assertRaisesRegex(ValueError, 'pinned object'):
+                    sources.verify_repository(root, 'KleinPerkins/skills', revision='0' * 40)
+                git('config', 'remote.origin.pushurl', 'git@github.com:KleinPerkins/skills.git')
+                with self.assertRaisesRegex(ValueError, 'remote identity'):
+                    sources.verify_repository(root, 'KleinPerkins/skills', revision=original)
+                git('config', '--unset', 'remote.origin.pushurl')
+                git('config', 'url.git@github.com:other/skills.git.insteadOf',
+                    'git@github.com:KleinPerkins/skills-private-original.git')
+                with self.assertRaisesRegex(ValueError, 'identity'):
+                    sources.verify_repository(root, 'KleinPerkins/skills', revision=original)
+
+
 if __name__ == '__main__':
     unittest.main()

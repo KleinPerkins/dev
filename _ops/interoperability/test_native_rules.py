@@ -99,7 +99,8 @@ class NativeRendering(SourcePreparation):
             reads.append(name)
             return files[name]
         owners = {self.dev: 'KleinPerkins/dev', self.skills: 'KleinPerkins/skills', self.awa: 'KleinPerkins/awa'}
-        with patch.object(n.inventory, 'repository', side_effect=lambda root: (owners[root], None)), \
+        with patch.object(n.original_sources, 'verify_repository'), \
+             patch.object(n.inventory, 'repository', side_effect=lambda root: (owners[root], None)), \
              patch.object(n, 'git', side_effect=read), patch.object(n, 'PAYLOAD', payload):
             result = n.render(self.dev, self.skills, self.awa)
             self.assertEqual(set(reads), set(files))

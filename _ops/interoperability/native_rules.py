@@ -15,6 +15,7 @@ import uuid
 
 import qualification
 import inventory
+import original_sources
 import render_rules
 import codex_work_rules
 
@@ -53,7 +54,8 @@ def git(root, *args):
 
 def render(dev, skills, awa):
     """Read a pinned skills Git object, never an installed Cursor projection."""
-    for root, owner in ((dev, 'KleinPerkins/dev'), (skills, 'KleinPerkins/skills'), (awa, 'KleinPerkins/awa')):
+    original_sources.verify_repository(skills, 'KleinPerkins/skills')
+    for root, owner in ((dev, 'KleinPerkins/dev'), (awa, 'KleinPerkins/awa')):
         identity, reason = inventory.repository(root)
         if identity != owner or reason is not None:
             raise ValueError('source identity unavailable, excluded, or mismatched')
@@ -156,7 +158,7 @@ def preview(args):
 
 def implementation_digest():
     return sha(b''.join(Path(__file__).with_name(name).read_bytes() for name in
-                       ('native_rules.py', 'render_rules.py', 'qualification.py', 'inventory.py', 'codex_work_rules.py')) +
+                       ('native_rules.py', 'render_rules.py', 'qualification.py', 'inventory.py', 'original_sources.py', 'codex_work_rules.py')) +
                (ROOT / '_ops/bin/install-agent-rules.sh').read_bytes() +
                (ROOT / '_ops/rules/hosts/codex-work-dispatch.md').read_bytes() +
                (ROOT / '_ops/interoperability/evidence/codex-work-activation-bindings.json').read_bytes())

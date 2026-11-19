@@ -94,3 +94,50 @@ semantic scope, and prove old approval/receipt replay remains refused. That deci
 is not supplied by retained predecessor plan prose or by changing a digest to make
 a check pass. The ordinary source artifact create/update transaction baseline does
 not depend on this future plan-authority gate.
+
+## Retained capability source continuity
+
+Existing installed source keeps its original Git history, local paths and pins.
+Clean successor repositories at the original names have separate immutable IDs;
+name reuse admits no replacement source, release or installed runtime.
+
+| Installed source | Original GitHub ID | Retained endpoint |
+|---|---:|---|
+| Skills | 1275604090 | `KleinPerkins/skills-private-original` |
+| MCP | 1271164179 | `KleinPerkins/kp-mcp-private-original` |
+| Embedded Operator Voice | 1317232260 | `KleinPerkins/operator-voice-private-original` |
+
+Dev bootstrap resolves a missing Skills/MCP source and Snow release access through
+GitHub's original numeric ID. Read-only `gh api /repositories/{id}` must report
+that exact ID, private visibility and its exact current or retained endpoint.
+Unavailable access, an unexpected name or a successor ID stops resolution. Explicit
+clone URL overrides must match the observed original endpoint. The existing Snow
+repository pin is translated only within this fixed original-ID mapping; its
+`snow-kit-v0.2.0` tag and `7594346fbb09161749d21624b35cf5a173c84958` commit stay fixed.
+No old tag is recreated in clean history.
+
+Existing local bootstrap, migration and native dispatch source consumption stays
+offline. It accepts only exact original/retained endpoints, checks configured fetch
+and push URLs, rejects effective origin URL rewrites to other identities, and
+requires the original Git object. The migration's existing tree, package, payload,
+primary/worktree and qualification checks still apply. Local object checks are
+history continuity evidence, not fresh proof of GitHub metadata or permission to
+push. The released name transaction must independently read back all immutable
+IDs and rewrite original remotes before reusing any slug; source compatibility
+never performs that host transaction.
+
+Dispatch remains pinned to `bc58eb77f442307ab4f124ab5aeec3f99571cb21` and payload
+`4cfb6f107e5a26dbea73c83bf35d4c918dbc73e0ba26498d2605de9ac71a5ba3`.
+Historical source exports, qualification receipts and their recorded owner labels
+are unchanged. The separate immutable work-dispatch export consumer has no live
+remote resolver: its accepted registry, closed receipt and byte checks stay intact.
+MCP migration keeps `a34a0f73b93650e4a6abe9c9dff9a2e3eced94cb` and maintenance keeps
+`3c1f05e596dc3cbd24d99334686193e172edb464`, including every existing hash/version check.
+Embedded Voice lookup belongs to Skills; Dev does not rewrite its payload or
+provenance. Neither Voice version split nor active runtime changes here.
+
+Only source fixtures and source generation qualify this change. Installation,
+remote rewrites, name swaps, public disclosure and runtime adoption retain their
+separate accepted transaction gates. Previously sealed operation directories keep
+their original implementation digest and bytes; a new implementation does not
+silently reauthorize an old preview.

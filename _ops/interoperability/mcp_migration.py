@@ -37,6 +37,8 @@ from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
 import zipfile
 
+import original_sources
+
 
 REQUEST_SCHEMA = "dev/mcp-migration-preview-request/v1"
 RESULT_SCHEMA = "dev/mcp-migration-preview/v1"
@@ -357,6 +359,13 @@ def _remote_identity(remote: str) -> str | None:
     return None
 
 
+def _verify_original_source(repository: Path, revision: str = SOURCE_REVISION) -> None:
+    try:
+        original_sources.verify_repository(repository, SOURCE_OWNER, revision=revision)
+    except ValueError:
+        raise MigrationError("source_identity_mismatch") from None
+
+
 def _verify_source_and_wheel(wheel: Path, repository: Path) -> None:
     if not wheel.is_absolute() or not wheel.is_file() or wheel.is_symlink():
         raise MigrationError("package_unavailable")
@@ -378,8 +387,9 @@ def _verify_source_and_wheel(wheel: Path, repository: Path) -> None:
         remote = _git(repository, "remote", "get-url", "origin").decode("utf-8").strip()
     except UnicodeError:
         raise MigrationError("source_unavailable") from None
-    if _remote_identity(remote) != SOURCE_OWNER:
+    if _remote_identity(remote) not in (SOURCE_OWNER, "KleinPerkins/kp-mcp-private-original"):
         raise MigrationError("source_identity_mismatch")
+    _verify_original_source(repository)
     revision = _git(repository, "rev-parse", SOURCE_REVISION + "^{commit}").decode().strip()
     tree = _git(repository, "rev-parse", SOURCE_REVISION + "^{tree}").decode().strip()
     package_tree = _git(
@@ -888,8 +898,9 @@ class BoundMaintenanceAPI:
         try:
             if (self.wheel.is_symlink()
                 or hashlib.sha256(self.wheel.read_bytes()).hexdigest() != MAINTENANCE_WHEEL_SHA256
-                or _remote_identity(_git(self.repository, "remote", "get-url", "origin").decode().strip()) != SOURCE_OWNER):
+                or _remote_identity(_git(self.repository, "remote", "get-url", "origin").decode().strip()) not in (SOURCE_OWNER, "KleinPerkins/kp-mcp-private-original")):
                 raise MigrationError("source_drift")
+            _verify_original_source(self.repository, MAINTENANCE_SOURCE_REVISION)
         except (OSError, UnicodeError):
             raise MigrationError("source_unavailable") from None
         if any(not _module_origin_is_wheel(module, self.wheel)
@@ -918,8 +929,9 @@ def _load_maintenance_api(wheel: Path, repository: Path) -> BoundMaintenanceAPI:
         raise MigrationError("source_unavailable")
     if hashlib.sha256(wheel.read_bytes()).hexdigest() != MAINTENANCE_WHEEL_SHA256:
         raise MigrationError("package_drift")
-    if _remote_identity(_git(repository, "remote", "get-url", "origin").decode().strip()) != SOURCE_OWNER:
+    if _remote_identity(_git(repository, "remote", "get-url", "origin").decode().strip()) not in (SOURCE_OWNER, "KleinPerkins/kp-mcp-private-original"):
         raise MigrationError("source_identity_mismatch")
+    _verify_original_source(repository, MAINTENANCE_SOURCE_REVISION)
     for expression, expected in (("^{commit}", MAINTENANCE_SOURCE_REVISION),
                                   ("^{tree}", MAINTENANCE_SOURCE_TREE),
                                   (":kp-mcp-bootstrap", MAINTENANCE_PACKAGE_TREE)):

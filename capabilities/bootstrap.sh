@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-CAP_SKILLS_REPO_URL="${CAP_SKILLS_REPO_URL:-git@github.com:KleinPerkins/skills.git}"
+CAP_SKILLS_REPO_URL="${CAP_SKILLS_REPO_URL:-}"
 # Derive paths from THIS script's location so it runs anywhere (e.g. a clean-room clone), not just ~/dev.
 CAP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 DEV_ROOT="$(cd "$CAP_ROOT/.." && pwd)"
@@ -110,13 +110,20 @@ skills_bootstrap_supports_reset() {
 
 # 1. Clone if the skills repo is missing (never clobber an existing real dir).
 if [ -e "$SKILLS_DIR/.git" ]; then
+  python3 "$DEV_ROOT/_ops/interoperability/original_sources.py" KleinPerkins/skills --repository "$SKILLS_DIR" >/dev/null
   log "skills repo already present at $SKILLS_DIR (leaving as-is)"
 elif [ -e "$SKILLS_DIR" ]; then
   log "REFUSING: $SKILLS_DIR exists but is not a git repo; not clobbering. Resolve manually."
   exit 1
 else
+  if [ -z "$CAP_SKILLS_REPO_URL" ]; then
+    CAP_SKILLS_REPO_URL="$(python3 "$DEV_ROOT/_ops/interoperability/original_sources.py" KleinPerkins/skills)"
+  else
+    python3 "$DEV_ROOT/_ops/interoperability/original_sources.py" KleinPerkins/skills --url "$CAP_SKILLS_REPO_URL" >/dev/null
+  fi
   log "cloning $CAP_SKILLS_REPO_URL -> $SKILLS_DIR"
   git clone "$CAP_SKILLS_REPO_URL" "$SKILLS_DIR"
+  python3 "$DEV_ROOT/_ops/interoperability/original_sources.py" KleinPerkins/skills --repository "$SKILLS_DIR" >/dev/null
 fi
 
 if [ -f "$SKILLS_DIR/bootstrap.sh" ]; then

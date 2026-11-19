@@ -381,6 +381,8 @@ class Fixture:
         for rel in (
             "bootstrap.sh",
             "capabilities/bootstrap.sh",
+            "_ops/interoperability/original_sources.py",
+            "_ops/interoperability/inventory.py",
             "_ops/bin/install-dev-awa-overlay.sh",
             "_ops/bin/install-worktree-hooks.sh",
             "_ops/bin/check-awa-release-binding.py",
@@ -449,7 +451,26 @@ class Fixture:
             encoding="utf-8",
         )
         skills_bootstrap.chmod(0o755)
-        (skills_bootstrap.parent / ".git").mkdir()
+        # This lane tests overlay ordering, not production source provenance.
+        # Use a real disposable owner repo and replace only its copied helper's
+        # original object anchor with the synthetic fixture commit. The separate
+        # bootstrap continuity tests retain production anchors and rejection cases.
+        skills = skills_bootstrap.parent
+        git_env = {key: value for key, value in os.environ.items()
+                   if not key.startswith("GIT_")}
+        git_env["HOME"] = str(self.home)
+        for args in (("init", "-q", "-b", "main"),
+                     ("remote", "add", "origin", "git@github.com:KleinPerkins/skills.git"),
+                     ("add", "."),
+                     ("-c", "user.name=Fixture", "-c", "user.email=fixture@example.test",
+                      "commit", "-qm", "synthetic overlay source")):
+            subprocess.run(["git", "-C", str(skills), *args], env=git_env,
+                           check=True, capture_output=True)
+        anchor = subprocess.check_output(["git", "-C", str(skills), "rev-parse", "HEAD"],
+                                         env=git_env, text=True).strip()
+        resolver = self.dev / "_ops/interoperability/original_sources.py"
+        resolver.write_text(resolver.read_text().replace(
+            "bc58eb77f442307ab4f124ab5aeec3f99571cb21", anchor))
         for rel in (
             "_ops/bin/install-agent-rules.sh",
             "_ops/bin/install-mcp.sh",

@@ -15,7 +15,7 @@ import sys
 import uuid
 
 HERE=Path(__file__).absolute().parent
-CORE_SHA='696c6b81da7be3c2b42b6676d9f71a92b68dedf1bce71276d8f738c79e8162e4'
+CORE_SHA='27edb1ae49df43a6721918020aaebed936486adf8216d48eeff3dd7b8d08a1cc'
 CATALOG_SHA='5431887ad3baf3b606b8cf087af6a23b2dff73a687b1f810196297205f04892c'
 for name,digest in [('theme_factory_canary.py',CORE_SHA),('theme_factory_catalog.py',CATALOG_SHA)]:
     path=HERE/name

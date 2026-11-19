@@ -112,6 +112,16 @@ def preview(fixture) -> dict:
 
 
 class MigrationOperations(unittest.TestCase):
+    def test_pre_compatibility_preview_cannot_authorize_new_implementation(self):
+        with operation_fixture() as f:
+            with patch.object(m, "implementation_digest", return_value="0" * 64):
+                preview(f)
+            before = (f.home / ".codex/config.toml").read_bytes()
+            with self.assertRaisesRegex(ValueError, "implementation"):
+                m.apply_operation(f.args)
+            self.assertEqual((f.home / ".codex/config.toml").read_bytes(), before)
+
+
     def test_preview_apply_verify_reapply_and_exact_rollback(self):
         with operation_fixture() as f:
             config_before = (f.home / ".codex/config.toml").read_bytes()
@@ -478,6 +488,19 @@ class SourceRepositoryFixture:
 
 
 class SourceProofAndCanary(unittest.TestCase):
+    def test_retained_original_endpoint_preserves_existing_object_proof(self):
+        with tempfile.TemporaryDirectory(prefix="int008-retained-") as raw:
+            fixture = SourceRepositoryFixture(Path(raw).resolve())
+            with fixture.constants():
+                before, blobs = m.object_source_proof(fixture.repo, "test-build")
+                run("git", "remote", "set-url", "origin",
+                    "git@github.com:KleinPerkins/skills-private-original.git", cwd=fixture.repo)
+                after, renamed_blobs = m.object_source_proof(fixture.repo, "test-build")
+                self.assertEqual(before, after)
+                self.assertEqual(blobs, renamed_blobs)
+                self.assertTrue(m.primary_observation(fixture.home, require_current=True)["current_merged_payload"])
+
+
     def test_exact_owner_objects_and_current_primary_are_required(self):
         with tempfile.TemporaryDirectory(prefix="int008-source-") as raw:
             fixture = SourceRepositoryFixture(Path(raw).resolve())

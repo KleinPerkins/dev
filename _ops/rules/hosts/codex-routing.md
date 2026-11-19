@@ -5,7 +5,11 @@ Skills' source-owned `global/rules/subagent-orchestration/codex_dispatch.py` and
 `CODEX-DISPATCH.md`. The qualified Skills revision is
 `bc58eb77f442307ab4f124ab5aeec3f99571cb21`; its payload SHA-256 is
 `4cfb6f107e5a26dbea73c83bf35d4c918dbc73e0ba26498d2605de9ac71a5ba3`.
-Resolve `KleinPerkins/skills` by Git remote. Read the pinned resolver, policy
+Resolve the retained original Skills history (GitHub ID `1275604090`) by Git
+remote: `KleinPerkins/skills` before its rename, then
+`KleinPerkins/skills-private-original`. Require the unchanged pinned original
+object; a clean successor at the reused slug cannot satisfy this pin. Read the
+pinned resolver, policy
 (`codex-work-policy.json`) and caller contract from an owner-approved checkout or
 byte-verified read-only Git-object export. Run `source-digest` and require the
 exact digest above. Never change a primary checkout to obtain this source.

@@ -11,7 +11,8 @@ set -euo pipefail
 CAP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 MCP_DIR="${KP_MCP_DIR_OVERRIDE:-$CAP_ROOT/mcp}"
 PIN_FILE="${SNOW_KIT_PIN_FILE:-$CAP_ROOT/mcp-pins.env}"
-MCP_REPO_URL="${KP_MCP_REPO_URL:-git@github.com:KleinPerkins/kp-mcp.git}"
+MCP_REPO_URL="${KP_MCP_REPO_URL:-}"
+SOURCE_IDENTITY="$CAP_ROOT/../_ops/interoperability/original_sources.py"
 
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
@@ -81,6 +82,9 @@ load_pin() {
 verify_remote_pin() {
   local resolved
   command -v "$GIT_BIN" >/dev/null 2>&1 || die "git is required"
+  # Only the original ID can supply the existing tag/SHA, before or after rename.
+  SNOW_REPO="$(python3 "$SOURCE_IDENTITY" KleinPerkins/kp-mcp --resolve-url "$SNOW_REPO")" ||
+    die "release source is not the retained original"
   resolved="$("$GIT_BIN" ls-remote --tags "$SNOW_REPO" "refs/tags/$SNOW_TAG" | awk 'NR == 1 {print $1}')"
   [ -n "$resolved" ] || die "release tag did not resolve"
   [ "$resolved" = "$SNOW_SHA" ] || die "release tag does not match the pinned SHA"
@@ -574,13 +578,21 @@ uninstall_snow_kit() {
 }
 
 full_bootstrap() {
+  load_pin
   if [ -e "$MCP_DIR/.git" ]; then
+    python3 "$SOURCE_IDENTITY" KleinPerkins/kp-mcp --repository "$MCP_DIR" --revision "$SNOW_SHA" >/dev/null
     log "kp-mcp present at $MCP_DIR (leaving checkout as-is)"
   elif [ -e "$MCP_DIR" ]; then
     die "$MCP_DIR exists but is not a git repo"
   else
+    if [ -z "$MCP_REPO_URL" ]; then
+      MCP_REPO_URL="$(python3 "$SOURCE_IDENTITY" KleinPerkins/kp-mcp)"
+    else
+      python3 "$SOURCE_IDENTITY" KleinPerkins/kp-mcp --url "$MCP_REPO_URL" >/dev/null
+    fi
     log "cloning kp-mcp capability source"
     "$GIT_BIN" clone "$MCP_REPO_URL" "$MCP_DIR"
+    python3 "$SOURCE_IDENTITY" KleinPerkins/kp-mcp --repository "$MCP_DIR" --revision "$SNOW_SHA" >/dev/null
   fi
 
   if command -v "$UV_BIN" >/dev/null 2>&1; then

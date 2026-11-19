@@ -21,6 +21,7 @@ import tomllib
 import uuid
 
 import inventory
+import original_sources
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -91,8 +92,9 @@ def no_symlink_components(path: Path) -> None:
 
 def repository_owner(path: Path) -> None:
     owner, reason = inventory.repository(path)
-    if owner != "KleinPerkins/skills" or reason is not None:
+    if owner not in ("KleinPerkins/skills", "KleinPerkins/skills-private-original") or reason is not None:
         raise ValueError("Skills source identity unavailable, excluded, or mismatched")
+    original_sources.verify_repository(path, "KleinPerkins/skills", revision=MERGED_REVISION)
 
 
 def git_payload(root: Path, revision: str) -> tuple[dict[str, str], dict[str, tuple[str, bytes]]]:
@@ -623,6 +625,7 @@ def implementation_digest() -> str:
     files = (
         Path(__file__),
         Path(__file__).with_name("inventory.py"),
+        Path(__file__).with_name("original_sources.py"),
         ROOT / "capabilities/bootstrap.sh",
     )
     return sha(b"".join(path.read_bytes() for path in files))
