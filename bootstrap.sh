@@ -37,6 +37,16 @@ if [ "$#" -gt 0 ]; then
   exit 2
 fi
 
+verify_bootstrap_source() {
+  env PYTHONDONTWRITEBYTECODE=1 python3 \
+    "$ROOT/_ops/interoperability/original_sources.py" KleinPerkins/skills --checkout "$1" >/dev/null
+}
+# The overlay may select another original Skills checkout. Qualify that actual
+# source before any capability can run, rather than trusting a path override.
+if [ -n "${DEV_AWA_SKILLS_ROOT:-}" ]; then
+  verify_bootstrap_source "$DEV_AWA_SKILLS_ROOT" || exit 78
+fi
+
 echo "[bootstrap] 1/8 — capabilities skills hub"
 capabilities_rc=0
 if [ -f "$ROOT/capabilities/bootstrap.sh" ]; then
@@ -48,8 +58,20 @@ if [ -f "$ROOT/capabilities/bootstrap.sh" ]; then
     bash "$ROOT/capabilities/bootstrap.sh" || capabilities_rc=$?
 else
   echo "[bootstrap] FATAL: capabilities/bootstrap.sh not present" >&2
-  capabilities_rc=1
+  capabilities_rc=78
 fi
+
+# A pre-use source refusal means no capability was executed. The overlay must
+# not execute the same rejected Skills source. Ordinary reconcile failures still
+# reach the repair barrier below after any partial capability changes.
+if [ "$capabilities_rc" -eq 78 ]; then
+  echo "[bootstrap] source checkout refused before use; existing host state preserved" >&2
+  exit 78
+fi
+
+# Recheck the actual overlay source immediately before its separate use. Source
+# changes during reconciliation are preserved, never executed as repair code.
+verify_bootstrap_source "${DEV_AWA_SKILLS_ROOT:-$ROOT/capabilities/skills}" || exit 78
 
 echo "[bootstrap] 2/8 — AWA external runtime + Dev host-hook transaction barrier"
 # Capabilities may install AWA and then fail on unrelated work. Always resolve the complete Dev

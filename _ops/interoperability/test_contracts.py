@@ -209,5 +209,438 @@ class FrozenWorkloadAndCatalog(unittest.TestCase):
 
 
 
+class OriginalSourceContinuity(unittest.TestCase):
+    def test_bootstrap_requires_original_history_and_exact_consumed_source(self):
+        sources = module('original_sources')
+        for owner in sources.ORIGINALS:
+            with self.subTest(owner=owner), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw)
+                original = root / 'original'
+                original.mkdir()
+                def git(where, *args):
+                    return subprocess.check_output(['git', '-C', str(where), *args], stderr=subprocess.PIPE).decode().strip()
+                def commit(where, text):
+                    git(where, 'add', '.')
+                    git(where, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', text)
+                git(original, 'init', '-q')
+                (original / 'bootstrap.sh').write_text('echo original\n')
+                (original / '.gitignore').write_text('global/ignored.py\n')
+                (original / 'global').mkdir()
+                (original / 'global/source.py').write_text('original = True\n')
+                if owner == 'KleinPerkins/kp-mcp':
+                    (original / 'pyproject.toml').write_text('[tool.uv]\npackage = false\n[tool.uv.workspace]\nmembers = []\n')
+                    (original / 'uv.lock').write_text('version = 1\n')
+                commit(original, 'original history')
+                anchor = git(original, 'rev-parse', 'HEAD')
+                git(original, 'remote', 'add', 'origin', f'git@github.com:{owner}.git')
+                with mock.patch.dict(sources.ANCHORS, {owner: anchor}), \
+                     mock.patch.object(sources, 'endpoint', side_effect=AssertionError('offline verifier used API')):
+                    self.assertEqual(sources.verify_checkout(original, owner), owner)
+                    alias = root / 'linked-original'
+                    alias.symlink_to(original, target_is_directory=True)
+                    with self.assertRaisesRegex(ValueError, 'linked bootstrap root'):
+                        sources.verify_checkout(alias, owner)
+                    self.assertTrue(alias.is_symlink())
+                    self.assertEqual(git(original, 'rev-parse', 'HEAD'), anchor)
+                    alias.unlink()
+                    # Established older detached source remains valid on the
+                    # same original history without a live API lookup.
+                    (original / 'README.md').write_text('later original snapshot\n')
+                    commit(original, 'later original snapshot')
+                    later = git(original, 'rev-parse', 'HEAD')
+                    with mock.patch.dict(sources.ANCHORS, {owner: later}):
+                        git(original, 'checkout', '-q', '--detach', anchor)
+                        self.assertEqual(sources.verify_checkout(original, owner), owner)
+                        git(original, 'checkout', '-q', '--detach', later)
+                    # A successor imports the object, but its actual HEAD belongs
+                    # to independent clean history and must never authorize use.
+                    successor = root / 'successor'
+                    successor.mkdir()
+                    git(successor, 'init', '-q')
+                    (successor / 'bootstrap.sh').write_text('echo successor-controlled\n')
+                    commit(successor, 'independent clean root')
+                    git(successor, 'remote', 'add', 'origin', f'git@github.com:{owner}.git')
+                    git(successor, 'fetch', '-q', str(original), anchor)
+                    self.assertEqual(sources.verify_repository(successor, owner), owner)
+                    before = (successor / 'bootstrap.sh').read_bytes()
+                    with self.assertRaisesRegex(ValueError, 'original history'):
+                        sources.verify_checkout(successor, owner)
+                    self.assertEqual((successor / 'bootstrap.sh').read_bytes(), before)
+                    # Local replace refs and legacy grafts cannot fabricate the
+                    # original ancestry of an independent successor root.
+                    bad_head = git(successor, 'rev-parse', 'HEAD')
+                    git(successor, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test',
+                        'replace', '--graft', bad_head, anchor)
+                    with self.assertRaisesRegex(ValueError, 'original history'):
+                        sources.verify_checkout(successor, owner)
+                    git(successor, 'replace', '-d', bad_head)
+                    grafts = successor / '.git/info/grafts'
+                    grafts.write_text(bad_head + ' ' + anchor + '\n')
+                    with self.assertRaisesRegex(ValueError, 'original history'):
+                        sources.verify_checkout(successor, owner)
+                    self.assertEqual(grafts.read_text(), bad_head + ' ' + anchor + '\n')
+                    grafts.unlink()
+                    # Existing original code remains offline, but modified,
+                    # staged, untracked and ignored consumed inputs refuse.
+                    source = original / 'global/source.py'
+                    with mock.patch.object(Path, 'read_bytes', side_effect=PermissionError('synthetic unreadable source')):
+                        with self.assertRaisesRegex(ValueError, 'verification unavailable; source preserved'):
+                            sources.verify_checkout(original, owner)
+                    self.assertEqual(source.read_text(), 'original = True\n')
+                    source.write_text('modified = True\n')
+                    with self.assertRaisesRegex(ValueError, 'modified'):
+                        sources.verify_checkout(original, owner)
+                    git(original, 'add', 'global/source.py')
+                    source.write_text('original = True\n')
+                    with self.assertRaisesRegex(ValueError, 'staged'):
+                        sources.verify_checkout(original, owner)
+                    git(original, 'reset', '-q', 'HEAD', '--', 'global/source.py')
+                    for relative in ('global/extra.py', 'global/ignored.py', 'global/__pycache__/source.pyc'):
+                        extra = original / relative
+                        extra.parent.mkdir(parents=True, exist_ok=True)
+                        extra.write_bytes(b'unverified source')
+                        with self.assertRaisesRegex(ValueError, 'untracked or ignored'):
+                            sources.verify_checkout(original, owner)
+                        self.assertEqual(extra.read_bytes(), b'unverified source')
+                        extra.unlink()
+                    link = original / 'global/linked.py'
+                    link.symlink_to(root / 'outside-source')
+                    with self.assertRaisesRegex(ValueError, 'linked'):
+                        sources.verify_checkout(original, owner)
+                    self.assertTrue(link.is_symlink())
+                    link.unlink()
+                    self.assertEqual(sources.verify_checkout(original, owner), owner)
+                    # The original source owner selected a clean maintenance
+                    # snapshot. Continuity does not itself approve this version
+                    # or move HEAD to the anchor; exact-pin callers are separate.
+                    source.write_text('owner_selected_maintenance = True\n')
+                    commit(original, 'owner-selected original maintenance fixture')
+                    selected_head = git(original, 'rev-parse', 'HEAD')
+                    self.assertEqual(sources.verify_checkout(original, owner), owner)
+                    self.assertEqual(git(original, 'rev-parse', 'HEAD'), selected_head)
+                    self.assertEqual(git(original, 'status', '--porcelain'), '')
+
+    def test_local_jobs_runtime_state_is_data_not_a_source_escape(self):
+        import stat
+        sources = module('original_sources')
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], stderr=subprocess.PIPE).decode().strip()
+            git('init', '-q')
+            git('remote', 'add', 'origin', 'git@github.com:KleinPerkins/skills.git')
+            (root / 'bootstrap.sh').write_text('echo original source\n')
+            template = root / sources.DASHBOARD_TEMPLATE
+            template.parent.mkdir(parents=True)
+            template.write_text('export const DASHBOARD = __DASHBOARD_JSON__;\n')
+            (template.parent.parent / '.gitignore').write_text('canvases/*.generated.canvas.tsx\ncanvases/*.canvas.data.json\n')
+            git('add', '.')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'original dashboard source')
+            anchor = git('rev-parse', 'HEAD')
+            live = root / sources.DASHBOARD_LIVE
+            rendered = 'export const DASHBOARD = {\n  "schema": "dashboard/v1",\n  "instances": []\n};\n'
+            with mock.patch.dict(sources.ANCHORS, {'KleinPerkins/skills': anchor}), \
+                 mock.patch.object(sources, 'endpoint', side_effect=AssertionError('offline state check used API')):
+                sources.verify_checkout(root, 'KleinPerkins/skills')
+                # These are post-commit runtime writes, never resealed as source.
+                live.write_text(rendered)
+                for path in sources.DASHBOARD_STATE - {sources.DASHBOARD_LIVE}:
+                    (root / path).write_text('{"canvasState": {}}\n')
+                self.assertEqual(git('status', '--porcelain'), '')
+                sources.verify_checkout(root, 'KleinPerkins/skills')
+                self.assertEqual(live.read_text(), rendered)
+                for injected in (rendered + 'run_unverified();\n', rendered.replace('"dashboard/v1"', '"wrong-schema"'),
+                                 rendered.replace('  "instances": []', '  "instances": (run_unverified())')):
+                    live.write_text(injected)
+                    with self.assertRaisesRegex(ValueError, 'unverified dashboard'):
+                        sources.verify_checkout(root, 'KleinPerkins/skills')
+                    self.assertEqual(live.read_text(), injected)
+                live.write_text(rendered)
+                live.chmod(0o755)
+                with self.assertRaisesRegex(ValueError, 'non-executable'):
+                    sources.verify_checkout(root, 'KleinPerkins/skills')
+                self.assertTrue(live.stat().st_mode & stat.S_IXUSR)
+                live.chmod(0o644)
+                outside = root.parent / (root.name + '-outside-state')
+                try:
+                    outside.write_text(rendered)
+                    live.unlink()
+                    live.symlink_to(outside)
+                    with self.assertRaisesRegex(ValueError, 'linked'):
+                        sources.verify_checkout(root, 'KleinPerkins/skills')
+                    self.assertTrue(live.is_symlink())
+                    self.assertEqual(outside.read_text(), rendered)
+                    live.unlink()
+                    live.write_text(rendered)
+                finally:
+                    outside.unlink(missing_ok=True)
+                for suffix in ('py', 'sh', 'pyc'):
+                    (root / '.git/info/exclude').write_text('**/adjacent.' + suffix + '\n')
+                    extra = live.parent / ('adjacent.' + suffix)
+                    extra.write_text('unverified executable/import source\n')
+                    self.assertEqual(git('status', '--porcelain'), '')
+                    with self.assertRaisesRegex(ValueError, 'untracked or ignored'):
+                        sources.verify_checkout(root, 'KleinPerkins/skills')
+                    self.assertTrue(extra.exists())
+                    extra.unlink()
+                sidecar = root / next(iter(sources.DASHBOARD_STATE - {sources.DASHBOARD_LIVE}))
+                sidecar.write_text('[]\n')
+                with self.assertRaisesRegex(ValueError, 'unverified dashboard'):
+                    sources.verify_checkout(root, 'KleinPerkins/skills')
+                sidecar.write_text('{}\n')
+                sources.verify_checkout(root, 'KleinPerkins/skills')
+
+    def test_mcp_existing_uv_runtime_is_preserved_without_source_admission(self):
+        import os
+        sources = module('original_sources')
+        owner = 'KleinPerkins/kp-mcp'
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], stderr=subprocess.PIPE).decode().strip()
+            git('init', '-q')
+            git('remote', 'add', 'origin', 'git@github.com:' + owner + '.git')
+            (root / 'pyproject.toml').write_text('[tool.uv]\npackage = false\n[tool.uv.workspace]\nmembers = ["*-kit"]\n')
+            (root / 'uv.lock').write_text('version = 1\n')
+            (root / '.gitignore').write_text('.venv/\n**/ignored.py\n')
+            git('add', '.')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'original uv workspace')
+            anchor = git('rev-parse', 'HEAD')
+            environment = root / '.venv'
+            environment.mkdir()
+            runtime = environment / 'host-owned-runtime.py'
+            runtime.write_bytes(b'opaque existing dependency bytes\n')
+            runtime.chmod(0o755)
+            initial = (runtime.read_bytes(), runtime.stat().st_mode)
+            clean_env = {key: value for key, value in os.environ.items()
+                         if key not in ('UV_PROJECT_ENVIRONMENT', 'UV_PROJECT', 'UV_WORKING_DIR')}
+            with mock.patch.dict(sources.ANCHORS, {owner: anchor}), \
+                 mock.patch.dict(os.environ, clean_env, clear=True), \
+                 mock.patch.object(sources, 'endpoint', side_effect=AssertionError('offline runtime check used API')):
+                self.assertEqual(git('status', '--porcelain'), '')
+                sources.verify_checkout(root, owner)
+                self.assertEqual((runtime.read_bytes(), runtime.stat().st_mode), initial)
+                # Only the established workspace environment location is opaque.
+                # Neither ignored source nor a kit-local environment is admitted.
+                for relative in ('ignored.py', '__pycache__/extra.pyc', 'extra-kit/.venv/ignored.py'):
+                    extra = root / relative
+                    extra.parent.mkdir(parents=True, exist_ok=True)
+                    extra.write_bytes(b'unverified source')
+                    with self.assertRaisesRegex(ValueError, 'untracked or ignored'):
+                        sources.verify_checkout(root, owner)
+                    self.assertEqual(extra.read_bytes(), b'unverified source')
+                    extra.unlink()
+                for key, accepted in (('UV_PROJECT_ENVIRONMENT', '.venv'), ('UV_PROJECT', '.'), ('UV_WORKING_DIR', '.')):
+                    with mock.patch.dict(os.environ, {key: accepted}):
+                        sources.verify_checkout(root, owner)
+                    with mock.patch.dict(os.environ, {key: '../other-workspace'}):
+                        with self.assertRaisesRegex(ValueError, 'redirection'):
+                            sources.verify_checkout(root, owner)
+                    self.assertEqual((runtime.read_bytes(), runtime.stat().st_mode), initial)
+                # Python3.12 resolve() reports a cyclic external override as
+                # RuntimeError; refuse through the same public error channel.
+                cycle = root.parent / (root.name + '-cyclic-environment')
+                try:
+                    cycle.symlink_to(cycle)
+                    with mock.patch.dict(os.environ, {'UV_PROJECT_ENVIRONMENT': str(cycle)}):
+                        with self.assertRaisesRegex(ValueError, 'verification unavailable; source preserved'):
+                            sources.verify_checkout(root, owner)
+                    self.assertTrue(cycle.is_symlink())
+                    self.assertEqual((runtime.read_bytes(), runtime.stat().st_mode), initial)
+                finally:
+                    cycle.unlink(missing_ok=True)
+                # A symlink cannot redirect the environment root outside this contract.
+                moved = root / '.environment-fixture'
+                environment.rename(moved)
+                environment.symlink_to(moved, target_is_directory=True)
+                with self.assertRaisesRegex(ValueError, 'root redirection'):
+                    sources.verify_checkout(root, owner)
+                self.assertTrue(environment.is_symlink())
+                environment.unlink()
+                moved.rename(environment)
+                # Untracked project metadata cannot authorize another runtime root.
+                project = root / 'pyproject.toml'
+                original = project.read_bytes()
+                project.write_bytes(original + b'# modified workspace\n')
+                with self.assertRaisesRegex(ValueError, 'modified'):
+                    sources.verify_checkout(root, owner)
+                self.assertEqual(project.read_bytes(), original + b'# modified workspace\n')
+                project.write_bytes(original)
+                sources.verify_checkout(root, owner)
+                self.assertEqual((runtime.read_bytes(), runtime.stat().st_mode), initial)
+
+    def test_rejected_clone_cannot_be_used_on_a_second_bootstrap_attempt(self):
+        import os
+        import shutil
+        import sys
+        for script, owner, identity, destination in (
+                ('bootstrap.sh', 'skills', 1275604090, 'skills'),
+                ('mcp-bootstrap.sh', 'kp-mcp', 1271164179, 'mcp')):
+            with self.subTest(script=script), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw)
+                dev = root / 'dev'
+                cap = dev / 'capabilities'
+                helpers = dev / '_ops/interoperability'
+                cap.mkdir(parents=True)
+                helpers.mkdir(parents=True)
+                checkout = root / 'wrong-history'
+                checkout.mkdir()
+                marker = root / 'source-was-used'
+                (checkout / 'bootstrap.sh').write_text('touch ' + str(marker) + '\n')
+                for args in (('init', '-q'), ('config', 'user.name', 'Fixture'),
+                             ('config', 'user.email', 'fixture@example.test'),
+                             ('add', '.'), ('commit', '-qm', 'wrong history'),
+                             ('remote', 'add', 'origin', f'git@github.com:KleinPerkins/{owner}.git')):
+                    subprocess.run(['git', '-C', str(checkout), *args], check=True, capture_output=True)
+                source = ROOT.parent.parent
+                shutil.copyfile(source / 'capabilities' / script, cap / script)
+                shutil.copyfile(source / 'capabilities/mcp-pins.env', cap / 'mcp-pins.env')
+                for name in ('original_sources.py', 'inventory.py', 'mcp_maintenance.py'):
+                    shutil.copyfile(ROOT / name, helpers / name)
+                fake = root / 'tools'
+                fake.mkdir()
+                real_git = shutil.which('git')
+                clone_log = root / 'clones'
+                (fake / 'git').write_text('#!' + sys.executable + '\n' +
+                    'import os,shutil,sys\n'
+                    'if sys.argv[1] == "clone":\n'
+                    ' shutil.copytree(' + repr(str(checkout)) + ',sys.argv[-1])\n'
+                    ' with open(' + repr(str(clone_log)) + ',"a") as f:f.write("clone\\n")\n'
+                    'else:os.execv(' + repr(real_git) + ',[' + repr(real_git) + ']+sys.argv[1:])\n')
+                (fake / 'gh').write_text('#!' + sys.executable + '\nimport json,sys\n' +
+                    'assert sys.argv[1:] == ["api","--hostname","github.com","/repositories/' + str(identity) + '"]\n' +
+                    'print(json.dumps(' + repr(dict(id=identity, full_name='KleinPerkins/' + owner, private=True)) + '))\n')
+                (fake / 'uv').write_text('#!/bin/sh\ntouch ' + str(marker) + '\n')
+                for tool in fake.iterdir():
+                    tool.chmod(0o700)
+                home = root / 'home'
+                home.mkdir()
+                env = {key: value for key, value in os.environ.items()
+                       if not key.startswith(('GIT_', 'SNOW_KIT_', 'KP_MCP_', 'DEV_MCP_'))
+                       and key not in ('BASH_ENV', 'ENV', 'CAP_SKILLS_REPO_URL')}
+                env.update(HOME=str(home), XDG_STATE_HOME=str(home / '.local/state'),
+                           XDG_DATA_HOME=str(home / '.local/share'), XDG_CONFIG_HOME=str(home / '.config'),
+                           PATH=str(fake) + os.pathsep + str(Path(sys.executable).parent) + os.pathsep + os.environ['PATH'])
+                if owner == 'kp-mcp':
+                    # An override may select a runtime pin; it must never turn
+                    # a successor HEAD into the original-history source anchor.
+                    forged_pin = root / 'runtime-pin.env'
+                    bad_head = subprocess.check_output(['git', '-C', str(checkout), 'rev-parse', 'HEAD'], text=True).strip()
+                    forged_pin.write_text('SNOW_KIT_REPO=git@github.com:KleinPerkins/kp-mcp.git\n'
+                                          'SNOW_KIT_TAG=snow-kit-v0.2.0\nSNOW_KIT_SHA=' + bad_head + '\n')
+                    env['SNOW_KIT_PIN_FILE'] = str(forged_pin)
+                for attempt in range(2):
+                    result = subprocess.run(['bash', str(cap / script)], env=env,
+                                            capture_output=True, text=True, timeout=20)
+                    self.assertNotEqual(result.returncode, 0, (attempt, result.stdout, result.stderr))
+                    self.assertIn('pinned object unavailable', result.stderr)
+                    self.assertTrue((cap / destination / '.git').is_dir())
+                    self.assertFalse(marker.exists())
+                self.assertEqual(clone_log.read_text(), 'clone\n')
+
+    def test_verifier_operational_and_malformed_output_failures_are_bounded(self):
+        import io
+        sources = module('original_sources')
+        owner = 'KleinPerkins/skills'
+        errors = (OSError('synthetic Git unavailable'), subprocess.TimeoutExpired('git', 15),
+                  UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'synthetic invalid output'))
+        for verify in (sources.verify_repository, sources.verify_checkout):
+            for error in errors:
+                with self.subTest(api=verify.__name__, error=type(error).__name__), \
+                     mock.patch.object(sources, 'git_result', side_effect=error), \
+                     mock.patch.object(sources, 'endpoint', side_effect=AssertionError('unexpected API')):
+                    with self.assertRaisesRegex(ValueError, 'verification unavailable; source preserved'):
+                        verify(Path('/synthetic-unavailable-source'), owner)
+        # A valid origin plus an empty secondary URL produces a malformed local
+        # config row; parsing must use the same bounded refusal channel.
+        with mock.patch.object(sources, 'local_git', side_effect=[
+                'git@github.com:KleinPerkins/skills.git', '/synthetic-source', 'remote.empty.url']):
+            with self.assertRaisesRegex(ValueError, 'verification unavailable; source preserved'):
+                sources.verify_repository(Path('/synthetic-source'), owner)
+        with mock.patch('sys.argv', ['original_sources.py', owner, '--repository', '/synthetic-source']), \
+             mock.patch('sys.stderr', new_callable=io.StringIO) as errors, \
+             mock.patch.object(sources, 'git_result', side_effect=subprocess.TimeoutExpired('git', 15)):
+            with self.assertRaises(SystemExit) as caught:
+                sources.main()
+            self.assertEqual(caught.exception.code, 1)
+            self.assertIn('verification unavailable; source preserved', errors.getvalue())
+            self.assertNotIn('Traceback', errors.getvalue())
+
+    @mock.patch.dict('os.environ', {'GH_HOST': 'untrusted-host.invalid'})
+    def test_original_id_routes_current_and_retained_endpoints_only(self):
+        sources = module('original_sources')
+        for owner, (identity, retained) in sources.ORIGINALS.items():
+            for name in (owner, retained):
+                with self.subTest(owner=owner, name=name), mock.patch.object(
+                        sources.subprocess, 'run', return_value=mock.Mock(
+                            stdout=json.dumps(dict(id=identity, full_name=name, private=True)))) as request:
+                    self.assertEqual(sources.endpoint(owner), name)
+                    self.assertEqual(request.call_args.args[0], ['gh', 'api', '--hostname', 'github.com', f'/repositories/{identity}'])
+                    self.assertNotIn('GH_HOST', request.call_args.kwargs['env'])
+                    self.assertEqual(sources.verify_url('git@github.com:' + name + '.git', owner), name)
+
+    def test_clean_successor_ids_and_unexpected_names_or_visibility_refuse(self):
+        sources = module('original_sources')
+        for owner, clean_id in (('KleinPerkins/skills', 1461925043), ('KleinPerkins/kp-mcp', 1460922143)):
+            identity, retained = sources.ORIGINALS[owner]
+            for row in (dict(id=clean_id, full_name=owner, private=True),
+                        dict(id=identity, full_name='other/' + retained.split('/')[1], private=True),
+                        dict(id=identity, full_name=retained, private=False),
+                        dict(id=str(identity), full_name=owner, private=True)):
+                with self.subTest(row=row), mock.patch.object(sources.subprocess, 'run',
+                        return_value=mock.Mock(stdout=json.dumps(row))):
+                    with self.assertRaisesRegex(ValueError, 'identity mismatched'):
+                        sources.endpoint(owner)
+
+    def test_unknown_endpoint_and_rename_redirect_do_not_qualify(self):
+        sources = module('original_sources')
+        with mock.patch.object(sources, 'endpoint', return_value='KleinPerkins/skills-private-original') as request:
+            with self.assertRaisesRegex(ValueError, 'endpoint mismatched'):
+                sources.verify_url('git@github.com:other/skills.git', 'KleinPerkins/skills')
+            request.assert_not_called()
+            with self.assertRaisesRegex(ValueError, 'stale'):
+                sources.verify_url('git@github.com:KleinPerkins/skills.git', 'KleinPerkins/skills')
+
+    def test_unavailable_live_identity_fails_closed(self):
+        sources = module('original_sources')
+        for error in (OSError(), subprocess.TimeoutExpired('gh', 30), subprocess.CalledProcessError(1, 'gh')):
+            with mock.patch.object(sources.subprocess, 'run', side_effect=error):
+                with self.assertRaisesRegex(ValueError, 'unavailable'):
+                    sources.endpoint('KleinPerkins/skills')
+
+    def test_local_old_objects_survive_rename_without_network_or_receipt_edits(self):
+        sources = module('original_sources')
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], stderr=subprocess.PIPE).decode().strip()
+            git('init', '-q')
+            (root / 'payload').write_text('original history')
+            git('add', 'payload')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'original')
+            original = git('rev-parse', 'HEAD')
+            git('remote', 'add', 'origin', 'git@github.com:KleinPerkins/skills.git')
+            with mock.patch.object(sources, 'endpoint', side_effect=AssertionError('local operation attempted API')):
+                for name in ('skills', 'skills-private-original'):
+                    git('remote', 'set-url', 'origin', 'git@github.com:KleinPerkins/' + name + '.git')
+                    self.assertEqual(sources.verify_repository(root, 'KleinPerkins/skills', revision=original),
+                                     'KleinPerkins/' + name)
+                git('config', 'remote.empty.url', '')
+                with self.assertRaisesRegex(ValueError, 'verification unavailable; source preserved'):
+                    sources.verify_repository(root, 'KleinPerkins/skills', revision=original)
+                self.assertEqual(git('config', '--get', 'remote.empty.url'), '')
+                git('config', '--unset', 'remote.empty.url')
+                with self.assertRaisesRegex(ValueError, 'pinned object'):
+                    sources.verify_repository(root, 'KleinPerkins/skills', revision='0' * 40)
+                git('config', 'remote.origin.pushurl', 'git@github.com:KleinPerkins/skills.git')
+                with self.assertRaisesRegex(ValueError, 'remote identity'):
+                    sources.verify_repository(root, 'KleinPerkins/skills', revision=original)
+                git('config', '--unset', 'remote.origin.pushurl')
+                git('config', 'url.git@github.com:other/skills.git.insteadOf',
+                    'git@github.com:KleinPerkins/skills-private-original.git')
+                with self.assertRaisesRegex(ValueError, 'identity'):
+                    sources.verify_repository(root, 'KleinPerkins/skills', revision=original)
+
+
 if __name__ == '__main__':
     unittest.main()

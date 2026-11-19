@@ -511,6 +511,11 @@ class MaintenanceTests(unittest.TestCase):
             path = fixture / relative
             path.write_text("#!/bin/bash\nexit 0\n")
             path.chmod(0o700)
+        # This fixture isolates the MCP handoff refusal after an accepted source
+        # preflight; real source identity/inventory tests live in test_contracts.
+        source_guard = fixture / "_ops/interoperability/original_sources.py"
+        source_guard.parent.mkdir(parents=True)
+        source_guard.write_text("# fixture: source preflight accepted\n")
         (fixture / "_ops/bin/install-mcp.sh").write_text("#!/bin/bash\nexit 73\n")
         (fixture / "capabilities/mcp-bootstrap.sh").write_text("#!/bin/bash\ntouch later-writer\n")
         result = self.run_script(fixture / "bootstrap.sh")

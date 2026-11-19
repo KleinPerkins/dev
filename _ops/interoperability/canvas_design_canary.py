@@ -14,7 +14,7 @@ import sys
 import types
 
 HERE = Path(__file__).absolute().parent
-TRANSACTION_SHA256 = '4fdbe6e4be9eb599e7ea1d6cfe7133eb5de8bba8de24d6f91aa8c26e6dc0f41c'
+TRANSACTION_SHA256 = 'd513c3d8502ec0c501e1be157babff7881a319591a41ad29c8855d28a9d92247'
 path = HERE / 'selected_skill_canary.py'
 if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != TRANSACTION_SHA256:
     raise ValueError('accepted temporary publication transaction changed')

@@ -19,7 +19,11 @@
 
 set -euo pipefail
 
-CAP_SKILLS_REPO_URL="${CAP_SKILLS_REPO_URL:-git@github.com:KleinPerkins/skills.git}"
+# Source verification refuses untracked executable inputs; do not create new
+# Python bytecode caches in an otherwise reviewed source checkout.
+export PYTHONDONTWRITEBYTECODE=1
+
+CAP_SKILLS_REPO_URL="${CAP_SKILLS_REPO_URL:-}"
 # Derive paths from THIS script's location so it runs anywhere (e.g. a clean-room clone), not just ~/dev.
 CAP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 DEV_ROOT="$(cd "$CAP_ROOT/.." && pwd)"
@@ -110,13 +114,20 @@ skills_bootstrap_supports_reset() {
 
 # 1. Clone if the skills repo is missing (never clobber an existing real dir).
 if [ -e "$SKILLS_DIR/.git" ]; then
+  python3 "$DEV_ROOT/_ops/interoperability/original_sources.py" KleinPerkins/skills --checkout "$SKILLS_DIR" >/dev/null || exit 78
   log "skills repo already present at $SKILLS_DIR (leaving as-is)"
 elif [ -e "$SKILLS_DIR" ]; then
   log "REFUSING: $SKILLS_DIR exists but is not a git repo; not clobbering. Resolve manually."
-  exit 1
+  exit 78
 else
+  if [ -z "$CAP_SKILLS_REPO_URL" ]; then
+    CAP_SKILLS_REPO_URL="$(python3 "$DEV_ROOT/_ops/interoperability/original_sources.py" KleinPerkins/skills)" || exit 78
+  else
+    python3 "$DEV_ROOT/_ops/interoperability/original_sources.py" KleinPerkins/skills --url "$CAP_SKILLS_REPO_URL" >/dev/null || exit 78
+  fi
   log "cloning $CAP_SKILLS_REPO_URL -> $SKILLS_DIR"
-  git clone "$CAP_SKILLS_REPO_URL" "$SKILLS_DIR"
+  git clone "$CAP_SKILLS_REPO_URL" "$SKILLS_DIR" || exit 78
+  python3 "$DEV_ROOT/_ops/interoperability/original_sources.py" KleinPerkins/skills --checkout "$SKILLS_DIR" >/dev/null || exit 78
 fi
 
 if [ -f "$SKILLS_DIR/bootstrap.sh" ]; then
@@ -130,11 +141,16 @@ if [ -f "$SKILLS_DIR/bootstrap.sh" ]; then
   fi
   log "delegating shelf-aware surfacing to $SKILLS_DIR/bootstrap.sh --reconcile"
   # bash 3.2 + set -u: empty "${array[@]}" is an unbound-variable error on macOS.
+  skills_rc=0
   if [ ${#RESET_ARGS[@]} -gt 0 ]; then
-    bash "$SKILLS_DIR/bootstrap.sh" --reconcile "${RESET_ARGS[@]}"
+    bash "$SKILLS_DIR/bootstrap.sh" --reconcile "${RESET_ARGS[@]}" || skills_rc=$?
   else
-    bash "$SKILLS_DIR/bootstrap.sh" --reconcile
+    bash "$SKILLS_DIR/bootstrap.sh" --reconcile || skills_rc=$?
   fi
+  # 78 is reserved here for our pre-use refusal. A child has already run and
+  # may have changed AWA state, so its own 78 must still reach root's repair.
+  [ "$skills_rc" -ne 78 ] || skills_rc=1
+  [ "$skills_rc" -eq 0 ] || exit "$skills_rc"
   log "done. Run 'make verify' to assert the invariant."
   exit 0
 fi

@@ -6,6 +6,7 @@ set -euo pipefail
 # disposable $SOURCE fixture repo below must use its own git metadata, not the parent's --
 # otherwise `git init` here silently re-initializes the parent repo instead (see
 # worktree-verify.sh for the same guard).
+unset BASH_ENV
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES 2>/dev/null || true
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
@@ -21,12 +22,32 @@ SOURCE="$TMP/source repo"
 mkdir -p "$SOURCE"
 git -C "$SOURCE" init -q -b main
 printf 'fixture\n' >"$SOURCE/README.md"
-printf 'locked\n' >"$SOURCE/uv.lock"
-git -C "$SOURCE" add README.md uv.lock
+printf 'version = 1\n' >"$SOURCE/uv.lock"
+printf '[tool.uv]\npackage = false\n[tool.uv.workspace]\nmembers = []\n' >"$SOURCE/pyproject.toml"
+git -C "$SOURCE" add README.md uv.lock pyproject.toml
 git -C "$SOURCE" -c user.name=Fixture -c user.email=fixture@example.invalid \
   commit -q -m "fixture v1"
 SHA1="$(git -C "$SOURCE" rev-parse HEAD)"
 git -C "$SOURCE" tag snow-kit-v0.1.0
+git -C "$SOURCE" remote add origin git@github.com:KleinPerkins/kp-mcp.git
+
+# Exercise production source verification against a real synthetic original
+# history. Only the disposable helper's identity anchor is replaced; runtime
+# release pins remain separate inputs and cannot replace this source anchor.
+FIXTURE_DEV="$TMP/dev"
+mkdir -p "$FIXTURE_DEV/capabilities" "$FIXTURE_DEV/_ops/interoperability"
+cp "$ROOT/capabilities/mcp-bootstrap.sh" "$FIXTURE_DEV/capabilities/"
+cp "$ROOT/capabilities/mcp-pins.env" "$FIXTURE_DEV/capabilities/"
+for helper in original_sources.py inventory.py mcp_maintenance.py; do
+  cp "$ROOT/_ops/interoperability/$helper" "$FIXTURE_DEV/_ops/interoperability/"
+done
+python3 - "$FIXTURE_DEV/_ops/interoperability/original_sources.py" "$SHA1" <<'PY_SOURCE'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+path.write_text(path.read_text().replace('7594346fbb09161749d21624b35cf5a173c84958', sys.argv[2]))
+PY_SOURCE
+SUT="$FIXTURE_DEV/capabilities/mcp-bootstrap.sh"
 
 FAKE="$TMP/fake"
 mkdir -p "$FAKE"
@@ -230,7 +251,7 @@ TOML
 write_pin() {
   local tag="$1" sha="$2"
   cat >"$PIN" <<EOF
-SNOW_KIT_REPO=$SOURCE
+SNOW_KIT_REPO=git@github.com:KleinPerkins/kp-mcp.git
 SNOW_KIT_TAG=$tag
 SNOW_KIT_SHA=$sha
 EOF
@@ -238,6 +259,24 @@ EOF
 write_pin snow-kit-v0.1.0 "$SHA1"
 
 export HOME="$HOME_DIR"
+# All Git/API traffic stays in this disposable fixture. The production resolver
+# still receives the original immutable ID and exact allowed GitHub endpoint.
+cat >"$FAKE/gh" <<'SH'
+#!/usr/bin/env bash
+[ "$*" = "api --hostname github.com /repositories/1271164179" ] || exit 91
+printf '%s\n' '{"id":1271164179,"full_name":"KleinPerkins/kp-mcp","private":true}'
+SH
+chmod +x "$FAKE/gh"
+export PATH="$FAKE:$PATH"
+export SNOW_KIT_TEST_SOURCE="$SOURCE"
+export SNOW_KIT_TEST_REAL_GIT="$(command -v git)"
+cat >"$FAKE/source-git" <<'SH'
+#!/bin/bash
+exec "$SNOW_KIT_TEST_REAL_GIT" -c "url.$SNOW_KIT_TEST_SOURCE.insteadOf=git@github.com:KleinPerkins/kp-mcp.git" "$@"
+SH
+chmod +x "$FAKE/source-git"
+export SNOW_KIT_GIT_BIN="$FAKE/source-git"
+
 export SNOW_KIT_PIN_FILE="$PIN"
 export SNOW_KIT_UV_BIN="$FAKE/uv"
 export SNOW_KIT_TEST_FAKE_SNOW="$FAKE/fake_snow.py"
@@ -364,6 +403,8 @@ fi
 
 # Historical no-argument bootstrap stays noninteractive.
 : >"$LOG"
+bash "$SUT" >/dev/null
+# Reuse the existing root uv environment on a second no-argument bootstrap.
 bash "$SUT" >/dev/null
 if grep -q '^auth login' "$LOG"; then fail "no-arg bootstrap opened auth"; fi
 

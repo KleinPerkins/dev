@@ -381,6 +381,8 @@ class Fixture:
         for rel in (
             "bootstrap.sh",
             "capabilities/bootstrap.sh",
+            "_ops/interoperability/original_sources.py",
+            "_ops/interoperability/inventory.py",
             "_ops/bin/install-dev-awa-overlay.sh",
             "_ops/bin/install-worktree-hooks.sh",
             "_ops/bin/check-awa-release-binding.py",
@@ -444,12 +446,34 @@ class Fixture:
             '[ "${1:-}" = "--reconcile" ]\n'
             'bash "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)'
             '/global/tools/awa/install.sh"\n'
+            'if [ "${FAKE_SOURCE_CHANGE_AFTER_AWA:-0}" = "1" ]; then\n'
+            '  printf "\\n# changed after first use\\n" >> "$(dirname "${BASH_SOURCE[0]:-$0}")/global/tools/awa/install.sh"\n'
+            'fi\n'
             'rc="${FAKE_CAPABILITIES_RC_AFTER_AWA:-0}"\n'
             '[ "$rc" -eq 0 ] || exit "$rc"\n',
             encoding="utf-8",
         )
         skills_bootstrap.chmod(0o755)
-        (skills_bootstrap.parent / ".git").mkdir()
+        # This lane tests overlay ordering, not production source provenance.
+        # Use a real disposable owner repo and replace only its copied helper's
+        # original object anchor with the synthetic fixture commit. The separate
+        # bootstrap continuity tests retain production anchors and rejection cases.
+        skills = skills_bootstrap.parent
+        git_env = {key: value for key, value in os.environ.items()
+                   if not key.startswith("GIT_")}
+        git_env["HOME"] = str(self.home)
+        for args in (("init", "-q", "-b", "main"),
+                     ("remote", "add", "origin", "git@github.com:KleinPerkins/skills.git"),
+                     ("add", "."),
+                     ("-c", "user.name=Fixture", "-c", "user.email=fixture@example.test",
+                      "commit", "-qm", "synthetic overlay source")):
+            subprocess.run(["git", "-C", str(skills), *args], env=git_env,
+                           check=True, capture_output=True)
+        anchor = subprocess.check_output(["git", "-C", str(skills), "rev-parse", "HEAD"],
+                                         env=git_env, text=True).strip()
+        resolver = self.dev / "_ops/interoperability/original_sources.py"
+        resolver.write_text(resolver.read_text().replace(
+            "bc58eb77f442307ab4f124ab5aeec3f99571cb21", anchor))
         for rel in (
             "_ops/bin/install-agent-rules.sh",
             "_ops/bin/install-mcp.sh",
@@ -695,6 +719,53 @@ class HostOverlayTest(unittest.TestCase):
             },
         }
 
+    def test_missing_source_entrypoint_never_executes_overlay(self):
+        (self.fx.dev / "capabilities/bootstrap.sh").unlink()
+        result = self.fx.run_bootstrap()
+        self.assertEqual(result.returncode, 78, result.stdout + result.stderr)
+        self.assertFalse(self.fx.log.exists())
+        self.assertFalse(self.fx.hooks.exists())
+
+    def test_changed_source_after_first_use_is_not_executed_as_repair(self):
+        result = self.fx.run_bootstrap(updates={"FAKE_SOURCE_CHANGE_AFTER_AWA": "1"})
+        self.assertEqual(result.returncode, 78, result.stdout + result.stderr)
+        self.assertEqual(len(self.fx.log.read_text().splitlines()), 1)
+        self.assertFalse(self.fx.hooks.exists())
+        script = self.fx.dev / "capabilities/skills/global/tools/awa/install.sh"
+        before = script.read_bytes()
+        self.assertIn(b"changed after first use", before)
+        result = self.fx.run_bootstrap()
+        self.assertEqual(result.returncode, 78, result.stdout + result.stderr)
+        self.assertEqual(script.read_bytes(), before)
+        self.assertEqual(len(self.fx.log.read_text().splitlines()), 1)
+
+    def test_source_override_is_checked_before_any_capability_executes(self):
+        wrong = self.fx.base / "untrusted-skills/global/tools/awa"
+        wrong.mkdir(parents=True)
+        marker = self.fx.base / "unverified-source-executed"
+        script = wrong / "install.sh"
+        script.write_text("touch " + str(marker) + "\n")
+        before = script.read_bytes()
+        result = self.fx.run_bootstrap(updates={"DEV_AWA_SKILLS_ROOT": str(wrong.parents[2])})
+        self.assertEqual(result.returncode, 78, result.stdout + result.stderr)
+        self.assertEqual(script.read_bytes(), before)
+        self.assertFalse(marker.exists())
+        self.assertFalse(self.fx.log.exists())
+        self.assertFalse(self.fx.hooks.exists())
+
+    def test_source_refusal_stops_before_rejected_gcb_or_later_writers(self):
+        script = self.fx.dev / "capabilities/skills/global/tools/awa/install.sh"
+        script.write_text(script.read_text() + "\n# unreviewed source change\n")
+        before = script.read_bytes()
+        for attempt in range(2):
+            result = self.fx.run_bootstrap()
+            self.assertEqual(result.returncode, 78, (attempt, result.stdout, result.stderr))
+            self.assertIn("source checkout refused before use", result.stderr)
+            self.assertEqual(script.read_bytes(), before)
+            self.assertFalse(self.fx.log.exists())
+            self.assertFalse(self.fx.hooks.exists())
+            self.assertFalse((self.fx.base / "non-awa-env.log").exists())
+
     def test_root_bootstrap_selects_external_before_skills_reconcile(self):
         unrelated = {"command": "/opt/unrelated/session-hook", "timeout": 9}
         self.fx.write_hooks(
@@ -749,6 +820,16 @@ class HostOverlayTest(unittest.TestCase):
             updates={"FAKE_CAPABILITIES_RC_AFTER_AWA": "37"}
         )
         self.assertEqual(result.returncode, 37, result.stdout + result.stderr)
+        self.fx.assert_matrix(self)
+        self.assertFalse((self.fx.base / "non-awa-env.log").exists())
+        self.assertFalse((self.fx.base / "hook-touch.log").exists())
+
+    def test_child_status_78_still_repairs_after_source_execution(self):
+        self.fx.write_hooks(
+            {"version": 1, "hooks": {"sessionStart": [{"command": "/keep"}]}}
+        )
+        result = self.fx.run_bootstrap(updates={"FAKE_CAPABILITIES_RC_AFTER_AWA": "78"})
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.fx.assert_matrix(self)
         self.assertFalse((self.fx.base / "non-awa-env.log").exists())
         self.assertFalse((self.fx.base / "hook-touch.log").exists())

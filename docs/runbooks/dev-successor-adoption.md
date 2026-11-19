@@ -94,3 +94,93 @@ semantic scope, and prove old approval/receipt replay remains refused. That deci
 is not supplied by retained predecessor plan prose or by changing a digest to make
 a check pass. The ordinary source artifact create/update transaction baseline does
 not depend on this future plan-authority gate.
+
+## Retained capability source continuity
+
+Existing installed source keeps its original Git history, local paths and pins.
+Clean successor repositories at the original names have separate immutable IDs;
+name reuse admits no replacement source, release or installed runtime.
+
+| Installed source | Original GitHub ID | Retained endpoint |
+|---|---:|---|
+| Skills | 1275604090 | `KleinPerkins/skills-private-original` |
+| MCP | 1271164179 | `KleinPerkins/kp-mcp-private-original` |
+| Embedded Operator Voice | 1317232260 | `KleinPerkins/operator-voice-private-original` |
+
+Dev bootstrap resolves a missing Skills/MCP source and Snow release access through
+GitHub's original numeric ID. Read-only `gh api --hostname github.com /repositories/{id}` must report
+that exact ID, private visibility and its exact current or retained endpoint.
+Unavailable access, an unexpected name or a successor ID stops resolution. Explicit
+clone URL overrides must match the observed original endpoint. The existing Snow
+repository pin is translated only within this fixed original-ID mapping; its
+`snow-kit-v0.2.0` tag and `7594346fbb09161749d21624b35cf5a173c84958` commit stay fixed.
+No old tag is recreated in clean history.
+
+General bootstrap already consumed the existing local checkout without selecting
+a new HEAD or ref. This compatibility change adds original-source continuity and
+consumed-source preflight; it keeps the already owner-selected source/version in
+place. The anchors witness history continuity, not execution-version approval.
+Preserving an older checkout does not activate it or approve its revision,
+vulnerability level or runtime. Existing exact-pin consumers below keep their
+stronger operation-specific admission; the general bootstrap predicate does not
+replace any exact revision, tree, package, payload or qualification check.
+
+Existing local bootstrap, migration and native dispatch source verification stays
+offline. It accepts only exact original/retained endpoints, checks configured fetch
+and push URLs, rejects effective origin URL rewrites to other identities, and
+requires the original Git object. The migration's existing tree, package, payload,
+primary/worktree and qualification checks still apply. Local object checks are
+history continuity evidence under the established owner-approved local Git/export
+trust boundary. They do not authenticate a GitHub repository ID or defend against
+an actor deliberately rewriting that trusted local history or source. An actor
+who deliberately reparents successor content onto the original anchor can satisfy
+ancestry and raw-HEAD consistency; this offline check makes no authenticity claim
+against that action. Only live remote resolution establishes the immutable GitHub
+ID. The released cutover separately requires fresh ID/endpoint readback before
+remote rewrite and name reuse. Local checks grant no permission to push. Bootstrap execution additionally requires an original-history relationship
+between HEAD and the fixed original anchor, plus exact raw HEAD blobs, executable
+modes and index state for every consumed source file. Callers must honor the
+existing one-writer rule and keep the selected checkout and its path stable for
+the entire bootstrap. Verification is a preflight over trusted local source, not
+an atomic execution binding: it acquires no source lock or immutable snapshot and
+makes no protection claim against concurrent path/content replacement. A direct
+symlink checkout root refuses without changing the alias or target. Skills covers `bootstrap.sh`,
+`scripts/`, `global/` and `local/`; MCP covers its workspace and kit source tree.
+Modified, staged, missing, untracked, ignored or linked source is preserved and
+refused before use, including unverified code caches. Two existing runtime roles
+stay separate from reviewed Git source. Skills permits only its three exact
+local-jobs dashboard view paths: generated TSX must reproduce the verified tracked
+template with canonical dashboard JSON, and the two JSON sidecars must be objects;
+all must be regular non-executable files. MCP permits only the ordinary root
+`.venv/` directory established by its verified tracked uv virtual-workspace
+configuration and lock. That environment remains a host-owned dependency: this
+check neither reads nor qualifies its contents, installs/rebuilds it, nor changes
+its runtime versions. Kit-local or arbitrary ignored source is not exempt, and
+uv project/environment redirects outside the established root contract refuse.
+Existing environment bytes remain untouched by source verification. Source
+bootstrap suppresses new Python bytecode caches.
+Runtime pin overrides cannot become repository-history anchors. A pre-use Skills
+source refusal also stops the root bootstrap before it could execute the rejected
+AWA installer. The root validates an explicit overlay source override before any
+capability runs and rechecks the actual source before overlay use. Ordinary
+post-use reconcile failures, including a child status 78, keep their repair barrier.
+Exact-object migration and dispatch readers continue to consume only their old
+verified objects, without authorizing a checkout merely because it imported them. The released name transaction must independently read back all immutable
+IDs and rewrite original remotes before reusing any slug; source compatibility
+never performs that host transaction.
+
+Dispatch remains pinned to `bc58eb77f442307ab4f124ab5aeec3f99571cb21` and payload
+`4cfb6f107e5a26dbea73c83bf35d4c918dbc73e0ba26498d2605de9ac71a5ba3`.
+Historical source exports, qualification receipts and their recorded owner labels
+are unchanged. The separate immutable work-dispatch export consumer has no live
+remote resolver: its accepted registry, closed receipt and byte checks stay intact.
+MCP migration keeps `a34a0f73b93650e4a6abe9c9dff9a2e3eced94cb` and maintenance keeps
+`3c1f05e596dc3cbd24d99334686193e172edb464`, including every existing hash/version check.
+Embedded Voice lookup belongs to Skills; Dev does not rewrite its payload or
+provenance. Neither Voice version split nor active runtime changes here.
+
+Only source fixtures and source generation qualify this change. Installation,
+remote rewrites, name swaps, public disclosure and runtime adoption retain their
+separate accepted transaction gates. Previously sealed operation directories keep
+their original implementation digest and bytes; a new implementation does not
+silently reauthorize an old preview.
