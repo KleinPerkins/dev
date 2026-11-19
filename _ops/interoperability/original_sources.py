@@ -176,10 +176,15 @@ def verify_checkout(root, owner):
 
     This checks accidental substitution and WIP against trusted local Git, not
     GitHub-ID authenticity against deliberate local-history/source fabrication.
+    The caller must honor the existing one-writer rule and keep the checkout/path
+    stable through execution. This preflight takes no lock or immutable snapshot
+    and does not promise protection from concurrent pathname replacement.
     Exact-object readers use verify_repository instead: their verified bytes are
     read from the fixed commit, never from this mutable working tree.
     """
     root = Path(root).absolute()
+    if root.is_symlink():
+        raise ValueError('linked bootstrap root refused; source preserved')
     if local_git(root, 'config', '--get-regexp', r'^(extensions\.partialclone|remote\..*\.promisor)$'):
         raise ValueError('partial source stores cannot qualify offline bootstrap history')
     name = verify_repository(root, owner)

@@ -130,7 +130,12 @@ against that action. Only live remote resolution establishes the immutable GitHu
 ID. The released cutover separately requires fresh ID/endpoint readback before
 remote rewrite and name reuse. Local checks grant no permission to push. Bootstrap execution additionally requires an original-history relationship
 between HEAD and the fixed original anchor, plus exact raw HEAD blobs, executable
-modes and index state for every consumed source file. Skills covers `bootstrap.sh`,
+modes and index state for every consumed source file. Callers must honor the
+existing one-writer rule and keep the selected checkout and its path stable for
+the entire bootstrap. Verification is a preflight over trusted local source, not
+an atomic execution binding: it acquires no source lock or immutable snapshot and
+makes no protection claim against concurrent path/content replacement. A direct
+symlink checkout root refuses without changing the alias or target. Skills covers `bootstrap.sh`,
 `scripts/`, `global/` and `local/`; MCP covers its workspace and kit source tree.
 Modified, staged, missing, untracked, ignored or linked source is preserved and
 refused before use, including unverified code caches. Two existing runtime roles

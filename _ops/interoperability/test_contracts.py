@@ -236,6 +236,13 @@ class OriginalSourceContinuity(unittest.TestCase):
                 with mock.patch.dict(sources.ANCHORS, {owner: anchor}), \
                      mock.patch.object(sources, 'endpoint', side_effect=AssertionError('offline verifier used API')):
                     self.assertEqual(sources.verify_checkout(original, owner), owner)
+                    alias = root / 'linked-original'
+                    alias.symlink_to(original, target_is_directory=True)
+                    with self.assertRaisesRegex(ValueError, 'linked bootstrap root'):
+                        sources.verify_checkout(alias, owner)
+                    self.assertTrue(alias.is_symlink())
+                    self.assertEqual(git(original, 'rev-parse', 'HEAD'), anchor)
+                    alias.unlink()
                     # Established older detached source remains valid on the
                     # same original history without a live API lookup.
                     (original / 'README.md').write_text('later original snapshot\n')
