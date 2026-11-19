@@ -52,7 +52,7 @@ _ops/checks/verify-operating-model.sh --ci      # repo-only (no ~/.cursor /.code
   which runs the verifier in `--ci` (repo-only) mode on every commit.
 - **Remote:** the public cohort uses meaningful sharded GitHub Actions checks and the
   qualified Chaos Scheduler App, with one automatically triggered independent review
-  from the PR's originating account. The five private/no-CI exceptions receive no CI.
+  from the PR's originating account. The six private/no-CI exceptions receive no CI.
   Current-main checks, account admission and actual App delivery must be observed;
   source-only success does not establish those outcomes.
 
