@@ -476,7 +476,7 @@ class OriginalSourceContinuity(unittest.TestCase):
                     ' with open(' + repr(str(clone_log)) + ',"a") as f:f.write("clone\\n")\n'
                     'else:os.execv(' + repr(real_git) + ',[' + repr(real_git) + ']+sys.argv[1:])\n')
                 (fake / 'gh').write_text('#!' + sys.executable + '\nimport json,sys\n' +
-                    'assert sys.argv[1:] == ["api","/repositories/' + str(identity) + '"]\n' +
+                    'assert sys.argv[1:] == ["api","--hostname","github.com","/repositories/' + str(identity) + '"]\n' +
                     'print(json.dumps(' + repr(dict(id=identity, full_name='KleinPerkins/' + owner, private=True)) + '))\n')
                 (fake / 'uv').write_text('#!/bin/sh\ntouch ' + str(marker) + '\n')
                 for tool in fake.iterdir():
@@ -506,6 +506,7 @@ class OriginalSourceContinuity(unittest.TestCase):
                     self.assertFalse(marker.exists())
                 self.assertEqual(clone_log.read_text(), 'clone\n')
 
+    @mock.patch.dict('os.environ', {'GH_HOST': 'untrusted-host.invalid'})
     def test_original_id_routes_current_and_retained_endpoints_only(self):
         sources = module('original_sources')
         for owner, (identity, retained) in sources.ORIGINALS.items():
@@ -514,7 +515,8 @@ class OriginalSourceContinuity(unittest.TestCase):
                         sources.subprocess, 'run', return_value=mock.Mock(
                             stdout=json.dumps(dict(id=identity, full_name=name, private=True)))) as request:
                     self.assertEqual(sources.endpoint(owner), name)
-                    self.assertEqual(request.call_args.args[0], ['gh', 'api', f'/repositories/{identity}'])
+                    self.assertEqual(request.call_args.args[0], ['gh', 'api', '--hostname', 'github.com', f'/repositories/{identity}'])
+                    self.assertNotIn('GH_HOST', request.call_args.kwargs['env'])
                     self.assertEqual(sources.verify_url('git@github.com:' + name + '.git', owner), name)
 
     def test_clean_successor_ids_and_unexpected_names_or_visibility_refuse(self):

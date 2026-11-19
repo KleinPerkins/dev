@@ -2,8 +2,10 @@
 
 Historical owner labels and object pins remain unchanged. GitHub's immutable ID
 selects the live endpoint; its observed name must be an explicitly allowed phase.
-Live discovery accepts no redirects or clean successor IDs. Local consumption
-remains offline and requires the original pinned Git object as well as its endpoint.
+Live discovery requires the fixed original ID and allowed endpoint. Established
+local consumption stays offline under the owner-approved local Git trust boundary;
+its endpoint, object and ancestry checks do not authenticate a GitHub repository ID
+against an actor deliberately rewriting that trusted local history or source.
 """
 import argparse
 import hashlib
@@ -47,8 +49,11 @@ def local_git(root, *args):
 def endpoint(owner):
     identity, retained = ORIGINALS[owner]
     try:
-        result = subprocess.run(['gh', 'api', f'/repositories/{identity}'],
-                                capture_output=True, text=True, timeout=30, check=True)
+        # The immutable IDs belong to github.com, irrespective of a caller's
+        # enterprise/default-host selection. Existing local reads stay offline.
+        env = {key: value for key, value in os.environ.items() if key != 'GH_HOST'}
+        result = subprocess.run(['gh', 'api', '--hostname', 'github.com', f'/repositories/{identity}'],
+                                env=env, capture_output=True, text=True, timeout=30, check=True)
         row = json.loads(result.stdout)
     except (OSError, subprocess.SubprocessError, ValueError):
         raise ValueError('original source identity unavailable') from None
@@ -68,6 +73,12 @@ def verify_url(remote, owner):
 
 
 def verify_repository(root, owner, *, revision=None):
+    """Check trusted-local endpoint/object continuity, without a remote-ID claim.
+
+    Only endpoint() establishes the live immutable GitHub ID. Existing local Git
+    and exact-object exports remain owner-trusted inputs; deliberate local-history
+    fabrication is outside this accidental-substitution compatibility boundary.
+    """
     name = inventory.identity(local_git(root, 'remote', 'get-url', 'origin'))
     if local_git(root, 'rev-parse', '--show-toplevel') is None or name not in (owner, ORIGINALS[owner][1]):
         raise ValueError('original source identity unavailable, excluded, or mismatched')
@@ -163,6 +174,8 @@ def verify_mcp_runtime_contract(root, project_bytes, lock_bytes):
 def verify_checkout(root, owner):
     """Refuse a foreign-history or modified source before executing its checkout.
 
+    This checks accidental substitution and WIP against trusted local Git, not
+    GitHub-ID authenticity against deliberate local-history/source fabrication.
     Exact-object readers use verify_repository instead: their verified bytes are
     read from the fixed commit, never from this mutable working tree.
     """
@@ -172,7 +185,9 @@ def verify_checkout(root, owner):
     name = verify_repository(root, owner)
     anchor = ANCHORS[owner]
     # Related original commits include an established older detached checkout.
-    # Merely importing an original object into a clean successor is insufficient.
+    # Merely importing an original object into independent clean history is
+    # insufficient. Deliberately reparenting trusted local history is outside
+    # this offline continuity check; cutover separately reads back live IDs.
     head = local_git(root, 'rev-parse', 'HEAD')
     if not head or (local_git(root, 'merge-base', '--is-ancestor', anchor, head) is None and
                     local_git(root, 'merge-base', '--is-ancestor', head, anchor) is None):

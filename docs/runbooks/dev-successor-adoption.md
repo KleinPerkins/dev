@@ -108,7 +108,7 @@ name reuse admits no replacement source, release or installed runtime.
 | Embedded Operator Voice | 1317232260 | `KleinPerkins/operator-voice-private-original` |
 
 Dev bootstrap resolves a missing Skills/MCP source and Snow release access through
-GitHub's original numeric ID. Read-only `gh api /repositories/{id}` must report
+GitHub's original numeric ID. Read-only `gh api --hostname github.com /repositories/{id}` must report
 that exact ID, private visibility and its exact current or retained endpoint.
 Unavailable access, an unexpected name or a successor ID stops resolution. Explicit
 clone URL overrides must match the observed original endpoint. The existing Snow
@@ -121,8 +121,14 @@ offline. It accepts only exact original/retained endpoints, checks configured fe
 and push URLs, rejects effective origin URL rewrites to other identities, and
 requires the original Git object. The migration's existing tree, package, payload,
 primary/worktree and qualification checks still apply. Local object checks are
-history continuity evidence, not fresh proof of GitHub metadata or permission to
-push. Bootstrap execution additionally requires an original-history relationship
+history continuity evidence under the established owner-approved local Git/export
+trust boundary. They do not authenticate a GitHub repository ID or defend against
+an actor deliberately rewriting that trusted local history or source. An actor
+who deliberately reparents successor content onto the original anchor can satisfy
+ancestry and raw-HEAD consistency; this offline check makes no authenticity claim
+against that action. Only live remote resolution establishes the immutable GitHub
+ID. The released cutover separately requires fresh ID/endpoint readback before
+remote rewrite and name reuse. Local checks grant no permission to push. Bootstrap execution additionally requires an original-history relationship
 between HEAD and the fixed original anchor, plus exact raw HEAD blobs, executable
 modes and index state for every consumed source file. Skills covers `bootstrap.sh`,
 `scripts/`, `global/` and `local/`; MCP covers its workspace and kit source tree.

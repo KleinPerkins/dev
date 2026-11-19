@@ -263,7 +263,7 @@ export HOME="$HOME_DIR"
 # still receives the original immutable ID and exact allowed GitHub endpoint.
 cat >"$FAKE/gh" <<'SH'
 #!/usr/bin/env bash
-[ "$*" = "api /repositories/1271164179" ] || exit 91
+[ "$*" = "api --hostname github.com /repositories/1271164179" ] || exit 91
 printf '%s\n' '{"id":1271164179,"full_name":"KleinPerkins/kp-mcp","private":true}'
 SH
 chmod +x "$FAKE/gh"

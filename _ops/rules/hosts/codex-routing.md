@@ -8,8 +8,11 @@ Skills' source-owned `global/rules/subagent-orchestration/codex_dispatch.py` and
 Resolve the retained original Skills history (GitHub ID `1275604090`) by Git
 remote: `KleinPerkins/skills` before its rename, then
 `KleinPerkins/skills-private-original`. Require the unchanged pinned original
-object; a clean successor at the reused slug cannot satisfy this pin. Read the
-pinned resolver, policy
+object and exact source digest below; name reuse admits no replacement source.
+Existing owner-approved local Git and exports are trusted continuity inputs, not
+GitHub-ID authentication against deliberate local-history rewriting. Live remote
+resolution and the separate cutover readback establish the immutable original ID.
+Read the pinned resolver, policy
 (`codex-work-policy.json`) and caller contract from an owner-approved checkout or
 byte-verified read-only Git-object export. Run `source-digest` and require the
 exact digest above. Never change a primary checkout to obtain this source.

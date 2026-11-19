@@ -19,7 +19,7 @@ import time
 HERE = Path(__file__).absolute().parent
 import hashlib
 
-CORE_SHA = "1c686d75de8fd5dba88e5c1573d3331d026e004036d91b47621c0a7dd9afe8f3"
+CORE_SHA = "0c42b47c6a6780f84a0daed84fbbecf8e24cc9d75d3ef9409f526fcc55252f38"
 if (HERE / 'isokit_migration.py').is_symlink() or hashlib.sha256((HERE / 'isokit_migration.py').read_bytes()).hexdigest() != CORE_SHA:
     raise ValueError('accepted Isokit transaction changed')
 sys.path.insert(0, str(HERE))
