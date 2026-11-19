@@ -22,8 +22,9 @@ SOURCE="$TMP/source repo"
 mkdir -p "$SOURCE"
 git -C "$SOURCE" init -q -b main
 printf 'fixture\n' >"$SOURCE/README.md"
-printf 'locked\n' >"$SOURCE/uv.lock"
-git -C "$SOURCE" add README.md uv.lock
+printf 'version = 1\n' >"$SOURCE/uv.lock"
+printf '[tool.uv]\npackage = false\n[tool.uv.workspace]\nmembers = []\n' >"$SOURCE/pyproject.toml"
+git -C "$SOURCE" add README.md uv.lock pyproject.toml
 git -C "$SOURCE" -c user.name=Fixture -c user.email=fixture@example.invalid \
   commit -q -m "fixture v1"
 SHA1="$(git -C "$SOURCE" rev-parse HEAD)"
@@ -402,6 +403,8 @@ fi
 
 # Historical no-argument bootstrap stays noninteractive.
 : >"$LOG"
+bash "$SUT" >/dev/null
+# Reuse the existing root uv environment on a second no-argument bootstrap.
 bash "$SUT" >/dev/null
 if grep -q '^auth login' "$LOG"; then fail "no-arg bootstrap opened auth"; fi
 

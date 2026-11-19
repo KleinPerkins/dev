@@ -227,6 +227,9 @@ class OriginalSourceContinuity(unittest.TestCase):
                 (original / '.gitignore').write_text('global/ignored.py\n')
                 (original / 'global').mkdir()
                 (original / 'global/source.py').write_text('original = True\n')
+                if owner == 'KleinPerkins/kp-mcp':
+                    (original / 'pyproject.toml').write_text('[tool.uv]\npackage = false\n[tool.uv.workspace]\nmembers = []\n')
+                    (original / 'uv.lock').write_text('version = 1\n')
                 commit(original, 'original history')
                 anchor = git(original, 'rev-parse', 'HEAD')
                 git(original, 'remote', 'add', 'origin', f'git@github.com:{owner}.git')
@@ -296,6 +299,143 @@ class OriginalSourceContinuity(unittest.TestCase):
                     self.assertTrue(link.is_symlink())
                     link.unlink()
                     self.assertEqual(sources.verify_checkout(original, owner), owner)
+
+    def test_local_jobs_runtime_state_is_data_not_a_source_escape(self):
+        import stat
+        sources = module('original_sources')
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], stderr=subprocess.PIPE).decode().strip()
+            git('init', '-q')
+            git('remote', 'add', 'origin', 'git@github.com:KleinPerkins/skills.git')
+            (root / 'bootstrap.sh').write_text('echo original source\n')
+            template = root / sources.DASHBOARD_TEMPLATE
+            template.parent.mkdir(parents=True)
+            template.write_text('export const DASHBOARD = __DASHBOARD_JSON__;\n')
+            (template.parent.parent / '.gitignore').write_text('canvases/*.generated.canvas.tsx\ncanvases/*.canvas.data.json\n')
+            git('add', '.')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'original dashboard source')
+            anchor = git('rev-parse', 'HEAD')
+            live = root / sources.DASHBOARD_LIVE
+            rendered = 'export const DASHBOARD = {\n  "schema": "dashboard/v1",\n  "instances": []\n};\n'
+            with mock.patch.dict(sources.ANCHORS, {'KleinPerkins/skills': anchor}), \
+                 mock.patch.object(sources, 'endpoint', side_effect=AssertionError('offline state check used API')):
+                sources.verify_checkout(root, 'KleinPerkins/skills')
+                # These are post-commit runtime writes, never resealed as source.
+                live.write_text(rendered)
+                for path in sources.DASHBOARD_STATE - {sources.DASHBOARD_LIVE}:
+                    (root / path).write_text('{"canvasState": {}}\n')
+                self.assertEqual(git('status', '--porcelain'), '')
+                sources.verify_checkout(root, 'KleinPerkins/skills')
+                self.assertEqual(live.read_text(), rendered)
+                for injected in (rendered + 'run_unverified();\n', rendered.replace('"dashboard/v1"', '"wrong-schema"'),
+                                 rendered.replace('  "instances": []', '  "instances": (run_unverified())')):
+                    live.write_text(injected)
+                    with self.assertRaisesRegex(ValueError, 'unverified dashboard'):
+                        sources.verify_checkout(root, 'KleinPerkins/skills')
+                    self.assertEqual(live.read_text(), injected)
+                live.write_text(rendered)
+                live.chmod(0o755)
+                with self.assertRaisesRegex(ValueError, 'non-executable'):
+                    sources.verify_checkout(root, 'KleinPerkins/skills')
+                self.assertTrue(live.stat().st_mode & stat.S_IXUSR)
+                live.chmod(0o644)
+                outside = root.parent / (root.name + '-outside-state')
+                try:
+                    outside.write_text(rendered)
+                    live.unlink()
+                    live.symlink_to(outside)
+                    with self.assertRaisesRegex(ValueError, 'linked'):
+                        sources.verify_checkout(root, 'KleinPerkins/skills')
+                    self.assertTrue(live.is_symlink())
+                    self.assertEqual(outside.read_text(), rendered)
+                    live.unlink()
+                    live.write_text(rendered)
+                finally:
+                    outside.unlink(missing_ok=True)
+                for suffix in ('py', 'sh', 'pyc'):
+                    (root / '.git/info/exclude').write_text('**/adjacent.' + suffix + '\n')
+                    extra = live.parent / ('adjacent.' + suffix)
+                    extra.write_text('unverified executable/import source\n')
+                    self.assertEqual(git('status', '--porcelain'), '')
+                    with self.assertRaisesRegex(ValueError, 'untracked or ignored'):
+                        sources.verify_checkout(root, 'KleinPerkins/skills')
+                    self.assertTrue(extra.exists())
+                    extra.unlink()
+                sidecar = root / next(iter(sources.DASHBOARD_STATE - {sources.DASHBOARD_LIVE}))
+                sidecar.write_text('[]\n')
+                with self.assertRaisesRegex(ValueError, 'unverified dashboard'):
+                    sources.verify_checkout(root, 'KleinPerkins/skills')
+                sidecar.write_text('{}\n')
+                sources.verify_checkout(root, 'KleinPerkins/skills')
+
+    def test_mcp_existing_uv_runtime_is_preserved_without_source_admission(self):
+        import os
+        sources = module('original_sources')
+        owner = 'KleinPerkins/kp-mcp'
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], stderr=subprocess.PIPE).decode().strip()
+            git('init', '-q')
+            git('remote', 'add', 'origin', 'git@github.com:' + owner + '.git')
+            (root / 'pyproject.toml').write_text('[tool.uv]\npackage = false\n[tool.uv.workspace]\nmembers = ["*-kit"]\n')
+            (root / 'uv.lock').write_text('version = 1\n')
+            (root / '.gitignore').write_text('.venv/\n**/ignored.py\n')
+            git('add', '.')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'original uv workspace')
+            anchor = git('rev-parse', 'HEAD')
+            environment = root / '.venv'
+            environment.mkdir()
+            runtime = environment / 'host-owned-runtime.py'
+            runtime.write_bytes(b'opaque existing dependency bytes\n')
+            runtime.chmod(0o755)
+            initial = (runtime.read_bytes(), runtime.stat().st_mode)
+            clean_env = {key: value for key, value in os.environ.items()
+                         if key not in ('UV_PROJECT_ENVIRONMENT', 'UV_PROJECT', 'UV_WORKING_DIR')}
+            with mock.patch.dict(sources.ANCHORS, {owner: anchor}), \
+                 mock.patch.dict(os.environ, clean_env, clear=True), \
+                 mock.patch.object(sources, 'endpoint', side_effect=AssertionError('offline runtime check used API')):
+                self.assertEqual(git('status', '--porcelain'), '')
+                sources.verify_checkout(root, owner)
+                self.assertEqual((runtime.read_bytes(), runtime.stat().st_mode), initial)
+                # Only the established workspace environment location is opaque.
+                # Neither ignored source nor a kit-local environment is admitted.
+                for relative in ('ignored.py', '__pycache__/extra.pyc', 'extra-kit/.venv/ignored.py'):
+                    extra = root / relative
+                    extra.parent.mkdir(parents=True, exist_ok=True)
+                    extra.write_bytes(b'unverified source')
+                    with self.assertRaisesRegex(ValueError, 'untracked or ignored'):
+                        sources.verify_checkout(root, owner)
+                    self.assertEqual(extra.read_bytes(), b'unverified source')
+                    extra.unlink()
+                for key, accepted in (('UV_PROJECT_ENVIRONMENT', '.venv'), ('UV_PROJECT', '.'), ('UV_WORKING_DIR', '.')):
+                    with mock.patch.dict(os.environ, {key: accepted}):
+                        sources.verify_checkout(root, owner)
+                    with mock.patch.dict(os.environ, {key: '../other-workspace'}):
+                        with self.assertRaisesRegex(ValueError, 'redirection'):
+                            sources.verify_checkout(root, owner)
+                    self.assertEqual((runtime.read_bytes(), runtime.stat().st_mode), initial)
+                # A symlink cannot redirect the environment root outside this contract.
+                moved = root / '.environment-fixture'
+                environment.rename(moved)
+                environment.symlink_to(moved, target_is_directory=True)
+                with self.assertRaisesRegex(ValueError, 'root redirection'):
+                    sources.verify_checkout(root, owner)
+                self.assertTrue(environment.is_symlink())
+                environment.unlink()
+                moved.rename(environment)
+                # Untracked project metadata cannot authorize another runtime root.
+                project = root / 'pyproject.toml'
+                original = project.read_bytes()
+                project.write_bytes(original + b'# modified workspace\n')
+                with self.assertRaisesRegex(ValueError, 'modified'):
+                    sources.verify_checkout(root, owner)
+                self.assertEqual(project.read_bytes(), original + b'# modified workspace\n')
+                project.write_bytes(original)
+                sources.verify_checkout(root, owner)
+                self.assertEqual((runtime.read_bytes(), runtime.stat().st_mode), initial)
 
     def test_rejected_clone_cannot_be_used_on_a_second_bootstrap_attempt(self):
         import os

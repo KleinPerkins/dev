@@ -127,8 +127,18 @@ between HEAD and the fixed original anchor, plus exact raw HEAD blobs, executabl
 modes and index state for every consumed source file. Skills covers `bootstrap.sh`,
 `scripts/`, `global/` and `local/`; MCP covers its workspace and kit source tree.
 Modified, staged, missing, untracked, ignored or linked source is preserved and
-refused before use, including unverified code caches and virtual environments in
-that source closure. Source bootstrap suppresses new Python bytecode caches.
+refused before use, including unverified code caches. Two existing runtime roles
+stay separate from reviewed Git source. Skills permits only its three exact
+local-jobs dashboard view paths: generated TSX must reproduce the verified tracked
+template with canonical dashboard JSON, and the two JSON sidecars must be objects;
+all must be regular non-executable files. MCP permits only the ordinary root
+`.venv/` directory established by its verified tracked uv virtual-workspace
+configuration and lock. That environment remains a host-owned dependency: this
+check neither reads nor qualifies its contents, installs/rebuilds it, nor changes
+its runtime versions. Kit-local or arbitrary ignored source is not exempt, and
+uv project/environment redirects outside the established root contract refuse.
+Existing environment bytes remain untouched by source verification. Source
+bootstrap suppresses new Python bytecode caches.
 Runtime pin overrides cannot become repository-history anchors. A pre-use Skills
 source refusal also stops the root bootstrap before it could execute the rejected
 AWA installer. The root validates an explicit overlay source override before any

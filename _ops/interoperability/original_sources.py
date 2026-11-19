@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import os
 import stat
+import tomllib
 import json
 from pathlib import Path
 import subprocess
@@ -92,6 +93,73 @@ BOOTSTRAP_ROOTS = {'KleinPerkins/skills': ('bootstrap.sh', 'scripts', 'global', 
                    'KleinPerkins/kp-mcp': ('',)}
 
 
+# Only these owner-defined local-jobs view artifacts are runtime data rather
+# than bootstrap/import source. Other ignored files remain unverified source.
+DASHBOARD_TEMPLATE = 'global/skills/local-jobs/canvases/local-jobs-dashboard.template.tsx'
+DASHBOARD_LIVE = 'global/skills/local-jobs/canvases/local-jobs-dashboard.generated.canvas.tsx'
+DASHBOARD_STATE = frozenset((DASHBOARD_LIVE,
+    'global/skills/local-jobs/canvases/local-jobs-dashboard.generated.canvas.data.json',
+    'global/skills/local-jobs/canvases/local-jobs-dashboard.canvas.data.json'))
+
+
+def verify_dashboard_state(path, relative, template_bytes):
+    """Accept the existing emitter's exact data envelope, never arbitrary TSX."""
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o111:
+        raise ValueError('dashboard state must be regular non-executable data; source preserved')
+    if template_bytes is None:
+        raise ValueError('dashboard state lacks its verified tracked template; source preserved')
+    try:
+        text = path.read_text(encoding='utf-8')
+        if relative == DASHBOARD_LIVE:
+            template = template_bytes.decode('utf-8')
+            marker = '__DASHBOARD_JSON__'
+            if template.count(marker) != 1:
+                raise ValueError
+            prefix, suffix = template.split(marker)
+            if not text.startswith(prefix) or not text.endswith(suffix):
+                raise ValueError
+            end = len(text) - len(suffix) if suffix else len(text)
+            payload = json.loads(text[len(prefix):end])
+            if not isinstance(payload, dict) or payload.get('schema') != 'dashboard/v1':
+                raise ValueError
+            expected = template.replace(marker, json.dumps(payload, indent=2, ensure_ascii=True), 1)
+            if text != expected:
+                raise ValueError
+        elif not isinstance(json.loads(text), dict):
+            raise ValueError
+    except (UnicodeError, ValueError):
+        raise ValueError('unverified dashboard state refused; source preserved') from None
+
+
+def verify_mcp_runtime_contract(root, project_bytes, lock_bytes):
+    """Keep the existing uv-owned environment outside Git-source qualification.
+
+    The tracked virtual workspace and unchanged kit installers use only the root
+    .venv. Its contents remain host-owned runtime dependencies, not admitted code
+    or a new environment-integrity claim from this source verifier.
+    """
+    try:
+        project = tomllib.loads(project_bytes.decode('utf-8'))
+        lock = tomllib.loads(lock_bytes.decode('utf-8'))
+        uv = project['tool']['uv']
+        members = uv['workspace']['members']
+        if (uv.get('package') is not False or not isinstance(members, list) or
+                any(not isinstance(member, str) or Path(member).is_absolute() or '..' in Path(member).parts
+                    for member in members) or type(lock.get('version')) is not int or lock['version'] != 1):
+            raise ValueError
+    except (AttributeError, KeyError, TypeError, UnicodeError, ValueError):
+        raise ValueError('tracked uv workspace contract required; source preserved') from None
+    expected = root.resolve()
+    for key, target in (('UV_PROJECT_ENVIRONMENT', expected / '.venv'),
+                        ('UV_PROJECT', expected), ('UV_WORKING_DIR', expected)):
+        if key in os.environ:
+            value = Path(os.environ[key])
+            candidate = value if value.is_absolute() else expected / value
+            if candidate.resolve() != target:
+                raise ValueError('uv project/environment redirection refused; runtime preserved')
+
+
 def verify_checkout(root, owner):
     """Refuse a foreign-history or modified source before executing its checkout.
 
@@ -112,7 +180,7 @@ def verify_checkout(root, owner):
     prefixes = BOOTSTRAP_ROOTS[owner]
     def selected(path):
         return any(not prefix or path == prefix or path.startswith(prefix + '/') for prefix in prefixes)
-    tree = git_result(root, 'ls-tree', '-rz', '--full-tree', head)
+    tree = git_result(root, 'ls-tree', '-r', '-z', '--full-tree', head)
     if tree.returncode:
         raise ValueError('bootstrap source tree unavailable')
     raw = tree.stdout
@@ -130,11 +198,24 @@ def verify_checkout(root, owner):
     if 'bootstrap.sh' not in expected and owner == 'KleinPerkins/skills':
         raise ValueError('bootstrap source is incomplete')
     actual = set()
+    runtime_state = []
+    template_bytes = None
+    project_bytes = lock_bytes = None
     for directory, dirs, files in os.walk(root, followlinks=False):
         relative = Path(directory).relative_to(root)
         if relative == Path('.'):
+            if owner == 'KleinPerkins/kp-mcp' and ('.venv' in dirs or '.venv' in files):
+                environment = root / '.venv'
+                if environment.is_symlink() or not environment.is_dir():
+                    raise ValueError('uv environment root redirection refused; runtime preserved')
+                if any(path == '.venv' or path.startswith('.venv/') for path in expected):
+                    raise ValueError('uv runtime cannot replace tracked source; source preserved')
+                dirs.remove('.venv')
             dirs[:] = [d for d in dirs if d != '.git' and selected(d)]
             files = [f for f in files if f != '.git']
+        for dirname in dirs:
+            if owner == 'KleinPerkins/skills' and (relative / dirname).as_posix() in DASHBOARD_STATE:
+                raise ValueError('dashboard state must be a regular file; source preserved')
         for filename in [*dirs, *files]:
             path = (relative / filename).as_posix()
             target = root / path
@@ -144,8 +225,11 @@ def verify_checkout(root, owner):
             path = (relative / filename).as_posix()
             if not selected(path):
                 continue
-            actual.add(path)
             target = root / path
+            if path not in expected and owner == 'KleinPerkins/skills' and path in DASHBOARD_STATE:
+                runtime_state.append((path, target))
+                continue
+            actual.add(path)
             info = target.stat()
             if path not in expected or not stat.S_ISREG(info.st_mode):
                 raise ValueError('untracked or ignored bootstrap source refused; source preserved')
@@ -154,6 +238,12 @@ def verify_checkout(root, owner):
             mode, oid = expected[path]
             if blob != oid or bool(info.st_mode & 0o111) != (mode == '100755'):
                 raise ValueError('modified bootstrap source refused; source preserved')
+            if path == DASHBOARD_TEMPLATE:
+                template_bytes = data
+            if path == 'pyproject.toml':
+                project_bytes = data
+            if path == 'uv.lock':
+                lock_bytes = data
     if actual != set(expected):
         raise ValueError('missing bootstrap source refused; source preserved')
     # Staged replacements are preserved rather than silently treated as approval.
@@ -161,6 +251,10 @@ def verify_checkout(root, owner):
     result = git_result(root, 'diff', '--no-ext-diff', '--no-textconv', '--cached', '--quiet', head, '--', *paths)
     if result.returncode:
         raise ValueError('staged bootstrap source refused; source preserved')
+    if owner == 'KleinPerkins/kp-mcp':
+        verify_mcp_runtime_contract(root, project_bytes, lock_bytes)
+    for relative, path in runtime_state:
+        verify_dashboard_state(path, relative, template_bytes)
     if local_git(root, 'rev-parse', 'HEAD') != head:
         raise ValueError('bootstrap source revision changed; source preserved')
     return name

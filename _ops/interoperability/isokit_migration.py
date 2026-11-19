@@ -24,7 +24,7 @@ import uuid
 
 HERE = Path(__file__).absolute().parent
 HELPERS = {
-    "original_sources.py": "bc46911a0391bf56489a8ad8f05c530b0e26ac05216e3b6dec86f828fb9338c6",
+    "original_sources.py": "6e0725f4013c022f0790ee52d01e1b2a2533065d3df4632d3b825594526d7c64",
     "skill_migration.py": "63338247bd1af57f492a46a1d8a20fc2585ecf826da0a37b3ac1bfe553300b11",
     "inventory.py": "5414d384788924f66f7ed324aa2c0092c5367a58ac914c36532c85a5fcd9f64e",
 }
