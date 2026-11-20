@@ -29,6 +29,31 @@ remains pending qualification. The caller must obtain live immutable identity an
 active name independently before an external action; this command never changes
 GitHub, grants publication authority, installs software or enables a writer.
 
+## Readback after a released populated-host adoption
+
+A clean successor checkout is only one part of host acceptance. After the exact
+populated-root transaction has been separately released and executed, retain its
+private receipt and verify these outcomes independently:
+
+- The active root resolves to the successor's live immutable ID and current name;
+  its HEAD, tree, raw index and clean tracked source match the released postimage.
+- The retained original and each old linked worktree preserve their recorded
+  HEADs, refs, raw indexes, file bytes and modes, including staged and unstaged
+  distinctions. Check the repaired common-Git bindings and the retained original's
+  endpoint against that transaction's exact postimages.
+- Independent nested repositories keep their approved paths and local changes.
+  Selected WIP and recovery material remain recoverable; fixed capability source
+  objects and installed runtime pointers retain their existing bindings. A source
+  validator does not establish runtime qualification or authorize a broad bootstrap.
+- The normal development path completes a fresh originating-account independent
+  review, exact PR CI and an observed App-owned squash merge. Positive and seeded
+  local review fixtures alone do not prove that delivery path.
+
+Reuse accepted preservation and restoration evidence; repeat only checks affected
+by the adoption or an unresolved dependency. Keep machine-specific receipts,
+account details and recovery contents private. Host acceptance does not release
+original publishing holds or restart paused product work.
+
 ## Current documents and predecessor provenance
 
 `.planning/doc-warden.json` has the successor's new repository key and ID.
