@@ -207,5 +207,105 @@ class SuccessorDeliveryTests(unittest.TestCase):
                 with self.assertRaises(ValueError): policy.load_policy()
 
 
+
+class DistributionBindingTests(unittest.TestCase):
+    def setUp(self):
+        self.script = ROOT / "_ops/baseline/distribution-binding.py"
+        self.registry = ROOT / "_ops/baseline/distribution-bindings.json"
+        spec = importlib.util.spec_from_file_location("distribution_binding", self.script)
+        self.binding = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.binding)
+        self.raw = self.registry.read_bytes()
+        self.selectors = {"repository_id": 1439196929, "revision": "a" * 40}
+
+    def test_sterling_binding_agrees_with_dev_authority_and_remains_pending(self):
+        projection = self.binding.project(self.raw, **self.selectors)
+        sterling = projection["binding"]
+        delivery, = [
+            row for row in policy.load_policy()["repositories"]
+            if row["repository_id"] == sterling["repository_id"]
+        ]
+        self.assertEqual(delivery["repository"], sterling["repository"])
+        self.assertEqual(delivery["disposition"], "actions-app")
+        self.assertEqual(projection["authority_repository_id"], 1459458379)
+        self.assertEqual(
+            {key: sterling[key] for key in ("source_visibility", "product_audience", "application_id", "state")},
+            {"source_visibility": "public", "product_audience": "private",
+             "application_id": "io.sterling.app", "state": "pending-profile-qualification"},
+        )
+        self.assertEqual(
+            self.binding.verify_projection(self.binding.canonical(projection), self.raw, **self.selectors),
+            projection,
+        )
+
+    def test_local_scope_edits_and_stale_revision_are_refused(self):
+        edits = {
+            "repository_id": 1449284973, "source_visibility": "private", "product_audience": "public",
+            "application_id": "com.kleinperkins.machine-monitor", "channels": ["stable"],
+            "outputs": ["opaque"], "signing": {"code_identity": "changed"}, "state": "qualified",
+        }
+        for key, value in edits.items():
+            with self.subTest(key=key):
+                projection = self.binding.project(self.raw, **self.selectors)
+                projection["binding"][key] = value
+                with self.assertRaisesRegex(ValueError, "differs"):
+                    self.binding.verify_projection(self.binding.canonical(projection), self.raw, **self.selectors)
+        projection = self.binding.canonical(self.binding.project(self.raw, **self.selectors))
+        with self.assertRaisesRegex(ValueError, "differs"):
+            self.binding.verify_projection(projection, self.raw, repository_id=1439196929, revision="b" * 40)
+
+    def test_missing_duplicate_and_wrong_authority_refuse(self):
+        registry = json.loads(self.raw)
+        registry["authority_repository_id"] = 1278387789
+        for raw in (b"", b'{"schema":"v1","schema":"v2"}', self.binding.canonical(registry)):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                self.binding.project(raw, **self.selectors)
+        with self.assertRaisesRegex(ValueError, "unbound"):
+            self.binding.project(self.raw, repository_id=1449284973, revision="a" * 40)
+
+    def test_live_authority_read_detects_a_moved_ref_and_wrong_repository(self):
+        from unittest.mock import patch
+
+        repo = {"id": 1459458379, "full_name": "KleinPerkins/dev", "private": False, "default_branch": "main"}
+        ref = {"ref": "refs/heads/main", "object": {"type": "commit", "sha": "a" * 40}}
+        moved = dict(ref, object=dict(ref["object"], sha="b" * 40))
+        wire = self.binding.canonical
+        with patch.object(self.binding, "fetch_github", side_effect=[wire(repo), wire(ref), self.raw, wire(ref)]) as fetch:
+            self.assertEqual(self.binding.current_source(), ("a" * 40, self.raw))
+        paths = [call.args[0] for call in fetch.call_args_list]
+        self.assertTrue(all(path == "/repositories/1459458379"
+                            or path.startswith("/repositories/1459458379/") for path in paths))
+        self.assertIn("?ref=" + "a" * 40, paths[2])
+        with patch.object(self.binding, "fetch_github", side_effect=[wire(repo), wire(ref), self.raw, wire(moved)]):
+            with self.assertRaisesRegex(ValueError, "changed"):
+                self.binding.current_source()
+        with patch.object(self.binding, "fetch_github", return_value=wire(dict(repo, id=1278387789))):
+            with self.assertRaisesRegex(ValueError, "authority identity"):
+                self.binding.current_source()
+
+    def test_cli_projects_committed_bytes_and_checks_a_consumer_copy(self):
+        with tempfile.TemporaryDirectory(prefix="distribution-binding-") as directory:
+            root = Path(directory)
+            baseline = root / "_ops/baseline"
+            baseline.mkdir(parents=True)
+            shutil.copy2(self.script, baseline / self.script.name)
+            shutil.copy2(self.registry, baseline / self.registry.name)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            git = ["git", "-C", str(root), "-c", "user.name=Fixture",
+                   "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false"]
+            subprocess.run([*git, "add", "_ops"], check=True)
+            subprocess.run([*git, "commit", "-qm", "Synthetic authority"], check=True)
+            revision = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+            command = [sys.executable, str(baseline / self.script.name), "1439196929", "--revision", revision]
+            (baseline / self.registry.name).write_bytes(b"uncommitted local content")
+            candidate = root / "projection.json"
+            candidate.write_bytes(subprocess.check_output(command))
+            subprocess.run([*command, "--verify", str(candidate)], check=True, capture_output=True)
+            candidate.write_text("{}")
+            result = subprocess.run([*command, "--verify", str(candidate)], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("differs", result.stderr)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
