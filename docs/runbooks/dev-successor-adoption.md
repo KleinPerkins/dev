@@ -76,6 +76,14 @@ artifact create/update remains available through the existing transaction engine
 section-zero bootstrap remains hard-bound to its original commit ancestry and
 refuses a fresh-history root; it is not the successor adoption route.
 
+An ordinary typed plan freeze records the two exact file digests in the receipt's
+`postimages`. The sidecar's `canonical_plan_digest` also binds the plan bytes.
+The receipt's separate `bindings.approved_plan_digest` names the central GSD
+authoring plan. Doc-warden deliberately leaves that binding at its all-zero
+sentinel in this successor, including when a repository-level plan is approved.
+The plan-sidecar validator uses the plan and sidecar postimages to verify the
+freeze. Central GSD authoring stays gated by its own authority decision.
+
 The historical ADR index at `_ops/adr/README.md` explains retained status
 wording separately from current authority. ADR 0013's approved metadata and
 predecessor applied `accepted_freeze` operation
