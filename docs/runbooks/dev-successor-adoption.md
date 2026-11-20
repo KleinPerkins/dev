@@ -46,8 +46,11 @@ private receipt and verify these outcomes independently:
   objects and installed runtime pointers retain their existing bindings. A source
   validator does not establish runtime qualification or authorize a broad bootstrap.
 - The normal development path completes a fresh originating-account independent
-  review, exact PR CI and an observed App-owned squash merge. Positive and seeded
-  local review fixtures alone do not prove that delivery path.
+  review, exact PR CI and an observed squash merge admitted by the App's own
+  approval and current gates. Preserve the accepted concurrent-writer limitation
+  in `.github/review-enrollments.json`: successful delivery does not prove
+  technical exclusion of other write-capable actors. Positive and seeded local
+  review fixtures alone do not prove that delivery path.
 
 Reuse accepted preservation and restoration evidence; repeat only checks affected
 by the adoption or an unresolved dependency. Keep machine-specific receipts,
