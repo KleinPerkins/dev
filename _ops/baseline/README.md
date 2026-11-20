@@ -96,3 +96,25 @@ separates retained policy from old runtime authority.
 
 The new repository framework belongs to the later repo-platform capability. This
 baseline transition does not expand that effort or restart paused WIP.
+
+## Private distribution binding
+
+`distribution-bindings.json` records Sterling’s approved public source, private
+product audience, repository identity, and signed macOS output roles. Dev’s
+existing delivery policy still owns GitHub CI and App admission. The binding
+starts in `pending-profile-qualification`.
+
+A public consumer can project and verify the current binding with no
+GitHub credential:
+
+```sh
+python3 _ops/baseline/distribution-binding.py 1439196929 --current > sterling-binding.json
+python3 _ops/baseline/distribution-binding.py 1439196929 --current --verify sterling-binding.json
+```
+
+The utility reads the committed registry at the verified live main revision
+of GitHub repository ID `1459458379`. Projection validation includes the
+source revision and byte digest, product identity, and channel and output
+scope. The `--revision` mode uses a pinned local commit for reproducible
+inspection. Qualification and publication authority require separate evidence
+under the approved execution plan.

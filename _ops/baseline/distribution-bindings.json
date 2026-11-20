@@ -1,0 +1,20 @@
+{
+  "schema": "dev-distribution-bindings/v1",
+  "authority_repository_id": 1459458379,
+  "bindings": [
+    {
+      "repository": "KleinPerkins/sterling.io",
+      "repository_id": 1439196929,
+      "source_visibility": "public",
+      "product_audience": "private",
+      "application_id": "io.sterling.app",
+      "channels": ["qualification", "stable"],
+      "outputs": ["macos-first-install-zip", "macos-update-zip"],
+      "signing": {
+        "code_identity": "developer-id-application",
+        "signature": "sparkle-ed25519"
+      },
+      "state": "pending-profile-qualification"
+    }
+  ]
+}
