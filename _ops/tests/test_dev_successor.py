@@ -27,9 +27,17 @@ class SuccessorTests(unittest.TestCase):
         self.root=Path(self.tmp.name)/'repo';self.root.mkdir()
         self.record=json.loads((ROOT/successor.RECORD).read_bytes())
         paths={r['path'] for k in ('retained_policy','historical_provenance') for r in self.record[k]}
-        paths|={successor.RECORD,'docs/adr/README.md','_ops/checks/dev-successor.py','_ops/bin/doc-warden.sh','_ops/doc-warden/triggers.v2.json','_ops/doc-warden/runtime/gsd-core/gsd-core-pin.json','_ops/doc-warden/runtime/gsd-core/runtime-interface.v1.json'}
+        paths|={successor.RECORD,'_ops/checks/dev-successor.py','_ops/bin/doc-warden.sh','_ops/doc-warden/triggers.v2.json','_ops/doc-warden/runtime/gsd-core/gsd-core-pin.json','_ops/doc-warden/runtime/gsd-core/runtime-interface.v1.json'}
         for name in paths:
             target=self.root/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/name,target)
+        adr_index = self.root / "docs/adr/README.md"
+        adr_index.parent.mkdir(parents=True)
+        adr_index.write_text(
+            "# Architecture decision records\n\n"
+            "| ADR | Status | One-line decision |\n"
+            "|---|---|---|\n",
+            encoding="utf-8",
+        )
         shutil.copytree(ROOT/'_ops/doc-warden/schemas',self.root/'_ops/doc-warden/schemas')
         self.git('init','-q','-b','main');self.git('config','user.name','Fixture');self.git('config','user.email','fixture@example.invalid');self.git('add','.');self.git('commit','-qm','fresh synthetic successor')
         p=patch.dict(os.environ,{'XDG_STATE_HOME':str(Path(self.tmp.name)/'state')});p.start();self.addCleanup(p.stop)

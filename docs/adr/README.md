@@ -6,3 +6,4 @@ The current baseline relation is recorded in [successor adoption](../runbooks/de
 
 | ADR | Status | One-line decision |
 |---|---|---|
+| [0001](0001-qualify-private-distribution-for-sterling.md) | Accepted | Qualify private distribution for Sterling |

@@ -128,7 +128,19 @@ service-account*.json
 /_ops/adr/0007-ai-analytics-definition-lattice.md
 /_ops/plans/template-framework/DECISIONS.md
 /_ops/plans/template-framework/ROADMAP.md
-/_ops/doc-warden/state/
+# Current Dev's reviewed, portable proof for the Sterling ADR and PRD.
+!/_ops/doc-warden/state/
+/_ops/doc-warden/state/*
+!/_ops/doc-warden/state/v2/
+/_ops/doc-warden/state/v2/*
+!/_ops/doc-warden/state/v2/events/
+!/_ops/doc-warden/state/v2/receipts/
+/_ops/doc-warden/state/v2/events/*
+/_ops/doc-warden/state/v2/receipts/*
+!/_ops/doc-warden/state/v2/events/b5ce073c-9410-5dc5-a5ab-51223459c379.json
+!/_ops/doc-warden/state/v2/events/fef9884b-49fe-5106-985a-b112af03eb6e.json
+!/_ops/doc-warden/state/v2/receipts/799112b5-5f87-4381-892e-3c5d76aca0f6.json
+!/_ops/doc-warden/state/v2/receipts/65b60162-0c78-4679-b089-e5fb24270569.json
 /_ops/baseline/state/
 /_ops/baseline/profiles/pr-automation/state/
 /_ops/interoperability/evidence/*
