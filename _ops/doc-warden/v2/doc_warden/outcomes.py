@@ -9,12 +9,11 @@ from typing import Any
 
 from .artifact_authority import ApprovedArtifact, resolve_approved_artifact
 from .canonical import contained_path, digest_ref, parse_json_object
+from .release_delivery import PULL_REQUEST, REVISION, observe_merged_delivery
 from .transactions import ObservedInput
 
 KINDS = {"verification", "uat"}
 VISUAL_CHECKS = {"comparison", "states", "accessibility", "responsive", "copy", "recovery", "assets"}
-REVISION = re.compile(r"[0-9a-f]{40}")
-PULL_REQUEST = re.compile(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[1-9][0-9]*")
 
 
 def _plan_scope(repo: Path, plan_id: object) -> tuple[ApprovedArtifact, set[str], list[ApprovedArtifact]]:
@@ -100,4 +99,7 @@ def outcome_binding(kind: str, inputs: dict[str, Any], repo: Path, *, approved: 
             raise ValueError("release_outcome_evidence_stale")
         observed.extend(proof.observed_inputs)
         observed.extend(proof_inputs)
-    return {field: value | {"plan_digest": plan.digest}}, observed
+    bound = value | {"plan_digest": plan.digest}
+    if approved:
+        bound["delivery"] = observe_merged_delivery(repo, value["pull_request"], value["commit"])
+    return {field: bound}, observed

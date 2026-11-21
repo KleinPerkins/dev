@@ -134,7 +134,11 @@ plan also requires exact evidence for comparison, states, accessibility,
 responsive layout, copy, recovery, and assets against the approved design.
 Each evidence row carries a repository-relative path, SHA-256 digest, and
 result. `draft release` binds the accepted verification and UAT records to the
-same plan and source revision. For acceptance via `--approval-file`, the
+same plan and source revision. An approved release verifies that its pull
+request delivered the declared commit to the repository’s live default branch.
+Dev releases also require the Reviewer App approval and successful required CI
+for the final PR head. Apply rechecks this delivery evidence before recording an
+approved release. For acceptance via `--approval-file`, the
 review hash covers the canonical JSON object with `kind`, `title`, `body`, and
 `evidence`. Apply the resulting preview with separate exact consent.
 

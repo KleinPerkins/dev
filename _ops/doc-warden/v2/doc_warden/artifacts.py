@@ -878,6 +878,8 @@ def draft_artifact(
         for item in authority.observed_inputs:
             if observed_input_rows.setdefault(item.path, item) != item:
                 raise ValueError("observed_input_drift")
+    if approved and kind == "release" and outcome_provenance is not None:
+        bindings["release_delivery"] = outcome_provenance["release_evidence"]["delivery"]
     if design_authority is not None:
         bindings["design_authority"] = design_authority
         for design_id in design_ids:

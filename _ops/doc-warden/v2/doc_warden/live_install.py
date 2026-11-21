@@ -886,7 +886,13 @@ def _uninstall_locked(
     except (OSError, subprocess.SubprocessError) as exc:
         raise ValueError("live_install_uninstall_incomplete") from exc
     if receipt is not None:
-        _restore_wrapper_preimages(home, receipt)
+        after_owner = _wrapper_images(home)
+        # The verified pre-uninstall images include absence. A successful owner
+        # uninstall may remove its files, or leave their exact installed bytes.
+        if any(current not in (receipt["postimages"][relative], None)
+               for relative, current in after_owner.items()):
+            raise ValueError("live_install_postimage_changed")
+        _restore_wrapper_preimages(home, receipt, after_owner)
     if record_completion is not None:
         record_completion()
     if receipt is not None:
@@ -911,7 +917,9 @@ def _read_wrapper_record(wrapper_receipt: Path) -> dict[str, Any]:
     return receipt
 
 
-def _restore_wrapper_preimages(home: Path, receipt: dict[str, Any]) -> None:
+def _restore_wrapper_preimages(
+    home: Path, receipt: dict[str, Any], expected: dict[str, str | None],
+) -> None:
     preimages = receipt["preimages"]
     try:
         decoded = {
@@ -926,9 +934,7 @@ def _restore_wrapper_preimages(home: Path, receipt: dict[str, Any]) -> None:
         raise ValueError("live_install_preimage_invalid") from exc
     if len(decoded) != len(preimages):
         raise ValueError("live_install_preimage_invalid")
-    observed = _wrapper_images(home)
-    if any(value is not None and value != receipt["postimages"][relative]
-           for relative, value in observed.items()):
+    if _wrapper_images(home) != expected:
         raise ValueError("live_install_postimage_changed")
     for relative, prior in decoded.items():
         path = contained_path(home, relative)

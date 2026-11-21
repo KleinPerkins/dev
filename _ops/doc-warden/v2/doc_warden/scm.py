@@ -98,24 +98,21 @@ def _fixture_github_cli(repo: Path) -> str:
     return str(candidate)
 
 
-def _github_metadata(
-    repository: str,
-    *,
-    github_cli: str = "gh",
-) -> dict[str, object]:
-    result = subprocess.run(
-        [github_cli, "api", f"repos/{quote(repository, safe='/')}"],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=20,
-    )
-    if result.returncode != 0:
-        raise ValueError("github_repository_identity_unavailable")
+def github_json(endpoint: str, *, github_cli: str, unavailable: str) -> object:
     try:
-        value = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise ValueError("github_repository_identity_unavailable") from exc
+        result = subprocess.run(
+            [github_cli, "api", endpoint], check=False, capture_output=True, timeout=20,
+        )
+        if result.returncode != 0 or len(result.stdout) > 2_000_000:
+            raise ValueError(unavailable)
+        return json.loads(result.stdout)
+    except (OSError, subprocess.TimeoutExpired, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(unavailable) from exc
+
+
+def _github_metadata(repository: str, *, github_cli: str = "gh") -> dict[str, object]:
+    value = github_json(f"repos/{quote(repository, safe='/')}", github_cli=github_cli,
+                        unavailable="github_repository_identity_unavailable")
     if not isinstance(value, dict):
         raise ValueError("github_repository_identity_unavailable")
     return value

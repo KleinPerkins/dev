@@ -21,6 +21,7 @@ from doc_warden.gsd_adapter import (
     project_current_view,
     requirements_current_view,
 )
+from doc_warden.operation_store import load_preview, store_preview
 from fixture_factory import FixtureFactory
 
 
@@ -899,6 +900,11 @@ class ProductLifecycleTests(unittest.TestCase):
 
     def test_release_artifact_binds_plan_verification_uat_commit_and_pr(self):
         repo = self.fixture.repo
+        profile_path = repo / ".planning/doc-warden.json"
+        profile = json.loads(profile_path.read_bytes())
+        profile_path.write_bytes(canonical_json(profile | {"github_repository_id": 1459458379}))
+        subprocess.run(["git", "-C", str(repo), "remote", "add", "origin",
+                        "git@github.com:KleinPerkins/dev.git"], check=True)
         self.fixture.approve_prd("REQ-001")
         lifecycle = {"lifecycle": "approved", "approval": self.approval()}
         plan = draft_artifact("plan", {"title": "Plan", **lifecycle}, repo=repo)
@@ -915,8 +921,64 @@ class ProductLifecycleTests(unittest.TestCase):
             outcomes[kind] = record.artifact_id
         evidence = {"plan": plan.artifact_id, "commit": head,
                     "pull_request": "https://github.com/KleinPerkins/dev/pull/1", **outcomes}
-        preview = draft_artifact("release", {"title": "Release", **lifecycle, "release_evidence": evidence}, repo=repo)
-        apply_preview(preview, consent_for(preview.transaction))
+        reviewed_head, tip = "a" * 40, "b" * 40
+        prefix = "repos/KleinPerkins/dev"
+        delivery_rows = {
+            prefix: {"id": 1459458379, "full_name": "KleinPerkins/dev", "default_branch": "main"},
+            prefix + "/pulls/1": {
+                "number": 1, "base": {"ref": "main", "repo": {"id": 1459458379}},
+                "head": {"sha": reviewed_head}, "merge_commit_sha": head,
+                "merged": True, "state": "closed", "merged_at": "2026-08-30T00:00:00Z",
+                "merged_by": {"id": 299927791},
+            },
+            prefix + "/branches/main": {"commit": {"sha": tip}},
+            prefix + f"/compare/{head}...{tip}": {"status": "ahead", "merge_base_commit": {"sha": head}},
+            prefix + "/pulls/1/reviews?per_page=100": [
+                {"user": {"id": 299927791}, "commit_id": reviewed_head, "state": "APPROVED"},
+            ],
+            prefix + f"/commits/{reviewed_head}/check-runs?check_name=ci-required&filter=latest": {"check_runs": [
+                {"id": 123, "app": {"id": 15368}, "head_sha": reviewed_head, "name": "ci-required",
+                 "status": "completed", "conclusion": "success"},
+            ]},
+        }
+
+        def draft(**changes):
+            return draft_artifact("release", {"title": "Release", **lifecycle,
+                                  "release_evidence": evidence | changes}, repo=repo)
+
+        def github(endpoint, **options):
+            return delivery_rows[endpoint]
+
+        with patch("doc_warden.release_delivery.github_json", side_effect=github) as remote:
+            with self.assertRaisesRegex(ValueError, "release_delivery_repository_mismatch"):
+                draft(pull_request="https://github.com/another/repo/pull/1")
+            remote.assert_not_called()
+            for endpoint, updates, code in (
+                ("/pulls/1", {"merged": False}, "release_delivery_merge_unverified"),
+                ("/pulls/1", {"merge_commit_sha": reviewed_head}, "release_delivery_merge_unverified"),
+                ("/pulls/1", {"merged_by": {"id": 1234}}, "release_delivery_app_unverified"),
+                (f"/compare/{head}...{tip}", {"status": "diverged"}, "release_delivery_merge_unverified"),
+                (f"/commits/{reviewed_head}/check-runs?check_name=ci-required&filter=latest",
+                 {"check_runs": []}, "release_delivery_ci_unverified"),
+            ):
+                with self.subTest(endpoint=endpoint, updates=updates), patch.dict(
+                    delivery_rows[prefix + endpoint], updates,
+                ), self.assertRaisesRegex(ValueError, code):
+                    draft()
+
+            preview = draft()
+            consent = consent_for(preview.transaction)
+            with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {"XDG_STATE_HOME": state}):
+                store_preview(preview.transaction)
+                resumed = load_preview(preview.transaction.operation_id, preview.transaction.action_digest)
+                with patch.dict(delivery_rows[prefix + "/pulls/1"], {"merged": False}):
+                    with self.assertRaisesRegex(ValueError, "release_delivery_merge_unverified"):
+                        apply_preview(resumed, consent)
+                self.assertFalse((repo / preview.artifact_path).exists())
+                receipt = apply_preview(resumed, consent)
+                self.assertEqual(receipt["bindings"]["release_delivery"]["reviewed_commit"], reviewed_head)
+                remote.side_effect = ValueError("release_delivery_unavailable")
+                self.assertEqual(apply_preview(resumed, consent), receipt)
         metadata = parse_artifact(self.fixture.repo / preview.artifact_path).metadata
         self.assertEqual(metadata["type"], "release")
         (repo / "README.md").write_text("Modified evidence.\n")

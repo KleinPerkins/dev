@@ -461,6 +461,13 @@ class LiveInstallTests(unittest.TestCase):
                               expected_runtime_digests=runtime_digests(repo))
             receipt = data / "gsd-core/doc-warden-wrapper-preimage.json"
             before = receipt.read_bytes()
+            path.unlink()
+            with mock.patch("doc_warden.live_install.subprocess.run") as owner:
+                with self.assertRaisesRegex(ValueError, "live_install_postimage_changed"):
+                    uninstall(repo, home=home, data_home=data)
+                owner.assert_not_called()
+            self.assertFalse(path.exists())
+            self.assertEqual(receipt.read_bytes(), before)
             path.write_bytes(b"later edit")
             with mock.patch("doc_warden.live_install.subprocess.run") as owner:
                 with self.assertRaisesRegex(ValueError, "live_install_postimage_changed"):
@@ -474,6 +481,20 @@ class LiveInstallTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "live_install_uninstall_incomplete"):
                     uninstall(repo, home=home, data_home=data)
             self.assertEqual(path.read_bytes(), b"installed")
+            self.assertEqual(receipt.read_bytes(), before)
+            restore = live_install_module._restore_wrapper_preimages
+
+            def delete_after_owner_snapshot(home, record, expected):
+                path.unlink()
+                restore(home, record, expected)
+
+            with mock.patch("doc_warden.live_install._restore_wrapper_preimages",
+                            side_effect=delete_after_owner_snapshot), mock.patch(
+                "doc_warden.live_install.subprocess.run",
+            ):
+                with self.assertRaisesRegex(ValueError, "live_install_postimage_changed"):
+                    uninstall(repo, home=home, data_home=data)
+            self.assertFalse(path.exists())
             self.assertEqual(receipt.read_bytes(), before)
 
     def test_uninstall_recovers_its_durable_outcome_or_retains_recovery_evidence(self):
