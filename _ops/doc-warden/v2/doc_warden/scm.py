@@ -98,15 +98,22 @@ def _fixture_github_cli(repo: Path) -> str:
     return str(candidate)
 
 
-def github_json(endpoint: str, *, github_cli: str, unavailable: str, parameters: tuple[str, ...] = ()) -> object:
+def github_bytes(endpoint: str, *, github_cli: str, unavailable: str, parameters: tuple[str, ...] = ()) -> bytes:
     try:
         result = subprocess.run(
             [github_cli, "api", endpoint, *parameters], check=False, capture_output=True, timeout=20,
         )
         if result.returncode != 0 or len(result.stdout) > 2_000_000:
             raise ValueError(unavailable)
-        return json.loads(result.stdout)
-    except (OSError, subprocess.TimeoutExpired, UnicodeError, json.JSONDecodeError) as exc:
+        return result.stdout
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ValueError(unavailable) from exc
+
+
+def github_json(endpoint: str, *, github_cli: str, unavailable: str, parameters: tuple[str, ...] = ()) -> object:
+    try:
+        return json.loads(github_bytes(endpoint, github_cli=github_cli, unavailable=unavailable, parameters=parameters))
+    except (UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError(unavailable) from exc
 
 

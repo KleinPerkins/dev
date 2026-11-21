@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from .canonical import canonical_json, digest_ref
 from .review_admission import verify_dev_review
-from .scm import _fixture_github_cli, _github_slug, _origin_url, github_json
+from .scm import _fixture_github_cli, _github_slug, _origin_url, github_bytes, github_json
 from .validators import read_repository_config
 
 
@@ -49,7 +49,7 @@ def _rows(value: object) -> list[dict[str, Any]]:
     return value
 
 
-def _app_timeline(cli: str, name: str, repository_id: int, pull: dict[str, Any], commit: str) -> str:
+def _app_timeline(cli: str, name: str, repository_id: int, pull: dict[str, Any], commit: str) -> tuple[str, bool]:
     def is_app(actor: object) -> bool:
         return _object(actor) == {"__typename": "Bot", "login": REVIEWER_APP, "databaseId": REVIEWER_BOT_ID}
 
@@ -85,7 +85,8 @@ def _app_timeline(cli: str, name: str, repository_id: int, pull: dict[str, Any],
     merges = [event for event in events if event["__typename"] == "MergedEvent"]
     if len(merges) != 1 or _object(merges[0].get("commit")).get("oid") != commit:
         raise ValueError("release_delivery_automation_unverified")
-    return digest_ref(canonical_json({"events": events, "active_request": current}))
+    enabled_event = any(event["__typename"] == "AutoMergeEnabledEvent" for event in events)
+    return digest_ref(canonical_json({"events": events, "active_request": current})), enabled_event
 
 
 def observe_merged_delivery(repo: Path, pull_request: str, commit: str) -> dict[str, Any]:
@@ -104,6 +105,10 @@ def observe_merged_delivery(repo: Path, pull_request: str, commit: str) -> dict[
 
     def read(suffix: str = "") -> object:
         return github_json(prefix + suffix, github_cli=cli, unavailable=UNAVAILABLE)
+
+    def read_log(suffix: str) -> bytes:
+        return github_bytes(prefix + suffix, github_cli=cli, unavailable=UNAVAILABLE,
+                            parameters=("--allow-escape-sequences",))
 
     identity = _object(read())
     name, branch = identity.get("full_name"), identity.get("default_branch")
@@ -151,7 +156,7 @@ def observe_merged_delivery(repo: Path, pull_request: str, commit: str) -> dict[
                 or len(approval) != 1 or approval[0].get("state") != "APPROVED"):
             raise ValueError("release_delivery_app_unverified")
         reviewer = REVIEWER_BOT_ID
-        automation = _app_timeline(cli, name, repository_id, pull, commit)
+        automation, armed = _app_timeline(cli, name, repository_id, pull, commit)
         checks = _rows(_object(read(f"/commits/{head}/check-runs?check_name=ci-required&filter=latest"))
                        .get("check_runs"))
         required = [row for row in checks if row.get("name") == "ci-required" and row.get("head_sha") == head
@@ -163,7 +168,8 @@ def observe_merged_delivery(repo: Path, pull_request: str, commit: str) -> dict[
         base_revision = base.get("sha")
         if not isinstance(base_revision, str) or REVISION.fullmatch(base_revision) is None:
             raise ValueError("release_delivery_review_unverified")
-        admitted_review = verify_dev_review(read, pull, approval[0], commit=commit, head=head, base=base_revision)
+        admitted_review = verify_dev_review(read, read_log, pull, approval[0], commit=commit, head=head,
+                                            base=base_revision, armed=armed)
     return {
         "repository_id": repository_id, "canonical_url": f"https://github.com/{name}/pull/{number}",
         "branch": branch, "merge_commit": commit, "reviewed_commit": head,

@@ -22,7 +22,7 @@ from doc_warden.gsd_adapter import (
     requirements_current_view,
 )
 from doc_warden.operation_store import load_preview, store_preview
-from doc_warden.review_admission import _dev_reviewer, _public_dev_git_tuple
+from doc_warden.review_admission import _dev_reviewer, _job_proves_delivery, _public_dev_git_tuple
 from fixture_factory import FixtureFactory
 
 
@@ -927,6 +927,35 @@ class ProductLifecycleTests(unittest.TestCase):
                              (base, reviewer.digest(b"exact fixture diff\n")))
             self.assertEqual(git.call_count, 6)
 
+    def test_dev_review_refuses_modified_helper_before_execution(self):
+        with patch.object(Path, "read_bytes", return_value=b"raise AssertionError('unverified code ran')\n"):
+            with self.assertRaisesRegex(ValueError, "^release_delivery_review_unverified$"):
+                _dev_reviewer()
+
+    def test_dev_review_requires_protected_witness_for_direct_squash_or_armed_delivery(self):
+        current = {"repository_id": 1459458379, "head_sha": "a" * 40, "base_sha": "b" * 40}
+        commit = "c" * 40
+        admission = {"status": "qualified-read-only", "tuple": current, "mutated": False}
+        direct = {"status": "merged", "merged": True, "head_sha": current["head_sha"],
+                  "base_sha": current["base_sha"], "merge_sha": commit}
+        requested = {"status": "armed", "merged": False, "head_sha": current["head_sha"]}
+
+        def witness(*records, second_target=10):
+            messages = ["TARGET_PR: 10", f"TARGET_PR: {second_target}", *(json.dumps(row) for row in records)]
+            return b"".join(f"2026-11-21T00:00:00.000Z {message}\n".encode() for message in messages)
+
+        self.assertTrue(_job_proves_delivery(witness(admission, direct), current, number=10, commit=commit, armed=False))
+        self.assertTrue(_job_proves_delivery(witness(admission, requested), current, number=10, commit=commit, armed=True))
+        for log, armed in (
+            (witness(direct), False),
+            (witness(admission, direct, second_target=11), False),
+            (witness(admission, direct | {"merge_sha": "d" * 40}), False),
+            (witness(admission, direct, direct), False),
+            (witness(admission, requested), False),
+        ):
+            with self.subTest(log=log, armed=armed):
+                self.assertFalse(_job_proves_delivery(log, current, number=10, commit=commit, armed=armed))
+
     def test_release_artifact_binds_plan_verification_uat_commit_and_pr(self):
         repo = self.fixture.repo
         profile_path = repo / ".planning/doc-warden.json"
@@ -1029,9 +1058,9 @@ class ProductLifecycleTests(unittest.TestCase):
                 self.assertEqual(receipt["bindings"]["release_delivery"]["reviewed_commit"], reviewed_head)
                 self.assertEqual(receipt["bindings"]["release_delivery"]["review_receipt_digest"], review_digest)
                 originating_review.assert_called_with(
-                    unittest.mock.ANY, delivery_rows[prefix + "/pulls/1"],
+                    unittest.mock.ANY, unittest.mock.ANY, delivery_rows[prefix + "/pulls/1"],
                     delivery_rows[prefix + "/pulls/1/reviews?per_page=100"][0],
-                    commit=head, head=reviewed_head, base=admitted_base,
+                    commit=head, head=reviewed_head, base=admitted_base, armed=False,
                 )
                 remote.side_effect = ValueError("release_delivery_unavailable")
                 self.assertEqual(apply_preview(resumed, consent), receipt)
