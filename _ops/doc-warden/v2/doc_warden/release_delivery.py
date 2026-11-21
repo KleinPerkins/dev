@@ -165,11 +165,7 @@ def observe_merged_delivery(repo: Path, pull_request: str, commit: str) -> dict[
                 or required[0].get("conclusion") != "success" or type(required[0].get("id")) is not int):
             raise ValueError("release_delivery_ci_unverified")
         check_id = required[0]["id"]
-        base_revision = base.get("sha")
-        if not isinstance(base_revision, str) or REVISION.fullmatch(base_revision) is None:
-            raise ValueError("release_delivery_review_unverified")
-        admitted_review = verify_dev_review(read, read_log, pull, approval[0], commit=commit, head=head,
-                                            base=base_revision, armed=armed)
+        admitted_review = verify_dev_review(read, read_log, pull, approval[0], commit=commit, head=head, armed=armed)
     return {
         "repository_id": repository_id, "canonical_url": f"https://github.com/{name}/pull/{number}",
         "branch": branch, "merge_commit": commit, "reviewed_commit": head,

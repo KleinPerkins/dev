@@ -933,12 +933,27 @@ class ProductLifecycleTests(unittest.TestCase):
 
     def test_dev_review_checks_squash_parent_before_reading_any_helper(self):
         head, base, commit = "a" * 40, "b" * 40, "c" * 40
-        read = unittest.mock.Mock(return_value={"sha": commit, "parents": [{"sha": head}]})
+        read = unittest.mock.Mock(return_value={"sha": commit, "parents": [{"sha": base}, {"sha": head}]})
         read_log = unittest.mock.Mock()
         with self.assertRaisesRegex(ValueError, "^release_delivery_review_unverified$"):
-            verify_dev_review(read, read_log, {}, {}, commit=commit, head=head, base=base, armed=False)
+            verify_dev_review(read, read_log, {}, {}, commit=commit, head=head, armed=False)
         read.assert_called_once_with(f"/git/commits/{commit}")
         read_log.assert_not_called()
+
+    def test_dev_review_reads_helper_at_immutable_parent_after_default_branch_advances(self):
+        head, original_base, commit, tip = (letter * 40 for letter in "abcd")
+        pull = {"base": {"sha": tip}}
+        read = unittest.mock.Mock(side_effect=[
+            {"sha": commit, "parents": [{"sha": original_base}]}, {"encoding": "base64", "content": "eA=="},
+        ])
+        with patch("doc_warden.review_admission._dev_reviewer", side_effect=ValueError) as load:
+            with self.assertRaisesRegex(ValueError, "^release_delivery_review_unverified$"):
+                verify_dev_review(read, unittest.mock.Mock(), pull, {}, commit=commit, head=head, armed=False)
+        self.assertEqual(read.call_args_list, [
+            unittest.mock.call(f"/git/commits/{commit}"),
+            unittest.mock.call(f"/contents/scripts/reviewer_app.py?ref={original_base}"),
+        ])
+        load.assert_called_once_with(b"x", original_base)
 
     def test_dev_review_requires_protected_witness_for_direct_squash_or_armed_delivery(self):
         current = {"repository_id": 1459458379, "head_sha": "a" * 40, "base_sha": "b" * 40}
@@ -1068,7 +1083,7 @@ class ProductLifecycleTests(unittest.TestCase):
                 originating_review.assert_called_with(
                     unittest.mock.ANY, unittest.mock.ANY, delivery_rows[prefix + "/pulls/1"],
                     delivery_rows[prefix + "/pulls/1/reviews?per_page=100"][0],
-                    commit=head, head=reviewed_head, base=admitted_base, armed=False,
+                    commit=head, head=reviewed_head, armed=False,
                 )
                 remote.side_effect = ValueError("release_delivery_unavailable")
                 self.assertEqual(apply_preview(resumed, consent), receipt)

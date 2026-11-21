@@ -230,8 +230,9 @@ Prepare and apply installation or removal within 24 hours of qualification.
 After that, qualify again and prepare a new preview. `doctor-gsd` can still
 inspect the verified installed runtime with its original qualification record.
 For later removal, use `runtime uninstall-gsd --preview` for the same
-destinations and apply its own exact consent envelope. A recorded removal can
-replay without invoking the uninstaller again. If completion cannot be verified,
+destinations and apply its own exact consent envelope. The preview checks
+installed ownership and recovery preimages independently of install readiness.
+A recorded removal can replay without invoking the uninstaller again. If completion cannot be verified,
 Doc-Warden reports `live_uninstall_recovery_required` and retains its private
 pending operation and any available preimage record for recovery.
 

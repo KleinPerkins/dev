@@ -661,6 +661,31 @@ class LiveInstallTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "runtime_install_repository_identity_mismatch"):
                     prepare_install(repo, home=home, data_home=data)
 
+    def test_uninstall_preview_and_apply_do_not_run_installation_preflight(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            repo, _ = live_install_repository(root)
+            home, data = root / "home", root / "data"
+
+            def fail_install_check(script, *arguments, **options):
+                if arguments == ("--check",):
+                    raise subprocess.CalledProcessError(1, [str(script), *arguments])
+                return run_runtime_script(script, *arguments, **options)
+
+            with mock.patch.dict("os.environ", {"XDG_STATE_HOME": str(root / "state")}), mock.patch(
+                "doc_warden.live_install.run_runtime_script", side_effect=fail_install_check,
+            ) as owner:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    prepare_install(repo, home=home, data_home=data)
+                owner.reset_mock()
+                preview = prepare_uninstall(repo, home=home, data_home=data)
+                self.assertEqual(preview["status"], "ready")
+                owner.assert_not_called()
+                operation = load_install_operation(preview["operation_id"], preview["action_digest"])
+                applied = apply_prepared_install(operation, live_install_consent(operation), real_home=root / "real-home")
+                self.assertEqual(applied["status"], "applied")
+                self.assertEqual([call.args[1:] for call in owner.call_args_list], [("--uninstall",)])
+
     def assert_install_revalidation_refuses(self, operation, consent=None):
         with mock.patch("doc_warden.live_install.apply_install") as installer:
             with self.assertRaisesRegex(

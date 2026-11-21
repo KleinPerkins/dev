@@ -164,7 +164,7 @@ def _dev_workflow_witness(reviewer, read: Callable[[str], Any], read_log: Callab
 
 def verify_dev_review(
     read: Callable[[str], Any], read_log: Callable[[str], bytes],
-    pull: dict[str, Any], approval: dict[str, Any], *, commit: str, head: str, base: str, armed: bool,
+    pull: dict[str, Any], approval: dict[str, Any], *, commit: str, head: str, armed: bool,
 ) -> str:
     try:
         # observe_merged_delivery has already proved this exact merge reached
@@ -172,8 +172,10 @@ def verify_dev_review(
         # base. Only read protected helper bytes from that authenticated Git
         # object, never from the PR head or the mutable local checkout.
         merged = read(f"/git/commits/{commit}")
-        if merged["sha"] != commit or [parent["sha"] for parent in merged["parents"]] != [base]:
+        parents = [parent["sha"] for parent in merged["parents"]]
+        if merged["sha"] != commit or len(parents) != 1 or re.fullmatch(r"[0-9a-f]{40}", parents[0]) is None:
             raise ValueError("release_delivery_review_unverified")
+        base = parents[0]
         reviewer = _dev_reviewer(_historical_source(read, APP_SCRIPT_PATH, base), base)
     except (ImportError, SyntaxError, ValueError, TypeError, AttributeError, KeyError, OSError) as exc:
         raise ValueError("release_delivery_review_unverified") from exc

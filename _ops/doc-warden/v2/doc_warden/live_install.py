@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import base64
@@ -356,6 +355,15 @@ def _validated_runtime_files(
     return runtime / QUALIFICATION_DIGEST_PATHS["installer_sha256"]
 
 
+def _runtime_preview_fields(runtime: Path, home: Path) -> dict[str, Any]:
+    interface = parse_json_object((runtime / "runtime-interface.v1.json").read_bytes())
+    return {
+        "home": str(home),
+        "paths": [f".cursor/skills/{entry['id']}" for entry in interface["host_skills"]],
+        "runtime_pin_digest": digest_ref((runtime / "gsd-core-pin.json").read_bytes()),
+    }
+
+
 def preview_install(
     repo: Path,
     *,
@@ -375,21 +383,12 @@ def preview_install(
     )
     if _sentinels(home, data_home) != before:
         raise ValueError("live_install_preview_wrote_state")
-    interface = json.loads((runtime / "runtime-interface.v1.json").read_text())
-    paths = [
-        f".cursor/skills/{entry['id']}"
-        for entry in interface["host_skills"]
-    ]
     return {
         "schema": "doc-warden/live-install-preview/v1",
         "status": "ready",
-        "home": str(home),
-        "paths": paths,
+        **_runtime_preview_fields(runtime, home),
         "global_hooks": proposed_hooks or [],
         "rollback": "runtime uninstall-gsd --preview",
-        "runtime_pin_digest": digest_ref(
-            (runtime / "gsd-core-pin.json").read_bytes()
-        ),
     }
 
 
@@ -417,17 +416,17 @@ def _prepare_runtime_change(
     if str(uuid.UUID(operation)) != operation:
         raise ValueError("operation_id_invalid")
     repository_key, github_repository_id, qualification = _destination_installation(repo, home, data_home)
-    preview = preview_install(repo, home=home, data_home=data_home, toolchain=qualification.toolchain)
     if consequence == UNINSTALL_CONSEQUENCE:
         _validate_uninstall_destinations(home, data_home)
         wrapper = _wrapper_path(data_home)
         if wrapper.exists() or wrapper.is_symlink():
             _check_wrapper_postimages(home, _read_wrapper_record(wrapper))
         preview = {
-            "schema": "doc-warden/live-uninstall-preview/v1", "status": "ready", "home": str(home),
-            "paths": preview["paths"], "ownership": "manifest_identity_matching_only",
-            "runtime_pin_digest": preview["runtime_pin_digest"],
+            "schema": "doc-warden/live-uninstall-preview/v1", "status": "ready",
+            **_runtime_preview_fields(_runtime(repo), home), "ownership": "manifest_identity_matching_only",
         }
+    else:
+        preview = preview_install(repo, home=home, data_home=data_home, toolchain=qualification.toolchain)
     if qualification.runtime_digests["pin_sha256"] != preview["runtime_pin_digest"]:
         raise ValueError("runtime_qualification_digest_mismatch")
     source_revision = subprocess.check_output(
