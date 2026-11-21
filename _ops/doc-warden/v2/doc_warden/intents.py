@@ -194,7 +194,7 @@ INTENT_SPECS: dict[str, IntentSpec] = {
     "pause": _spec(
         "pause",
         "Pause here.",
-        (r"\bpause (?:here|the work)\b",),
+        (r"\bpause (?:here|the work)\b(?! with continuity)",),
         'v2-preview intent "Pause here."',
         "authoring_state",
         native_dispatch="operator_invoke_required",
@@ -206,6 +206,34 @@ INTENT_SPECS: dict[str, IntentSpec] = {
         'v2-preview intent "Resume the work."',
         "execution",
         native_dispatch="operator_invoke_required",
+    ),
+    "checkpoint_authoring": _spec(
+        "checkpoint_authoring",
+        "Checkpoint this authoring session.",
+        (r"\bcheckpoint (?:this |the |my )?authoring(?: session| state| work)?\b",),
+        "checkpoint --state <state-file> --event <event-file> --operation-id <operation-id> --preview",
+        "authoring_continuity",
+    ),
+    "handoff_authoring": _spec(
+        "handoff_authoring",
+        "Hand off this authoring session.",
+        (r"\b(?:hand off|handoff) (?:this |the |my )?authoring(?: session| state| work)?\b",),
+        "handoff --state <state-file> --event <event-file> --operation-id <operation-id> --preview",
+        "authoring_continuity",
+    ),
+    "pause_with_continuity": _spec(
+        "pause_with_continuity",
+        "Pause with continuity.",
+        (r"\bpause(?: here| the work)? with continuity\b",),
+        "pause-with-continuity --state <state-file> --event <event-file> --operation-id <operation-id> --preview",
+        "authoring_continuity",
+    ),
+    "resume_authoring": _spec(
+        "resume_authoring",
+        "Resume this authoring session.",
+        (r"\bresume (?:this |the |my )?authoring(?: session| state| work)?\b",),
+        "resume-authoring --state <state-file> --event <event-file> --operation-id <operation-id> --preview",
+        "authoring_continuity",
     ),
     "verify": _spec(
         "verify",
@@ -283,7 +311,7 @@ def map_intent(
         return _unmatched()
 
     consequences = {spec.consequence for spec in matches}
-    if len(consequences) > 1:
+    if len(consequences) > 1 or ("authoring_continuity" in consequences and len(matches) > 1):
         candidates = tuple(spec.intent for spec in matches)
         return ProposedIntent(
             status="ambiguous",

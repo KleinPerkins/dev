@@ -12,6 +12,7 @@ from unittest import mock
 import doc_warden.live_install as live_install_module
 from doc_warden.artifacts import apply_preview, consent_for, repository_profile
 from doc_warden.canonical import canonical_json, digest_ref, parse_json_object
+from doc_warden.gsd_adapter import CENTRAL_REPOSITORY_ID, CENTRAL_REPOSITORY_KEY as CURRENT_REPOSITORY_KEY
 from doc_warden.live_install import (
     CENTRAL_REPOSITORY_KEY,
     GSD_COMMIT,
@@ -28,12 +29,15 @@ from doc_warden.live_install import (
     doctor_observation_status,
     load_install_operation,
     prepare_install,
+    prepare_uninstall,
     preview_doctor_receipt,
     preview_install,
     uninstall,
     validate_doctor_observation,
     validate_global_hooks,
 )
+from doc_warden.runtime_host import _toolchain, qualify_destination
+from doc_warden.scm import RepositoryIdentity
 from fixture_factory import ROOT
 
 
@@ -194,6 +198,7 @@ def live_install_fixture(root: Path):
 
 
 def installed_runtime_fixture(root: Path):
+    root = root.resolve(strict=True)
     repo, qualification = live_install_repository(root)
     subprocess.run(
         [
@@ -302,6 +307,272 @@ def run_doc_warden_cli(*arguments, extra_env=None, check=True):
 
 
 class LiveInstallTests(unittest.TestCase):
+    def test_only_the_gated_wrapper_passes_the_live_home_flag(self):
+        with mock.patch.dict(os.environ, {"DOC_WARDEN_ALLOW_LIVE_HOME": "1"}):
+            self.assertNotIn("DOC_WARDEN_ALLOW_LIVE_HOME", live_install_module._environment(ROOT, ROOT))
+            authorized = live_install_module._environment(ROOT, ROOT, allow_live_home=True)
+        self.assertEqual(authorized["DOC_WARDEN_ALLOW_LIVE_HOME"], "1")
+
+    def test_uninstall_accepts_exact_legacy_destination_alias(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            repo, home, data, _, manifest = installed_runtime_fixture(root)
+            alias = root / "alias"
+            alias.symlink_to(root, target_is_directory=True)
+            recorded_home, recorded_data = alias / home.name, alias / data.name
+            record = parse_json_object(manifest.read_bytes())
+            record.update(cursor_root=str(recorded_home / ".cursor"),
+                          release_root=str(recorded_data / "gsd-core/releases" / GSD_COMMIT))
+            manifest.write_bytes(canonical_json(record))
+            with mock.patch("doc_warden.live_install.subprocess.run") as owner:
+                uninstall(repo, home=home, data_home=data)
+            self.assertEqual(owner.call_args.kwargs["env"]["HOME"], str(recorded_home))
+            self.assertEqual(owner.call_args.kwargs["env"]["XDG_DATA_HOME"], str(recorded_data))
+
+    def test_uninstall_refuses_data_owned_by_another_home(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            repo, _, data, _, manifest = installed_runtime_fixture(root)
+            original = manifest.read_bytes()
+            with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(root / "state")}):
+                with self.assertRaisesRegex(ValueError, "live_uninstall_destination_mismatch"):
+                    prepare_uninstall(repo, home=root / "another-home", data_home=data)
+            self.assertEqual(manifest.read_bytes(), original)
+
+    def test_uninstall_cli_requires_exact_apply_and_binds_destination_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            repo, _ = live_install_repository(root)
+            home, data = root / "home", root / "data"
+            sentinel = home / ".gsd/defaults.json"
+            sentinel.parent.mkdir(parents=True)
+            sentinel.write_bytes(b"before")
+            environment = {"XDG_STATE_HOME": str(root / "state")}
+            uninstall_args = ("runtime", "uninstall-gsd", "--repo", str(repo), "--home", str(home),
+                              "--data-home", str(data))
+            result = run_doc_warden_cli(*uninstall_args, extra_env=environment, check=False)
+            self.assertEqual(parse_json_object(result.stdout)["code"], "runtime_apply_requires_generic_apply")
+            preview = parse_json_object(run_doc_warden_cli(
+                *uninstall_args, "--preview", extra_env=environment,
+            ).stdout)
+            self.assertEqual(preview["consequence"], "live_runtime_uninstall")
+            self.assertEqual(preview["data_home"], str(data))
+            apply_args = ("apply", "--operation-id", preview["operation_id"],
+                          "--action-digest", preview["action_digest"])
+            result = run_doc_warden_cli(*apply_args, extra_env=environment, check=False)
+            self.assertEqual(parse_json_object(result.stdout)["code"], "fresh_exact_consent_required")
+            with mock.patch.dict(os.environ, environment):
+                operation = load_install_operation(preview["operation_id"], preview["action_digest"])
+                envelope = root / "consent.json"
+                envelope.write_bytes(canonical_json(live_install_consent(operation)))
+            apply_args += ("--consent-envelope", str(envelope))
+            sentinel.write_bytes(b"operator changed after preview")
+            result = run_doc_warden_cli(*apply_args, extra_env=environment, check=False)
+            self.assertEqual(parse_json_object(result.stdout)["code"], "operation_specification_mismatch")
+            self.assertEqual(sentinel.read_bytes(), b"operator changed after preview")
+            sentinel.write_bytes(b"before")
+            applied = run_doc_warden_cli(*apply_args, extra_env=environment)
+            replayed = run_doc_warden_cli(*apply_args, extra_env=environment)
+            self.assertEqual(applied.stdout, replayed.stdout)
+            self.assertEqual(parse_json_object(applied.stdout)["schema"], "doc-warden/live-uninstall-result/v1")
+
+    def test_install_and_uninstall_refuse_when_either_destination_has_a_writer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo, _ = live_install_repository(root)
+            home, data = root / "home", root / "data"
+            with mock.patch.dict("os.environ", {"XDG_STATE_HOME": str(root / "state")}):
+                targets = ((home, data), (home, root / "other-data"), (root / "other-home", data))
+                operations = []
+                for target_home, target_data in targets:
+                    preview = prepare_install(repo, home=target_home, data_home=target_data)
+                    operations.append(load_install_operation(preview["operation_id"], preview["action_digest"]))
+                with live_install_module._runtime_writer(home, data), mock.patch(
+                    "doc_warden.live_install.apply_install",
+                ) as installer, mock.patch("doc_warden.live_install._uninstall_locked") as uninstaller:
+                    for operation in operations:
+                        with self.subTest(home=operation.home, data=operation.data_home):
+                            with self.assertRaisesRegex(ValueError, "^live_install_operation_busy$"):
+                                apply_prepared_install(operation, live_install_consent(operation),
+                                                       real_home=root / "actual-home")
+                            with self.assertRaisesRegex(ValueError, "^live_install_operation_busy$"):
+                                uninstall(operation.repo, home=operation.home, data_home=operation.data_home)
+                    installer.assert_not_called()
+                    uninstaller.assert_not_called()
+
+    def test_same_version_toolchain_replacement_changes_host_binding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("node", "npm", "python3", "bash"):
+                binary = root / name
+                binary.write_text("#!/bin/sh\nprintf 'fixture version\n'\n")
+                binary.chmod(0o755)
+            with mock.patch.dict("os.environ", {"PATH": str(root)}):
+                initial = _toolchain()
+                (root / "python3").write_text("#!/bin/sh\n# replacement\nprintf 'fixture version\n'\n")
+                changed = _toolchain()
+            self.assertEqual(initial["executables"]["python3"]["version"],
+                             changed["executables"]["python3"]["version"])
+            self.assertNotEqual(initial, changed)
+
+    def test_exact_install_replay_reads_the_record_and_recovers_before_completion_record(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo, _ = live_install_repository(root)
+            home, data = root / "home", root / "data"
+            with mock.patch.dict("os.environ", {"XDG_STATE_HOME": str(root / "state")}):
+                preview = prepare_install(repo, home=home, data_home=data)
+                operation = load_install_operation(preview["operation_id"], preview["action_digest"])
+                consent = live_install_consent(operation)
+                actual_write = live_install_module.atomic_write
+
+                def lose_result(destination, relative, content):
+                    if relative.startswith("runtime/install-"):
+                        raise OSError("fixture crash before recording the outcome")
+                    return actual_write(destination, relative, content)
+
+                with mock.patch("doc_warden.live_install.atomic_write", side_effect=lose_result):
+                    with self.assertRaisesRegex(OSError, "fixture crash"):
+                        apply_prepared_install(operation, consent, real_home=root / "actual-home")
+                wrapper = data / "gsd-core/doc-warden-wrapper-preimage.json"
+                self.assertTrue(wrapper.is_file())
+                with mock.patch("doc_warden.live_install.apply_install") as fresh_install:
+                    recovered = apply_prepared_install(operation, consent, real_home=root / "actual-home")
+                    replay = apply_prepared_install(operation, consent, real_home=root / "actual-home")
+                    fresh_install.assert_not_called()
+                self.assertEqual(recovered, replay)
+                self.assertEqual(replay["status"], "applied")
+
+    def test_uninstall_preserves_later_edits_and_keeps_preimages_after_owner_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo, _ = live_install_repository(root)
+            home, data = root / "home", root / "data"
+            path = home / ".cursor/gsd-install-state.json"
+            path.parent.mkdir(parents=True)
+            path.write_bytes(b"original")
+
+            def simulate_install(*args, **kwargs):
+                path.write_bytes(b"installed")
+
+            with mock.patch("doc_warden.live_install.subprocess.run", side_effect=simulate_install):
+                apply_install(repo, home=home, data_home=data, isolated_home_qualified=True,
+                              host_signer_qualified=False, real_home=root / "actual-home",
+                              expected_runtime_digests=runtime_digests(repo))
+            receipt = data / "gsd-core/doc-warden-wrapper-preimage.json"
+            before = receipt.read_bytes()
+            path.write_bytes(b"later edit")
+            with mock.patch("doc_warden.live_install.subprocess.run") as owner:
+                with self.assertRaisesRegex(ValueError, "live_install_postimage_changed"):
+                    uninstall(repo, home=home, data_home=data)
+                owner.assert_not_called()
+            self.assertEqual(path.read_bytes(), b"later edit")
+            self.assertEqual(receipt.read_bytes(), before)
+            path.write_bytes(b"installed")
+            with mock.patch("doc_warden.live_install.subprocess.run",
+                            side_effect=subprocess.CalledProcessError(1, "fixture uninstaller")):
+                with self.assertRaisesRegex(ValueError, "live_install_uninstall_incomplete"):
+                    uninstall(repo, home=home, data_home=data)
+            self.assertEqual(path.read_bytes(), b"installed")
+            self.assertEqual(receipt.read_bytes(), before)
+
+    def test_uninstall_recovers_its_durable_outcome_or_retains_recovery_evidence(self):
+        for failed_step in ("record_completion", "remove_wrapper"):
+            with self.subTest(failed_step=failed_step), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory).resolve()
+                repo, _ = live_install_repository(root)
+                home, data = root / "home", root / "data"
+                residue = home / ".cursor/gsd-install-state.json"
+                residue.parent.mkdir(parents=True)
+                residue.write_bytes(b"original")
+
+                def simulate_install(*args, **kwargs):
+                    residue.write_bytes(b"installed")
+
+                with mock.patch("doc_warden.live_install.subprocess.run", side_effect=simulate_install):
+                    apply_install(repo, home=home, data_home=data, isolated_home_qualified=True,
+                                  host_signer_qualified=False, real_home=root / "actual-home",
+                                  expected_runtime_digests=runtime_digests(repo))
+                wrapper = data / "gsd-core/doc-warden-wrapper-preimage.json"
+                original_write = live_install_module.atomic_write
+                original_unlink = Path.unlink
+                with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(root / "state")}):
+                    preview = prepare_uninstall(repo, home=home, data_home=data)
+                    operation = load_install_operation(preview["operation_id"], preview["action_digest"])
+                    consent = live_install_consent(operation)
+                    basename = f"uninstall-{operation.operation_id}.json"
+                    state = root / "state/doc-warden/runtime"
+
+                    def lose_receipt(destination, name, content):
+                        if Path(name).name == basename and failed_step == "record_completion":
+                            raise OSError("fixture completion storage failure")
+                        return original_write(destination, name, content)
+
+                    def fail_unlink(path, *args, **kwargs):
+                        if path == wrapper and failed_step == "remove_wrapper":
+                            raise OSError("fixture wrapper release failure")
+                        return original_unlink(path, *args, **kwargs)
+
+                    with mock.patch("doc_warden.live_install.atomic_write", side_effect=lose_receipt), mock.patch.object(
+                        Path, "unlink", fail_unlink,
+                    ):
+                        with self.assertRaisesRegex(ValueError, "live_uninstall_recovery_required"):
+                            apply_prepared_install(operation, consent, real_home=root / "actual-home")
+                    self.assertEqual(residue.read_bytes(), b"original")
+                    self.assertTrue(wrapper.is_file())
+                    pending = state / f"uninstall-pending-{operation.operation_id}.json"
+                    self.assertTrue(pending.is_file())
+                    with mock.patch("doc_warden.live_install._uninstall_locked") as owner:
+                        if failed_step == "record_completion":
+                            with self.assertRaisesRegex(ValueError, "live_uninstall_recovery_required"):
+                                apply_prepared_install(operation, consent, real_home=root / "actual-home")
+                            self.assertTrue(wrapper.is_file())
+                            self.assertTrue(pending.is_file())
+                            self.assertFalse((state / basename).exists())
+                        else:
+                            result = apply_prepared_install(operation, consent, real_home=root / "actual-home")
+                            self.assertEqual(result["status"], "applied")
+                            self.assertFalse(wrapper.exists())
+                            self.assertFalse(pending.exists())
+                        owner.assert_not_called()
+
+    def test_current_owner_requires_qualification_for_this_exact_destination(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo, _ = live_install_repository(root)
+            home, data = root / "qualified-home", root / "data"
+            profile = repo / ".planning/doc-warden.json"
+            profile.parent.mkdir()
+            profile.write_bytes(canonical_json(repository_profile(
+                repo, CURRENT_REPOSITORY_KEY, github_repository_id=CENTRAL_REPOSITORY_ID,
+            )))
+            with mock.patch.dict("os.environ", {"XDG_STATE_HOME": str(root / "state")}), mock.patch(
+                "doc_warden.runtime_host.observe_repository_identity",
+                return_value=RepositoryIdentity("KleinPerkins/dev", CENTRAL_REPOSITORY_ID),
+            ) as identity, mock.patch(
+                "doc_warden.runtime_host._toolchain", return_value={"node": "fixture", "npm": "fixture"},
+            ):
+                with self.assertRaisesRegex(ValueError, "runtime_destination_qualification_required"):
+                    prepare_install(repo, home=home, data_home=data)
+                evidence = qualify_destination(repo, home=home, data_home=data)
+                self.assertEqual(evidence["status"], "qualified")
+                preview = prepare_install(repo, home=home, data_home=data)
+                self.assertEqual(preview["repository_key"], CURRENT_REPOSITORY_KEY)
+                self.assertEqual(preview["github_repository_id"], CENTRAL_REPOSITORY_ID)
+                with self.assertRaisesRegex(ValueError, "runtime_destination_qualification_required"):
+                    prepare_install(repo, home=root / "other-home", data_home=data)
+                with mock.patch("doc_warden.live_install.apply_install") as installer, mock.patch(
+                    "doc_warden.live_install._live_doctor_state",
+                ) as readback:
+                    operation = load_install_operation(preview["operation_id"], preview["action_digest"])
+                    result = apply_prepared_install(operation, live_install_consent(operation), real_home=home)
+                    self.assertEqual(result["status"], "applied")
+                    installer.assert_called_once()
+                    readback.assert_called_once()
+                identity.return_value = RepositoryIdentity("KleinPerkins/dev", 111)
+                with self.assertRaisesRegex(ValueError, "runtime_install_repository_identity_mismatch"):
+                    prepare_install(repo, home=home, data_home=data)
+
     def assert_install_revalidation_refuses(self, operation, consent=None):
         with mock.patch("doc_warden.live_install.apply_install") as installer:
             with self.assertRaisesRegex(
@@ -314,7 +585,7 @@ class LiveInstallTests(unittest.TestCase):
                         if consent is not None
                         else live_install_consent(operation)
                     ),
-                    real_home=operation.home,
+                    real_home=operation.home.with_name("real-home"),
                 )
         installer.assert_not_called()
 
@@ -378,9 +649,10 @@ class LiveInstallTests(unittest.TestCase):
                 with mock.patch(
                     "doc_warden.live_install.apply_install"
                 ) as installer:
-                    result = apply_prepared_install(
-                        operation, consent, real_home=home.resolve()
-                    )
+                    with self.assertRaisesRegex(ValueError, "runtime_destination_qualification_required"):
+                        apply_prepared_install(operation, consent, real_home=home.resolve())
+                    installer.assert_not_called()
+                    result = apply_prepared_install(operation, consent, real_home=root / "real-home")
                 installer.assert_called_once()
                 self.assertEqual(
                     installer.call_args.kwargs["expected_runtime_digests"],
@@ -510,7 +782,7 @@ class LiveInstallTests(unittest.TestCase):
                 apply_prepared_install(
                     operation,
                     live_install_consent(operation),
-                    real_home=operation.home,
+                    real_home=root / "real-home",
                 )
             self.assertEqual(validation_count, 2)
             self.assertFalse(executed.exists())
@@ -766,7 +1038,7 @@ class LiveInstallTests(unittest.TestCase):
                 (data / "gsd-core/doc-warden-wrapper-preimage.json").exists()
             )
 
-    def test_failed_install_restores_wrapper_even_if_upstream_uninstall_fails(self):
+    def test_failed_install_retains_recovery_preimage_if_upstream_uninstall_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             home = root / "home"
@@ -792,7 +1064,7 @@ class LiveInstallTests(unittest.TestCase):
                         expected_runtime_digests=runtime_digests(ROOT),
                     )
             self.assertEqual(marker.read_text(), "before\n")
-            self.assertFalse(
+            self.assertTrue(
                 (data / "gsd-core/doc-warden-wrapper-preimage.json").exists()
             )
 

@@ -53,6 +53,8 @@ type FleetRepository = {
   mutation_eligible?: boolean;
   docs_only?: boolean;
   checkout_count?: number;
+  source_revision?: string | null;
+  observed_at?: string | null;
 };
 
 type Snapshot = {
@@ -147,6 +149,8 @@ export default function DocWardenRoadmap() {
         ? "Explicit exclusion"
         : "Governance target",
     labelReason(repository.reason),
+    repository.source_revision?.slice(0, 12) ?? "—",
+    repository.observed_at ?? "—",
     labelNextAction(repository.next_action),
   ]);
 
@@ -299,7 +303,7 @@ export default function DocWardenRoadmap() {
             </CardBody>
           </Card>
           <Table
-            headers={["Repository", "Catalog status", "Governance", "Reason", "Next action"]}
+            headers={["Repository", "Catalog status", "Governance", "Reason", "Revision", "Observed at", "Next action"]}
             rows={fleetRows}
             striped
           />

@@ -1,9 +1,12 @@
+import io
 import json
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from doc_warden.artifacts import apply_preview, consent_for, draft_artifact
 from doc_warden.canonical import canonical_json, digest_ref, parse_artifact
+from doc_warden.cli import main
 from doc_warden.validators import validate_design_coverage
 from fixture_factory import FixtureFactory
 
@@ -11,6 +14,31 @@ from fixture_factory import FixtureFactory
 class UiContractTests(unittest.TestCase):
     def setUp(self):
         self.fixture = FixtureFactory.create("ui")
+        self.fixture.approve_prd("REQ-001")
+        self.uxr_id = self.fixture.approve_uxr()
+        asset_record = {
+            "schema": "doc-warden/external-asset/v2", "provider": "figma",
+            "canonical_url": "https://www.figma.com/design/file/Fixture?node-id=1-2",
+            "immutable_revision": "figma-revision-123", "source_repository_key": self.fixture.repository_key,
+            "source_github_repository_id": None, "source_commit": None, "export_sha256": "a" * 64,
+            "captured_at": "2026-08-30T00:00:00Z", "owner": "design-owner", "license": "internal-use",
+            "egress_projection": "external_asset_pointer/v1",
+        }
+        asset_observation = {
+            "schema": "doc-warden/external-asset-observation/v1",
+            "external_asset_digest": digest_ref(canonical_json(asset_record)),
+            "observed_revision": asset_record["immutable_revision"],
+            "observed_export_sha256": asset_record["export_sha256"],
+            "observed_at": "2026-08-30T00:01:00Z", "observed_by": "design-reviewer",
+            "observation_method": "read_only_provider_observation",
+        }
+        asset = draft_artifact("asset", {"title": "Fixture visual", "lifecycle": "approved",
+                                         "approval": {"actor": "fixture", "date": "2026-08-30"},
+                                         "external_asset": asset_record,
+                                         "external_asset_observations": [asset_observation]},
+                               repo=self.fixture.repo)
+        apply_preview(asset, consent_for(asset.transaction))
+        self.asset_id = asset.artifact_id
 
     def tearDown(self):
         repo_path = self.fixture.repo
@@ -50,7 +78,7 @@ class UiContractTests(unittest.TestCase):
                 "tokens": ["color.text.primary"],
                 "components": ["Button"],
             },
-            "visual_assets": ["ASSET-001"],
+            "visual_assets": [self.asset_id],
             "unresolved_interactions": [],
             "prototypes": [],
             "approval": {"approved_by": "operator", "approved_at": "2026-08-30T00:00:00Z"},
@@ -87,6 +115,60 @@ class UiContractTests(unittest.TestCase):
                 {"title": "UI plan", "approved_prd": True, "ui_visual": True},
                 repo=self.fixture.repo,
             )
+
+    def test_ui_plan_requires_actual_uxr_and_verifiable_visual_assets(self):
+        design = self.persist_approved_design(design=self.complete_design() | {"visual_assets": ["ASSET-missing"]})
+        inputs = {"title": "Visual plan", "ui_visual": True, "uxr_id": "UXR-missing",
+                  "design_ids": [design.artifact_id], "design_versions": {design.artifact_id: 1}}
+        with self.assertRaisesRegex(ValueError, "ui_plan_requires_approved_uxr"):
+            draft_artifact("plan", inputs, repo=self.fixture.repo)
+        with self.assertRaisesRegex(ValueError, "ui_visual_asset_unavailable"):
+            draft_artifact("plan", inputs | {"uxr_id": self.uxr_id}, repo=self.fixture.repo)
+
+    def test_design_binding_alone_requires_uxr_and_visual_asset_on_both_authoring_paths(self):
+        design = self.persist_approved_design(design=self.complete_design() | {"visual_assets": ["ASSET-missing"]})
+        repo = self.fixture.repo
+        fields = {"title": "Visual plan", "design_ids": [design.artifact_id],
+                  "design_versions": {design.artifact_id: 1}}
+        base_cli = ["draft", "plan", "--repo", str(repo), "--title", "Visual plan",
+                    "--design-binding", f"{design.artifact_id}@1", "--preview"]
+        for cli_args, inputs, code in (
+            ([], {}, "ui_plan_requires_uxr_and_approved_design"),
+            (["--uxr-id", self.uxr_id], {"uxr_id": self.uxr_id}, "ui_visual_asset_unavailable"),
+        ):
+            for explicit in ({}, {"ui_visual": False}):
+                with self.subTest(inputs=inputs, explicit=explicit), self.assertRaisesRegex(ValueError, f"^{code}$"):
+                    draft_artifact("plan", fields | inputs | explicit, repo=repo)
+            with redirect_stdout(io.StringIO()) as result:
+                self.assertEqual(main(base_cli + cli_args), 1)
+            self.assertEqual(json.loads(result.getvalue())["code"], code)
+
+    def test_design_binding_refuses_changed_frozen_bytes_on_both_authoring_paths(self):
+        design = self.persist_approved_design()
+        repo = self.fixture.repo
+        fields = {"title": "Visual plan", "design_ids": [design.artifact_id],
+                  "design_versions": {design.artifact_id: 1}, "uxr_id": self.uxr_id}
+        path = repo / design.artifact_path
+        original = path.read_bytes()
+        updated = original.replace(b'"open dashboard"', b'"open visual overview"')
+        self.assertNotEqual(updated, original)
+        path.write_bytes(updated)
+        with self.assertRaisesRegex(ValueError, "^authority_freeze_mismatch$"):
+            draft_artifact("plan", fields, repo=repo)
+        with redirect_stdout(io.StringIO()) as result:
+            self.assertEqual(main(["draft", "plan", "--repo", str(repo), "--title", "Visual plan",
+                                   "--design-binding", f"{design.artifact_id}@1",
+                                   "--uxr-id", self.uxr_id, "--preview"]), 1)
+        self.assertEqual(json.loads(result.getvalue())["code"], "authority_freeze_mismatch")
+
+    def test_cli_rejects_conflicting_versions_for_the_same_design(self):
+        design = self.persist_approved_design()
+        with redirect_stdout(io.StringIO()) as result:
+            self.assertEqual(main(["draft", "plan", "--repo", str(self.fixture.repo), "--title", "Visual plan",
+                                   "--design-binding", f"{design.artifact_id}@1",
+                                   "--design-binding", f"{design.artifact_id}@2",
+                                   "--uxr-id", self.uxr_id, "--preview"]), 1)
+        self.assertEqual(json.loads(result.getvalue())["code"], "design_binding_version_conflict")
 
     def test_design_requires_loading_empty_error_success_disabled_and_recovery_states(self):
         design = self.complete_design()
@@ -155,7 +237,7 @@ class UiContractTests(unittest.TestCase):
                     "title": "UI plan",
                     "approved_prd": True,
                     "ui_visual": True,
-                    "uxr_id": "UXR-001",
+                    "uxr_id": self.uxr_id,
                     "design": self.complete_design(),
                 },
                 repo=self.fixture.repo,
@@ -169,7 +251,7 @@ class UiContractTests(unittest.TestCase):
                 "title": "UI plan",
                 "approved_prd": True,
                 "ui_visual": True,
-                "uxr_id": "UXR-001",
+                "uxr_id": self.uxr_id,
                 "design_ids": [design.artifact_id],
                 "design_versions": {design.artifact_id: 1},
             },
@@ -199,9 +281,7 @@ class UiContractTests(unittest.TestCase):
                     repo=self.fixture.repo,
                 )
             emit_preview.assert_not_called()
-        self.assertFalse(
-            (self.fixture.repo / ".planning/artifacts").exists()
-        )
+        self.assertEqual(list((self.fixture.repo / ".planning/artifacts").glob("DESIGN-*.md")), [])
 
     def test_complete_design_contract_is_canonical_persisted_authority(self):
         preview = self.persist_approved_design()
@@ -247,7 +327,7 @@ class UiContractTests(unittest.TestCase):
                         "title": "UI plan",
                         "approved_prd": True,
                         "ui_visual": True,
-                        "uxr_id": "UXR-001",
+                        "uxr_id": self.uxr_id,
                         "design": self.complete_design(),
                         "design_ids": [stub.artifact_id],
                         "design_versions": {stub.artifact_id: 1},
@@ -268,7 +348,7 @@ class UiContractTests(unittest.TestCase):
                         "title": "UI plan",
                         "approved_prd": True,
                         "ui_visual": True,
-                        "uxr_id": "UXR-001",
+                        "uxr_id": self.uxr_id,
                         "design": mismatched,
                         "design_ids": [persisted.artifact_id],
                         "design_versions": {persisted.artifact_id: 1},
@@ -286,7 +366,7 @@ class UiContractTests(unittest.TestCase):
                 "title": "UI plan",
                 "approved_prd": True,
                 "ui_visual": True,
-                "uxr_id": "UXR-001",
+                "uxr_id": self.uxr_id,
                 "design_ids": [persisted.artifact_id],
                 "design_versions": {persisted.artifact_id: 1},
             },
@@ -318,7 +398,7 @@ class UiContractTests(unittest.TestCase):
                 "title": "UI plan",
                 "approved_prd": True,
                 "ui_visual": True,
-                "uxr_id": "UXR-001",
+                "uxr_id": self.uxr_id,
                 "design_ids": [original.artifact_id],
                 "design_versions": {original.artifact_id: 1},
             },
@@ -368,7 +448,7 @@ class UiContractTests(unittest.TestCase):
                     "title": "UI plan",
                     "approved_prd": True,
                     "ui_visual": True,
-                    "uxr_id": "UXR-001",
+                    "uxr_id": self.uxr_id,
                 },
                 repo=self.fixture.repo,
             )
@@ -379,7 +459,7 @@ class UiContractTests(unittest.TestCase):
                 "title": "UI plan",
                 "approved_prd": True,
                 "ui_visual": True,
-                "uxr_id": "UXR-001",
+                "uxr_id": self.uxr_id,
                 "design_ids": [design.artifact_id],
                 "design_versions": {design.artifact_id: 1},
             },

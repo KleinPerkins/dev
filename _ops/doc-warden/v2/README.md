@@ -62,6 +62,16 @@ replay reconstruct only exact outputs of the same operation; foreign files,
 empty directories and changed output bytes are refused. Legacy prose and
 receipts are read without rewriting them.
 
+Draft, update and successor previews accept `--parents-file` for an ADR that
+depends on existing approved artifacts. The JSON file contains `observed_at`
+as an ISO timestamp with timezone and `parents` as a list of exact `kind`, `id`,
+`version` and `digest` objects. Supported kinds are ADR, asset, design, plan,
+PRD, specification and UX requirements, using their artifact type codes. The writer
+resolves each active parent, verifies its freeze receipt and event, and binds
+their bytes and the candidate inventory to the operation. It preserves those
+typed relations on acceptance and checks the parents again. Use a draft update
+to select a different parent before acceptance.
+
 The mutable index supports exactly one `ADR | Status | One-line decision` table
 or one legacy `ADR | Title | Status | Date` table. Identity cells must be exact
 safe ADR basenames or same-directory Markdown links whose labels are the same
@@ -106,6 +116,28 @@ obligations, frozen historical records, and consumer-owned convention decisions.
 It does not qualify native execution or override a consumer's conflicting local
 plan convention.
 
+Feature spec and plan previews require a current approved PRD with matching
+freeze evidence. Use `--prd-id` when more than one applies. The preview derives
+its requirement IDs from that PRD. Use `--defect-id` on a plan to select the
+existing READY defect route. A newly expanded defect needs feature planning.
+
+For visual work, select `--uxr-id` and `--design-binding ID@VERSION`. Each
+design must cover the applicable requirements and reference approved, immutable
+assets. Use `--ui-requirement-id` to name the visual subset when the PRD also
+covers nonvisual behavior. `--rigor-file` takes recorded JSON change signals
+such as `sessions`, `components`, `ui_visual` and `sensitive`. A sensitive
+scope requires `--sensitive-adr-id` to identify its approved decision.
+
+Use `draft verification` and `draft uat` with an evidence file to bind outcomes
+to the current approved plan, source revision, and every required ID. A visual
+plan also requires exact evidence for comparison, states, accessibility,
+responsive layout, copy, recovery, and assets against the approved design.
+Each evidence row carries a repository-relative path, SHA-256 digest, and
+result. `draft release` binds the accepted verification and UAT records to the
+same plan and source revision. For acceptance via `--approval-file`, the
+review hash covers the canonical JSON object with `kind`, `title`, `body`, and
+`evidence`. Apply the resulting preview with separate exact consent.
+
 ## Authoring with a separate authority export
 
 `prepare-authoring` can bind an explicit central owner reference tree without
@@ -117,15 +149,15 @@ bash _ops/bin/doc-warden.sh prepare-authoring --repo /absolute/repository \
 ```
 
 The repository must already have an enabled v2 profile whose GSD pin and interface
-digests match that reference. The reference must contain the policy, schemas,
-trigger catalog, approved plan and exact runtime bindings. Missing authority does
-not become a zero-digest fallback. This option neither adopts a repository nor
-grants permission to read another root; the caller obtains applicable root and
-operation approval before using it.
+digests match that reference. The Dev reference contains the policy, schemas,
+trigger catalog and exact runtime bindings. Its current plan selector binds the
+approved PLAN, its governance sidecar, their accepted-freeze evidence and the
+approved ADR that authorizes the selection. The caller obtains applicable root
+and operation approval before using the reference.
 
 An explicit binding produces a closed `authoring-import-preview/v2` record that
-binds the canonical reference root, complete authority digests and repository
-profile digest. Ordinary repository-local previews retain their v1 format,
+binds the canonical reference root, authority digests, observed authority inputs
+and repository profile digest. Ordinary repository-local previews retain their v1 format,
 including compatibility with older records lacking `active_plan_id`.
 
 Result validation rechecks the prepared pin and interface bytes. The resulting
@@ -136,7 +168,56 @@ transaction preimages and postimages so exact receipt replay remains valid.
 
 `validate-authoring` stores its validated transaction in the existing private
 operation store and returns its expiry and consent requirement. The existing
-generic `apply` route still requires fresh exact consent. Preparing or validating
-does not invoke a native workflow, worker, installer or repository write. These
-authoring contracts make no autonomous-execution or same-user security-boundary
-claim.
+generic `apply` route still requires fresh exact consent.
+
+For native `*-PLAN.md` drafts, run the installed `gsd-plan-checker` role from the
+exact pinned GSD package in the supported authoring client and keep its final
+report private. Pass that report to `validate-authoring --native-check-report`.
+Include `native_plan_check` in the result envelope with schema
+`doc-warden/gsd-native-plan-check/v1`, the prepare record’s `preview_digest`,
+the full `changed_file_digests` map, the role’s `descriptor_digest`, the client’s
+`run_id`, the `verdict` of `VERIFICATION PASSED`, and the report’s `report_digest`.
+Doc-Warden verifies the report bytes and exact bindings, then runs the installed
+GSD plan-structure utility on isolated copies of the draft PLAN files. Only the
+proof digest is bound to the transaction. Native authoring and review are
+operator-invoked. Doc-Warden validates the supplied role evidence without
+attesting the client account or launching its workflow. Drafts without native
+PLAN files use the ordinary import route.
+
+## Governed authoring continuity
+
+Use `checkpoint`, `handoff`, `pause-with-continuity` or `resume-authoring` with
+`--state`, `--event`, a fresh `--operation-id` and `--preview`. Apply the exact
+operation through `apply` with its lifecycle consent envelope. Use the returned
+closed authoring state for the next request in the same session. Doc-Warden
+keeps the last valid state in the machine-local XDG state directory. Each
+checkpoint request has a typed Save-Game scope that stays stable on exact retry.
+
+Checkpoint, handoff and pause require a qualified, enabled Save-Game owner
+installation and matching Flush, Index and observation evidence. Resume
+observes the saved pointer and live authority without triggering owner repair.
+An incomplete result reports its recovery action and retains the prior state.
+Views, normal drafting and plain pause work independently.
+
+## Current runtime installation
+
+Use the verified merged Dev source and its observed repository identity.
+Use the Doc-Warden CLI for destination qualification and live changes. The
+retained shell helper provides the pinned Cursor integration and its isolated
+verification harness.
+`runtime qualify-gsd` runs the existing isolated binding verifier for the
+selected `--home` and `--data-home`. It binds the result to the source revision,
+runtime files, toolchain and destination. Then use `runtime install-gsd --preview`
+for those same destinations and apply the exact consent envelope. Apply verifies
+the resulting install and restores its preimage if verification fails. The
+historical runtime record remains available for isolated compatibility checks.
+For later removal, use `runtime uninstall-gsd --preview` for the same
+destinations and apply its own exact consent envelope. A recorded removal can
+replay without invoking the uninstaller again. If completion cannot be verified,
+Doc-Warden reports `live_uninstall_recovery_required` and retains its private
+pending operation and any available preimage record for recovery.
+
+From the pinned source checkout, `bash _ops/bin/install-skills.sh --only doc-warden`
+selects the Doc-Warden skill for the existing client discovery paths. Confirm
+discovery and invocation in a fresh supported client before reporting client
+qualification.

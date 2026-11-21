@@ -6,11 +6,14 @@ import json
 import os
 import subprocess
 import base64
+import fcntl
+import stat
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .canonical import (
     atomic_write,
@@ -19,7 +22,9 @@ from .canonical import (
     digest_ref,
     parse_json_object,
 )
-from .operation_store import operation_path
+from .operation_store import operation_path, private_state_root
+from .gsd_adapter import CENTRAL_REPOSITORY_ID, CENTRAL_REPOSITORY_KEY as CURRENT_REPOSITORY_KEY
+from .runtime_host import read_destination_qualification
 from .scm import observe_repository_identity
 from .transactions import (
     MutationAction,
@@ -51,6 +56,8 @@ GSD_UPSTREAM_REPOSITORY = "https://github.com/open-gsd/gsd-core"
 GSD_UPSTREAM_TARBALL = (
     "https://registry.npmjs.org/@opengsd/gsd-core/-/gsd-core-1.11.0.tgz"
 )
+INSTALL_CONSEQUENCE = "live_runtime_install"
+UNINSTALL_CONSEQUENCE = "live_runtime_uninstall"
 QUALIFICATION_FIELDS = {
     "dependency_licenses",
     "digests",
@@ -109,6 +116,7 @@ class LiveInstallOperation:
     repo: Path
     canonical_root: str
     repository_key: str
+    github_repository_id: int | None
     operation_id: str
     action_digest: str
     source_revision: str
@@ -119,12 +127,15 @@ class LiveInstallOperation:
     qualification_digest: str
     before_sentinels: dict[str, str]
     expires_at: str
+    consequence: str = INSTALL_CONSEQUENCE
 
 
 @dataclass(frozen=True)
 class RuntimeQualification:
     qualification_digest: str
     runtime_digests: dict[str, str]
+    path: Path
+    basis: str
 
 
 @dataclass(frozen=True)
@@ -147,8 +158,12 @@ def _runtime(repo: Path) -> Path:
     return repo.resolve(strict=True) / "_ops/doc-warden/runtime/gsd-core"
 
 
-def _environment(home: Path, data_home: Path) -> dict[str, str]:
-    return {**os.environ, "HOME": str(home), "XDG_DATA_HOME": str(data_home)}
+def _environment(home: Path, data_home: Path, *, allow_live_home: bool = False) -> dict[str, str]:
+    environment = {**os.environ, "HOME": str(home), "XDG_DATA_HOME": str(data_home)}
+    environment.pop("DOC_WARDEN_ALLOW_LIVE_HOME", None)
+    if allow_live_home:
+        environment["DOC_WARDEN_ALLOW_LIVE_HOME"] = "1"
+    return environment
 
 
 def _is_sha256(value: object) -> bool:
@@ -315,6 +330,8 @@ def _validate_runtime_qualification(repo: Path) -> RuntimeQualification:
     return RuntimeQualification(
         qualification_digest=digest_ref(qualification_bytes),
         runtime_digests=observed,
+        path=qualification_path,
+        basis="m1_t01_qualification",
     )
 
 
@@ -366,7 +383,7 @@ def preview_install(
         "home": str(home),
         "paths": paths,
         "global_hooks": proposed_hooks or [],
-        "rollback": "runtime uninstall-gsd",
+        "rollback": "runtime uninstall-gsd --preview",
         "runtime_pin_digest": digest_ref(
             (runtime / "gsd-core-pin.json").read_bytes()
         ),
@@ -380,14 +397,34 @@ def prepare_install(
     data_home: Path,
     operation_id: str | None = None,
 ) -> dict[str, Any]:
+    return _prepare_runtime_change(repo, home, data_home, operation_id, INSTALL_CONSEQUENCE)
+
+
+def prepare_uninstall(repo: Path, *, home: Path, data_home: Path) -> dict[str, Any]:
+    return _prepare_runtime_change(repo, home, data_home, None, UNINSTALL_CONSEQUENCE)
+
+
+def _prepare_runtime_change(
+    repo: Path, home: Path, data_home: Path, operation_id: str | None, consequence: str,
+) -> dict[str, Any]:
     repo = repo.resolve(strict=True)
     home = home.expanduser().resolve()
     data_home = data_home.expanduser().resolve()
-    preview = preview_install(repo, home=home, data_home=data_home)
     operation = operation_id or str(uuid.uuid4())
     if str(uuid.UUID(operation)) != operation:
         raise ValueError("operation_id_invalid")
-    qualification = _validate_runtime_qualification(repo)
+    repository_key, github_repository_id, qualification = _destination_installation(repo, home, data_home)
+    preview = preview_install(repo, home=home, data_home=data_home)
+    if consequence == UNINSTALL_CONSEQUENCE:
+        _validate_uninstall_destinations(home, data_home)
+        wrapper = _wrapper_path(data_home)
+        if wrapper.exists() or wrapper.is_symlink():
+            _check_wrapper_postimages(home, _read_wrapper_record(wrapper))
+        preview = {
+            "schema": "doc-warden/live-uninstall-preview/v1", "status": "ready", "home": str(home),
+            "paths": preview["paths"], "ownership": "manifest_identity_matching_only",
+            "runtime_pin_digest": preview["runtime_pin_digest"],
+        }
     if qualification.runtime_digests["pin_sha256"] != preview["runtime_pin_digest"]:
         raise ValueError("runtime_qualification_digest_mismatch")
     source_revision = subprocess.check_output(
@@ -397,7 +434,8 @@ def prepare_install(
     fields = {
         "schema": "doc-warden/live-install-action/v1",
         "operation_id": operation,
-        "repository_key": CENTRAL_REPOSITORY_KEY,
+        "repository_key": repository_key,
+        "github_repository_id": github_repository_id,
         "canonical_root": str(repo),
         "source_revision": source_revision,
         "home": str(home.resolve()),
@@ -406,7 +444,7 @@ def prepare_install(
         "runtime_digests": qualification.runtime_digests,
         "qualification_digest": qualification.qualification_digest,
         "before_sentinels": _sentinels(home, data_home),
-        "consequence": "live_runtime_install",
+        "consequence": consequence,
     }
     action_digest = digest_ref(canonical_json(fields))
     specification = {
@@ -424,8 +462,11 @@ def prepare_install(
         "action_digest": action_digest,
         "source_revision": source_revision,
         "canonical_root": str(repo),
-        "repository_key": CENTRAL_REPOSITORY_KEY,
-        "consequence": "live_runtime_install",
+        "repository_key": repository_key,
+        "github_repository_id": github_repository_id,
+        "data_home": str(data_home),
+        "before_sentinels_digest": digest_ref(canonical_json(fields["before_sentinels"])),
+        "consequence": consequence,
         "consent_required": True,
         "expires_at": expires_at,
     }
@@ -444,6 +485,7 @@ def load_install_operation(
         "schema",
         "operation_id",
         "repository_key",
+        "github_repository_id",
         "canonical_root",
         "source_revision",
         "home",
@@ -461,8 +503,7 @@ def load_install_operation(
         or payload["schema"] != "doc-warden/live-install-operation/v1"
         or payload["operation_id"] != operation_id
         or payload["action_digest"] != action_digest
-        or payload["repository_key"] != CENTRAL_REPOSITORY_KEY
-        or payload["consequence"] != "live_runtime_install"
+        or payload["consequence"] not in (INSTALL_CONSEQUENCE, UNINSTALL_CONSEQUENCE)
         or not isinstance(payload["runtime_digests"], dict)
         or set(payload["runtime_digests"]) != set(QUALIFICATION_DIGEST_PATHS)
         or not isinstance(payload["before_sentinels"], dict)
@@ -477,7 +518,8 @@ def load_install_operation(
     operation = LiveInstallOperation(
         repo=repo,
         canonical_root=str(repo),
-        repository_key=CENTRAL_REPOSITORY_KEY,
+        repository_key=payload["repository_key"],
+        github_repository_id=payload["github_repository_id"],
         operation_id=operation_id,
         action_digest=action_digest,
         source_revision=payload["source_revision"],
@@ -488,12 +530,22 @@ def load_install_operation(
         qualification_digest=payload["qualification_digest"],
         before_sentinels=payload["before_sentinels"],
         expires_at=payload["expires_at"],
+        consequence=payload["consequence"],
     )
-    _validate_install_operation(operation)
+    _validate_install_operation(operation, require_preimages=False)
     return operation
 
 
-def _validate_install_operation(operation: LiveInstallOperation) -> None:
+def _destination_installation(repo: Path, home: Path, data_home: Path):
+    if read_repository_config(repo) is None:
+        # Historical records support isolated compatibility checks only.
+        return CENTRAL_REPOSITORY_KEY, None, _validate_runtime_qualification(repo)
+    context, digest, runtime_digests, path = read_destination_qualification(repo, home=home, data_home=data_home)
+    return (context["repository_key"], context["github_repository_id"],
+            RuntimeQualification(digest, runtime_digests, path, "host_destination_qualification"))
+
+
+def _validate_install_operation(operation: LiveInstallOperation, *, require_preimages: bool = True) -> None:
     try:
         repo = operation.repo.resolve(strict=True)
         home = operation.home.expanduser().resolve()
@@ -502,13 +554,13 @@ def _validate_install_operation(operation: LiveInstallOperation) -> None:
         source_revision = subprocess.check_output(
             ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
         ).strip()
-        qualification = _validate_runtime_qualification(repo)
+        repository_key, github_repository_id, qualification = _destination_installation(repo, home, data_home)
         runtime_pin_digest = qualification.runtime_digests["pin_sha256"]
-        before_sentinels = _sentinels(home, data_home)
         fields = {
             "schema": "doc-warden/live-install-action/v1",
             "operation_id": operation.operation_id,
             "repository_key": operation.repository_key,
+            "github_repository_id": operation.github_repository_id,
             "canonical_root": operation.canonical_root,
             "source_revision": operation.source_revision,
             "home": str(operation.home),
@@ -517,7 +569,7 @@ def _validate_install_operation(operation: LiveInstallOperation) -> None:
             "runtime_digests": operation.runtime_digests,
             "qualification_digest": operation.qualification_digest,
             "before_sentinels": operation.before_sentinels,
-            "consequence": "live_runtime_install",
+            "consequence": operation.consequence,
         }
         action_digest = digest_ref(canonical_json(fields))
         operation_id = str(uuid.UUID(operation.operation_id))
@@ -525,7 +577,9 @@ def _validate_install_operation(operation: LiveInstallOperation) -> None:
         raise ValueError("operation_specification_mismatch") from exc
     if (
         operation_id != operation.operation_id
-        or operation.repository_key != CENTRAL_REPOSITORY_KEY
+        or operation.consequence not in (INSTALL_CONSEQUENCE, UNINSTALL_CONSEQUENCE)
+        or operation.repository_key != repository_key
+        or operation.github_repository_id != github_repository_id
         or str(repo) != operation.canonical_root
         or home != operation.home
         or data_home != operation.data_home
@@ -535,10 +589,39 @@ def _validate_install_operation(operation: LiveInstallOperation) -> None:
         or runtime_pin_digest != operation.runtime_pin_digest
         or qualification.runtime_digests != operation.runtime_digests
         or qualification.qualification_digest != operation.qualification_digest
-        or before_sentinels != operation.before_sentinels
+        or (require_preimages and _sentinels(home, data_home) != operation.before_sentinels)
         or action_digest != operation.action_digest
     ):
         raise ValueError("operation_specification_mismatch")
+
+
+@contextmanager
+def _runtime_writer(home: Path, data_home: Path):
+    home, data_home = home.resolve(), data_home.resolve()
+    for root in {home, data_home}:
+        root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    locks = {
+        contained_path(home, ".local/state/doc-warden/gsd-install.lock"),
+        contained_path(data_home, ".doc-warden-gsd-install.lock"),
+    }
+    handles = []
+    flags = os.O_RDWR | os.O_CREAT | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        for lock in sorted(locks):
+            lock.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            fd = os.open(lock, flags, 0o600)
+            handles.append(fd)
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+                raise ValueError("live_install_lock_invalid")
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise ValueError("live_install_operation_busy") from exc
+        yield
+    finally:
+        for fd in reversed(handles):
+            os.close(fd)
 
 
 def apply_prepared_install(
@@ -558,27 +641,120 @@ def apply_prepared_install(
         action_digest=operation.action_digest,
         consequence_class="external",
     )
-    _validate_install_operation(operation)
-    # ADR 0010 defers a security-grade host signer. In M1, the validated
-    # operation-bound external consent above is the retained operator gate.
-    operator_confirmation_qualified = True
-    apply_install(
-        operation.repo,
-        home=operation.home,
-        data_home=operation.data_home,
-        isolated_home_qualified=True,
-        host_signer_qualified=operator_confirmation_qualified,
-        real_home=real_home,
-        expected_runtime_digests=operation.runtime_digests,
-    )
-    return {
-        "schema": "doc-warden/live-install-result/v1",
+    _validate_install_operation(operation, require_preimages=False)
+    if operation.home == real_home.resolve() and operation.github_repository_id is None:
+        raise ValueError("runtime_destination_qualification_required")
+    removing = operation.consequence == UNINSTALL_CONSEQUENCE
+    verb = "uninstall" if removing else "install"
+    result = {
+        "schema": f"doc-warden/live-{verb}-result/v1",
         "operation_id": operation.operation_id,
         "action_digest": operation.action_digest,
         "status": "applied",
         "home": str(operation.home),
         "runtime_pin_digest": operation.runtime_pin_digest,
     }
+    home, data_home = operation.home, operation.data_home
+    operation_binding = {"operation_id": operation.operation_id, "action_digest": operation.action_digest}
+    state = private_state_root()
+    outcome = contained_path(state, f"runtime/{verb}-{operation.operation_id}.json")
+    with _runtime_writer(home, data_home):
+        _validate_install_operation(operation, require_preimages=False)
+        if removing:
+            _apply_uninstall_with_receipt(operation, outcome, result, allow_live_home=home == real_home.resolve())
+            return result
+        if outcome.is_file():
+            saved = parse_json_object(outcome.read_bytes())
+            if saved != {"result": result, "postimages": _sentinels(home, data_home)}:
+                raise ValueError("live_install_postimage_changed")
+            return result
+        _apply_install_with_readback(operation, operation_binding, real_home=real_home)
+        evidence = canonical_json({"result": result, "postimages": _sentinels(home, data_home)})
+        atomic_write(state, outcome.relative_to(state).as_posix(), evidence)
+        if outcome.read_bytes() != evidence:
+            raise ValueError("live_install_readback_failed")
+        return result
+
+
+def _apply_uninstall_with_receipt(
+    operation: LiveInstallOperation, outcome: Path, result: dict[str, Any], *, allow_live_home: bool,
+) -> None:
+    home, data_home = operation.home, operation.data_home
+    wrapper = _wrapper_path(data_home)
+    state = outcome.parent.parent
+    pending = outcome.with_name(f"uninstall-pending-{operation.operation_id}.json")
+    pending_payload = canonical_json({
+        "schema": "doc-warden/live-uninstall-pending/v1",
+        "operation_id": operation.operation_id,
+        "action_digest": operation.action_digest,
+    })
+    if pending.exists() or pending.is_symlink():
+        if pending.is_symlink() or not pending.is_file() or pending.read_bytes() != pending_payload:
+            raise ValueError("live_uninstall_recovery_required")
+
+    def verify_completion() -> None:
+        if outcome.is_symlink() or not outcome.is_file():
+            raise ValueError("live_uninstall_recovery_required")
+        saved = parse_json_object(outcome.read_bytes())
+        observed = _sentinels(home, data_home)
+        wrapper_digest = observed.pop(str(wrapper), None)
+        if (set(saved) != {"result", "postimages", "wrapper_digest"} or saved["result"] != result
+                or saved["postimages"] != observed
+                or (wrapper_digest is not None and wrapper_digest != saved["wrapper_digest"])):
+            raise ValueError("live_install_postimage_changed")
+        if wrapper_digest is not None:
+            wrapper.unlink()
+        pending.unlink(missing_ok=True)
+
+    def record_completion() -> None:
+        postimages = _sentinels(home, data_home)
+        wrapper_digest = postimages.pop(str(wrapper), None)
+        evidence = canonical_json({"result": result, "postimages": postimages, "wrapper_digest": wrapper_digest})
+        atomic_write(state, outcome.relative_to(state).as_posix(), evidence)
+        if outcome.read_bytes() != evidence:
+            raise ValueError("live_uninstall_recovery_required")
+
+    try:
+        if outcome.exists() or outcome.is_symlink():
+            verify_completion()
+            return
+        if _sentinels(home, data_home) != operation.before_sentinels:
+            raise ValueError("live_uninstall_recovery_required" if pending.is_file() else "operation_specification_mismatch")
+        _validated_runtime_files(operation.repo, operation.runtime_digests)
+        atomic_write(state, pending.relative_to(state).as_posix(), pending_payload)
+        _uninstall_locked(operation.repo, home=home, data_home=data_home,
+                          record_completion=record_completion, allow_live_home=allow_live_home)
+        verify_completion()
+    except OSError as exc:
+        raise ValueError("live_uninstall_recovery_required") from exc
+
+
+def _apply_install_with_readback(operation: LiveInstallOperation, binding: dict[str, str], *, real_home: Path) -> None:
+    home, data_home = operation.home, operation.data_home
+    wrapper = _wrapper_path(data_home)
+    if wrapper.is_file():
+        previous = _read_wrapper_record(wrapper)
+        if previous["operation"] != binding or previous["postimages"] is None:
+            raise ValueError("live_install_recovery_evidence_required")
+        _check_wrapper_postimages(home, previous)
+    else:
+        if _sentinels(home, data_home) != operation.before_sentinels:
+            raise ValueError("operation_specification_mismatch")
+        apply_install(
+            operation.repo, home=home, data_home=data_home,
+            isolated_home_qualified=True, host_signer_qualified=True, real_home=real_home,
+            expected_runtime_digests=operation.runtime_digests, operation_binding=binding,
+        )
+    if operation.github_repository_id is not None:
+        try:
+            _live_doctor_state(operation.repo, home=home, data_home=data_home)
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            try:
+                _uninstall_locked(operation.repo, home=home, data_home=data_home,
+                                  allow_live_home=home == real_home.resolve())
+            except (OSError, ValueError, subprocess.SubprocessError) as rollback_error:
+                raise ValueError("live_install_rollback_incomplete") from rollback_error
+            raise ValueError("live_install_readback_failed") from exc
 
 
 def apply_install(
@@ -590,29 +766,34 @@ def apply_install(
     host_signer_qualified: bool,
     real_home: Path,
     expected_runtime_digests: dict[str, str],
+    operation_binding: dict[str, str] | None = None,
 ) -> None:
     if not isolated_home_qualified:
         raise ValueError("isolated_home_not_qualified")
-    is_live = home.resolve() == real_home.resolve()
+    home, data_home = home.expanduser().resolve(), data_home.expanduser().resolve()
+    is_live = home == real_home.resolve()
     if is_live and not host_signer_qualified:
         raise ValueError("host_signer_not_qualified")
     installer = _validated_runtime_files(repo, expected_runtime_digests)
-    env = _environment(home, data_home)
-    if is_live:
-        env["DOC_WARDEN_ALLOW_LIVE_HOME"] = "1"
-    wrapper_receipt = data_home / "gsd-core/doc-warden-wrapper-preimage.json"
+    env = _environment(home, data_home, allow_live_home=is_live)
+    wrapper_receipt = _wrapper_path(data_home)
     if wrapper_receipt.exists():
         raise ValueError("live_install_already_applied")
+    home.mkdir(parents=True, exist_ok=True, mode=0o700)
     wrapper_receipt.parent.mkdir(parents=True, exist_ok=True)
     receipt = {
-        "schema": "doc-warden/live-install-preimage/v1",
+        "schema": "doc-warden/live-install-preimage/v2",
+        "operation": operation_binding,
+        "postimages": None,
         "preimages": {
             relative: (
-                base64.b64encode((home / relative).read_bytes()).decode("ascii")
-                if (home / relative).is_file()
+                {"content": base64.b64encode(path.read_bytes()).decode("ascii"),
+                 "mode": stat.S_IMODE(path.stat().st_mode)}
+                if path.is_file()
                 else None
             )
             for relative in UPSTREAM_RESIDUE_PATHS
+            for path in (contained_path(home, relative),)
         },
     }
     written = atomic_write(
@@ -624,68 +805,138 @@ def apply_install(
     try:
         installer = _validated_runtime_files(repo, expected_runtime_digests)
     except ValueError:
-        _restore_wrapper_preimages(home, wrapper_receipt)
         wrapper_receipt.unlink()
         raise
     try:
         subprocess.run(
-            [str(installer), "--apply"], check=True, env=env
+            [str(installer), "--apply"], check=True, capture_output=True, env=env
         )
     except (OSError, subprocess.SubprocessError) as install_error:
         try:
-            uninstall(repo, home=home, data_home=data_home)
+            receipt["postimages"] = _wrapper_images(home)
+            atomic_write(wrapper_receipt.parent, wrapper_receipt.name, canonical_json(receipt))
+            _uninstall_locked(repo, home=home, data_home=data_home, allow_live_home=is_live)
         except (OSError, subprocess.SubprocessError, ValueError) as rollback_error:
             raise ValueError("live_install_rollback_incomplete") from rollback_error
         raise install_error
+    receipt["postimages"] = _wrapper_images(home)
+    atomic_write(wrapper_receipt.parent, wrapper_receipt.name, canonical_json(receipt))
+
+
+def _wrapper_path(data_home: Path) -> Path:
+    return data_home / "gsd-core/doc-warden-wrapper-preimage.json"
+
+
+def _wrapper_images(home: Path) -> dict[str, str | None]:
+    return {relative: digest_ref(canonical_json({"content": digest_ref(path.read_bytes()),
+                                                "mode": stat.S_IMODE(path.stat().st_mode)})) if path.is_file() else None
+            for relative in UPSTREAM_RESIDUE_PATHS for path in (contained_path(home, relative),)}
+
+
+def _check_wrapper_postimages(home: Path, record: dict[str, Any]) -> None:
+    if record["postimages"] is None:
+        raise ValueError("live_install_recovery_evidence_required")
+    if _wrapper_images(home) != record["postimages"]:
+        raise ValueError("live_install_postimage_changed")
+
+
+def _validate_uninstall_destinations(home: Path, data_home: Path) -> tuple[Path, Path]:
+    if not data_home.exists():
+        return home, data_home
+    manifest = contained_path(data_home, "gsd-core/doc-warden-manifest.json")
+    if not manifest.exists():
+        return home, data_home
+    record = parse_json_object(_read_regular_file(manifest))
+    if (record.get("schema") != "doc-warden/gsd-install-manifest/v1" or record.get("owner") != "doc-warden"
+            or any(not isinstance(record.get(key), str) for key in ("cursor_root", "release_root"))):
+        raise ValueError("live_uninstall_destination_mismatch")
+    cursor_root = Path(record["cursor_root"])
+    release_root = Path(record["release_root"])
+    if (not cursor_root.is_absolute() or cursor_root.name != ".cursor"
+            or not release_root.is_absolute() or release_root.parts[-3:] != ("gsd-core", "releases", GSD_COMMIT)
+            or cursor_root.resolve() != home / ".cursor"
+            or release_root.resolve() != data_home / "gsd-core/releases" / GSD_COMMIT):
+        raise ValueError("live_uninstall_destination_mismatch")
+    # Legacy manifests may record a lexical alias. The retained owner helper
+    # compares that spelling; all wrapper preimages use the canonical destination.
+    return cursor_root.parent, release_root.parents[2]
 
 
 def uninstall(repo: Path, *, home: Path, data_home: Path) -> None:
-    uninstall_error = None
+    home, data_home = home.expanduser().resolve(), data_home.expanduser().resolve()
+    with _runtime_writer(home, data_home):
+        _uninstall_locked(repo, home=home, data_home=data_home)
+
+
+def _uninstall_locked(
+    repo: Path, *, home: Path, data_home: Path, record_completion: Callable[[], None] | None = None,
+    allow_live_home: bool = False,
+) -> None:
+    owner_home, owner_data = _validate_uninstall_destinations(home, data_home)
+    wrapper_receipt = _wrapper_path(data_home)
+    receipt = _read_wrapper_record(wrapper_receipt) if wrapper_receipt.is_file() else None
+    if receipt is not None:
+        _check_wrapper_postimages(home, receipt)
     try:
         subprocess.run(
             [str(_runtime(repo) / "install.sh"), "--uninstall"],
-            check=True,
-            env=_environment(home, data_home),
+            check=True, capture_output=True,
+            env=_environment(owner_home, owner_data, allow_live_home=allow_live_home),
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        uninstall_error = exc
-    wrapper_receipt = data_home / "gsd-core/doc-warden-wrapper-preimage.json"
-    if wrapper_receipt.is_file():
-        _restore_wrapper_preimages(home, wrapper_receipt)
+        raise ValueError("live_install_uninstall_incomplete") from exc
+    if receipt is not None:
+        _restore_wrapper_preimages(home, receipt)
+    if record_completion is not None:
+        record_completion()
+    if receipt is not None:
         wrapper_receipt.unlink()
-    if uninstall_error is not None:
-        raise ValueError("live_install_uninstall_incomplete") from uninstall_error
 
 
-def _restore_wrapper_preimages(home: Path, wrapper_receipt: Path) -> None:
+def _read_wrapper_record(wrapper_receipt: Path) -> dict[str, Any]:
+    if wrapper_receipt.is_symlink() or wrapper_receipt.stat().st_mode & 0o077:
+        raise ValueError("live_install_preimage_invalid")
     receipt = parse_json_object(wrapper_receipt.read_bytes())
+    if receipt.get("schema") == "doc-warden/live-install-preimage/v1":
+        raise ValueError("live_install_recovery_evidence_required")
     if (
-        set(receipt) != {"schema", "preimages"}
-        or receipt["schema"] != "doc-warden/live-install-preimage/v1"
+        set(receipt) != {"schema", "preimages", "postimages", "operation"}
+        or receipt["schema"] != "doc-warden/live-install-preimage/v2"
         or not isinstance(receipt["preimages"], dict)
         or set(receipt["preimages"]) != set(UPSTREAM_RESIDUE_PATHS)
+        or (receipt["postimages"] is not None and (not isinstance(receipt["postimages"], dict)
+            or set(receipt["postimages"]) != set(UPSTREAM_RESIDUE_PATHS)))
     ):
         raise ValueError("live_install_preimage_invalid")
+    return receipt
+
+
+def _restore_wrapper_preimages(home: Path, receipt: dict[str, Any]) -> None:
     preimages = receipt["preimages"]
     try:
         decoded = {
             relative: (
-                None if prior is None else base64.b64decode(prior, validate=True)
+                None if prior is None else (base64.b64decode(prior["content"], validate=True), prior["mode"])
             )
             for relative, prior in preimages.items()
-            if prior is None or isinstance(prior, str)
+            if prior is None or (isinstance(prior, dict) and set(prior) == {"content", "mode"}
+                                 and type(prior["mode"]) is int and 0 <= prior["mode"] <= 0o777)
         }
     except (ValueError, TypeError) as exc:
         raise ValueError("live_install_preimage_invalid") from exc
     if len(decoded) != len(preimages):
         raise ValueError("live_install_preimage_invalid")
+    observed = _wrapper_images(home)
+    if any(value is not None and value != receipt["postimages"][relative]
+           for relative, value in observed.items()):
+        raise ValueError("live_install_postimage_changed")
     for relative, prior in decoded.items():
-        path = home / relative
+        path = contained_path(home, relative)
         if prior is None:
             path.unlink(missing_ok=True)
         else:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(prior)
+            data, mode = prior
+            atomic_write(home, relative, data).chmod(mode)
 
 
 def _source_revision(repo: Path) -> str:
@@ -708,9 +959,14 @@ def _live_doctor_state(
     data_home: Path,
 ) -> tuple[dict[str, Any], tuple[ObservedInput, ...]]:
     root = repo.resolve(strict=True)
-    home = home.expanduser().absolute()
-    data_home = data_home.expanduser().absolute()
-    qualification = _validate_runtime_qualification(root)
+    home = home.expanduser().resolve()
+    data_home = data_home.expanduser().resolve()
+    profile = read_repository_config(root)
+    if profile is not None and (profile["repository_key"] == CURRENT_REPOSITORY_KEY
+                                or profile["github_repository_id"] == CENTRAL_REPOSITORY_ID):
+        _, _, qualification = _destination_installation(root, home, data_home)
+    else:
+        qualification = _validate_runtime_qualification(root)
     runtime = _runtime(root)
     subprocess.run(
         [str(runtime / "install.sh"), "--doctor"],
@@ -851,13 +1107,9 @@ def _live_doctor_state(
                 "digest_basis": "live_bounded_shim_bytes",
             }
         )
-    qualification_path = (
-        root
-        / "_ops/doc-warden/state/v2/runtime/gsd-core-v1.11.0-qualification.json"
-    ).resolve(strict=True)
     observed_inputs.append(
         ObservedInput(
-            str(qualification_path),
+            str(qualification.path.resolve(strict=True)),
             qualification.qualification_digest,
         )
     )
@@ -880,7 +1132,7 @@ def _live_doctor_state(
             "interface_digest": qualification.runtime_digests[
                 "runtime_interface_sha256"
             ],
-            "interface_digest_basis": "m1_t01_qualification",
+            "interface_digest_basis": qualification.basis,
             "qualification_digest": qualification.qualification_digest,
         },
         "machine_install_receipt": {
@@ -1244,18 +1496,25 @@ def _sentinels(home: Path, data_home: Path) -> dict[str, str]:
         data_home / "gsd-core",
     )
     result: dict[str, str] = {}
+
+    def observe(path: Path) -> None:
+        if path.is_symlink():
+            result[str(path)] = digest_ref(canonical_json({"symlink": str(path.readlink())}))
+        elif path.is_file():
+            result[str(path)] = digest_ref(canonical_json({"content": digest_ref(path.read_bytes()),
+                                                         "mode": stat.S_IMODE(path.stat().st_mode)}))
+
     for path in (
         home / ".cursor/hooks.json",
         home / ".local/bin/gsd-core",
         home / ".local/bin/gsd-tools",
         home / ".local/bin/gsd_run",
+        *(home / relative for relative in UPSTREAM_RESIDUE_PATHS),
     ):
-        if path.is_file() and not path.is_symlink():
-            result[str(path)] = digest_ref(path.read_bytes())
+        observe(path)
     for root in roots:
         if not root.exists():
             continue
         for path in sorted(root.rglob("*")):
-            if path.is_file() and not path.is_symlink():
-                result[str(path)] = digest_ref(path.read_bytes())
+            observe(path)
     return result

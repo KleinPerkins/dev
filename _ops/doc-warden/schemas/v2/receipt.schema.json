@@ -31,6 +31,7 @@
         },
         "gsd_interface_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
         "gsd_pin_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "native_plan_check_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
         "policy_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
         "policy_version": {"minLength": 1, "type": "string"},
         "repository_identity": {"additionalProperties": false, "properties": {"github_repository": {"pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "type": "string"}, "github_repository_id": {"minimum": 1, "type": "integer"}}, "required": ["github_repository", "github_repository_id"], "type": "object"},

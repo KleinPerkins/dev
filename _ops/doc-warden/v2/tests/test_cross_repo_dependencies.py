@@ -103,6 +103,7 @@ class CrossRepoDependencyTests(unittest.TestCase):
         }
 
     def persist_plan_with_relations(self, relations):
+        self.dependent.approve_prd("REQ-001")
         operation_id = self.dependent.id_for("dependency-plan-operation")
         plan_id = (
             f"PLAN-{self.dependent.repository_key}-"
@@ -139,6 +140,7 @@ class CrossRepoDependencyTests(unittest.TestCase):
         )
 
     def accepted_dependency_state(self, match_evidence=None):
+        self.dependent.approve_prd("REQ-001")
         revision = self.head(self.dependent.repo)
         target_id = f"REPO-{self.owner.repository_key}"
         evidence = match_evidence or {
@@ -337,6 +339,36 @@ class CrossRepoDependencyTests(unittest.TestCase):
         self.assertEqual(observed.observed_revision, revision)
         self.assertEqual(observed.target_kind, "repository")
         self.assertEqual(graph.planned_relations, ())
+
+    def test_cross_repo_artifact_availability_and_version_come_from_owner_records(self):
+        target = self.owner.approve_prd("REQ-001")
+        missing = f"PRD-{self.owner.repository_key}-{self.owner.id_for('missing-prd')}"
+        relations = [
+            self.relation(
+                source_id="placeholder", target_id=identifier, target_kind="prd",
+                authority="planned", relation="depends_on_planned",
+                repository_key=self.owner.repository_key, revision=self.head(self.owner.repo),
+            )
+            for identifier in (target, missing)
+        ]
+        for relation in relations:
+            relation["target"]["version"] = 9
+        self.persist_plan_with_relations(relations)
+        successor = draft_artifact("prd", {
+            "title": "Replacement requirements", "version": 2, "supersedes": target,
+            "lifecycle": "approved", "approval": {"actor": "fixture", "date": "2026-01-01"},
+            "requirements": [{"id": "REQ-002", "statement": "Current behavior."}],
+        }, repo=self.owner.repo)
+        apply_preview(successor, consent_for(successor.transaction))
+
+        for roots in ((self.dependent.repo, self.owner.repo), (self.owner.repo, self.dependent.repo)):
+            records = {node.id: node for node in resolve_graph(roots).node_records}
+            self.assertFalse(records[missing].available)
+            self.assertEqual(records[missing].lifecycle, "unavailable")
+            self.assertTrue(records[target].available)
+            self.assertEqual(records[target].version, 1)
+            self.assertEqual(records[target].lifecycle, "superseded")
+            self.assertEqual(records[successor.artifact_id].lifecycle, "approved")
 
     def test_revision_only_refresh_updates_projection_and_unblocks_authoring(self):
         plan, assumption, evidence, old_projection = (

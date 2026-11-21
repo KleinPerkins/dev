@@ -1,21 +1,25 @@
 """Deterministic import boundary for exact-pin GSD authoring results.
 
-This module validates caller-supplied authoring bytes. It never invokes a GSD
-workflow, implementation phase, cross-phase driver, SCM command, or scheduler.
+This module validates caller-supplied authoring bytes and checker evidence. It
+never invokes a GSD workflow, implementation phase, cross-phase driver, SCM
+mutation, or scheduler.
 """
 
 from __future__ import annotations
 
 import fnmatch
+import re
 import subprocess
 import uuid
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from .artifact_authority import resolve_approved_artifact
 from .artifacts import _bindings
 from .canonical import canonical_json, contained_path, digest_ref, parse_json_object
 from .dependencies import assert_plan_assumptions_current
+from .gsd_plan_check import CHECKER_DESCRIPTOR_DIGEST, GSD_REVISION, run_plan_structure_checks
 from .transactions import (
     MutationAction,
     MutationRequest,
@@ -52,6 +56,10 @@ RESULT_FIELDS = {
     "commands",
     "assumptions_changed",
 }
+CENTRAL_SELECTOR = "_ops/doc-warden/current-plan-authority.json"
+CENTRAL_REPOSITORY_KEY = "47f7e608-ce5f-50ae-be86-10d7e95265f9"
+CENTRAL_REPOSITORY_ID = 1459458379
+MAX_NATIVE_REPORT_BYTES = 64 * 1024
 
 
 @dataclass(frozen=True)
@@ -82,6 +90,7 @@ class AuthoringImportPreview:
     binding_root: str | None = None
     authority_bindings: dict[str, Any] | None = None
     profile_digest: str | None = None
+    authority_inputs_digest: str | None = None
 
 
 @dataclass(frozen=True)
@@ -92,6 +101,8 @@ class AuthoringResult:
     checker_passed: bool
     commands: tuple[str, ...] = ()
     assumptions_changed: bool = False
+    native_plan_check: dict[str, Any] | None = None
+    native_report: bytes | None = None
 
 
 @dataclass(frozen=True)
@@ -99,6 +110,18 @@ class ImportPlan:
     transaction: TransactionPreview
     changed_paths: tuple[str, ...]
     checker_passed: bool
+
+
+@dataclass(frozen=True)
+class CentralAuthority:
+    bindings: dict[str, Any]
+    inputs: tuple[ObservedInput, ...]
+
+    @property
+    def inputs_digest(self) -> str:
+        return digest_ref(canonical_json([
+            {"path": item.path, "digest": item.digest} for item in self.inputs
+        ]))
 
 
 BEGIN_PROJECT = "<!-- doc-warden:project-current:begin -->\n"
@@ -133,25 +156,73 @@ def _central_schema_directory(root: Path) -> Path:
     return path
 
 
-def _central_authority_bindings(root: Path) -> dict[str, Any]:
-    required = ("_ops/doc-warden/POLICY.md", "_ops/doc-warden/triggers.v2.json",
-                "_ops/plans/doc-warden-execution-plan-v2.md")
-    for relative in required:
-        if not contained_path(root, relative).is_file():
-            raise ValueError("authoring_authority_unavailable")
+def _central_authority(root: Path) -> CentralAuthority:
+    selector_path = contained_path(root, CENTRAL_SELECTOR)
+    if not selector_path.is_file():
+        raise ValueError("authoring_authority_unavailable")
+    selector_bytes = selector_path.read_bytes()
+    selector = parse_json_object(selector_bytes)
+    fields = {"schema", "repository_key", "github_repository_id", "plan_id",
+              "plan_version", "plan_receipt_id", "decision_id"}
+    if (set(selector) != fields or selector_bytes != canonical_json(selector)
+            or selector["schema"] != "doc-warden/current-plan-authority/v1"
+            or selector["repository_key"] != CENTRAL_REPOSITORY_KEY
+            or selector["github_repository_id"] != CENTRAL_REPOSITORY_ID
+            or type(selector["plan_version"]) is not int
+            or any(not isinstance(selector[key], str) or not selector[key]
+                   for key in ("plan_id", "plan_receipt_id", "decision_id"))):
+        raise ValueError("authoring_authority_selector_invalid")
+    plan = resolve_approved_artifact(root, "plan", selector["plan_id"], version=selector["plan_version"])
+    decision = resolve_approved_artifact(root, "adr", selector["decision_id"])
+    if (plan.operation_id != selector["plan_receipt_id"]
+            or plan.metadata["repository_key"] != CENTRAL_REPOSITORY_KEY
+            or plan.metadata["github_repository_id"] != CENTRAL_REPOSITORY_ID):
+        raise ValueError("authoring_authority_selector_mismatch")
+    inputs: dict[str, ObservedInput] = {}
+
+    def observe(item: ObservedInput) -> None:
+        if inputs.setdefault(item.path, item) != item:
+            raise ValueError("authoring_authority_changed")
+
+    required_plan = {"kind": "plan", "id": selector["plan_id"], "version": selector["plan_version"]}
+    parents = [relation for relation in decision.metadata["relations"]
+               if relation["relation"] == "derives_from"]
+    if sum(relation["target"] == required_plan for relation in parents) != 1:
+        raise ValueError("authoring_authority_decision_mismatch")
+    for relation in parents:
+        target = relation["target"]
+        provenance = relation["provenance"]
+        if len(provenance) != 1 or set(provenance[0]) != {"digest"}:
+            raise ValueError("authoring_authority_decision_mismatch")
+        parent = resolve_approved_artifact(root, target["kind"], target["id"],
+                                           version=target["version"], digest=provenance[0]["digest"])
+        for item in parent.observed_inputs:
+            observe(item)
+    for item in (*plan.observed_inputs, *decision.observed_inputs):
+        observe(item)
+    observe(ObservedInput(str(selector_path), digest_ref(selector_bytes)))
+
     schemas = _central_schema_directory(root)
-    paths = list(schemas.glob("*.schema.json"))
+    paths = sorted(schemas.glob("*.schema.json"))
     if not paths:
         raise ValueError("authoring_authority_unavailable")
-    for path in paths:
-        if not contained_path(root, str(path.relative_to(root))).is_file():
+    observe(ObservedInput(str(schemas), directory_input_digest(schemas)))
+    for path in (*paths, root / "_ops/doc-warden/POLICY.md", root / "_ops/doc-warden/triggers.v2.json",
+                 *_runtime_paths(root)):
+        path = contained_path(root, path.relative_to(root).as_posix())
+        if not path.is_file():
             raise ValueError("authoring_authority_unavailable")
-    bindings = _bindings(root)
-    for name in ("policy_digest", "schema_digest", "trigger_catalog_digest",
-                 "gsd_pin_digest", "approved_plan_digest"):
-        if bindings[name] == "sha256:" + "0" * 64:
-            raise ValueError("authoring_authority_unavailable")
-    return bindings
+        observe(ObservedInput(str(path), digest_ref(path.read_bytes())))
+    bindings = _bindings(root) | {"approved_plan_digest": plan.digest}
+    return CentralAuthority(bindings, tuple(inputs[key] for key in sorted(inputs)))
+
+
+def _recheck_central_authority(preview: AuthoringImportPreview, authority: Path) -> CentralAuthority:
+    current = _central_authority(authority)
+    if (current.bindings != preview.authority_bindings
+            or current.inputs_digest != preview.authority_inputs_digest):
+        raise ValueError("authoring_authority_changed")
+    return current
 
 
 def _central_profile(repo: Path, pin_digest: str, interface_digest: str) -> str:
@@ -177,8 +248,7 @@ def validate_runtime_binding(preview: AuthoringImportPreview) -> Path:
     if preview.binding_root is not None:
         if str(authority) != preview.binding_root:
             raise ValueError("authoring_authority_root_changed")
-        if _central_authority_bindings(authority) != preview.authority_bindings:
-            raise ValueError("authoring_authority_changed")
+        _recheck_central_authority(preview, authority)
         if _central_profile(preview.repo, preview.pin_digest, preview.interface_digest) != preview.profile_digest:
             raise ValueError("authoring_profile_changed")
     return authority
@@ -290,7 +360,7 @@ def _matches_allowed(path: str, patterns: tuple[str, ...]) -> bool:
 
 
 def validate_authoring_result_envelope(raw: dict[str, Any]) -> None:
-    if set(raw) != RESULT_FIELDS:
+    if set(raw) not in (RESULT_FIELDS, RESULT_FIELDS | {"native_plan_check"}):
         raise ValueError("authoring_result_contract_invalid")
     source_revision = raw["source_revision"]
     pin_digest = raw["pin_digest"]
@@ -322,9 +392,13 @@ def validate_authoring_result_envelope(raw: dict[str, Any]) -> None:
             or len(expected_digest) != 71
         ):
             raise ValueError("authoring_result_contract_invalid")
+    if "native_plan_check" in raw and not isinstance(raw["native_plan_check"], dict):
+        raise ValueError("authoring_native_plan_check_invalid")
 
 
-def authoring_result_from_envelope(repo: Path, raw: dict[str, Any]) -> AuthoringResult:
+def authoring_result_from_envelope(
+    repo: Path, raw: dict[str, Any], *, native_report: bytes | None = None
+) -> AuthoringResult:
     validate_authoring_result_envelope(raw)
     outputs: dict[str, bytes] = {}
     root = repo.resolve(strict=True)
@@ -344,7 +418,62 @@ def authoring_result_from_envelope(repo: Path, raw: dict[str, Any]) -> Authoring
         checker_passed=raw["checker_passed"],
         commands=tuple(raw["commands"]),
         assumptions_changed=raw["assumptions_changed"],
+        native_plan_check=raw.get("native_plan_check"),
+        native_report=native_report,
     )
+
+
+def authoring_preview_record(preview: AuthoringImportPreview) -> dict[str, Any]:
+    payload = {
+        "schema": "doc-warden/authoring-import-preview/v1",
+        "canonical_root": preview.canonical_root,
+        "operation_id": preview.operation_id,
+        "source_revision": preview.source_revision,
+        "pin_digest": preview.pin_digest,
+        "interface_digest": preview.interface_digest,
+        "input_digests": preview.input_digests,
+        "frozen_digests": preview.frozen_digests,
+        "allowed_outputs": list(preview.allowed_outputs),
+        "post_validator": preview.post_validator,
+        "disposition": preview.disposition,
+        "active_plan_id": preview.active_plan_id,
+    }
+    if preview.binding_root is not None:
+        payload.update(schema="doc-warden/authoring-import-preview/v2",
+                       binding_root=preview.binding_root,
+                       authority_bindings=preview.authority_bindings,
+                       profile_digest=preview.profile_digest,
+                       authority_inputs_digest=preview.authority_inputs_digest)
+    payload["preview_digest"] = digest_ref(canonical_json(payload))
+    return payload
+
+
+def _native_plan_check_digest(preview: AuthoringImportPreview, result: AuthoringResult) -> str:
+    check = result.native_plan_check
+    report = result.native_report
+    if check is None or report is None:
+        raise ValueError("authoring_native_plan_check_required")
+    if (
+        set(check) != {"schema", "preview_digest", "changed_file_digests", "descriptor_digest",
+                       "run_id", "verdict", "report_digest"}
+        or check["schema"] != "doc-warden/gsd-native-plan-check/v1"
+        or check["preview_digest"] != authoring_preview_record(preview)["preview_digest"]
+        or check["changed_file_digests"] != {path: digest_ref(data) for path, data in result.outputs.items()}
+        or check["descriptor_digest"] != CHECKER_DESCRIPTOR_DIGEST
+        or not isinstance(check["run_id"], str)
+        or re.fullmatch(r"[A-Za-z0-9_-]{1,128}", check["run_id"]) is None
+        or not 0 < len(report) <= MAX_NATIVE_REPORT_BYTES
+        or check["report_digest"] != digest_ref(report)
+    ):
+        raise ValueError("authoring_native_plan_check_invalid")
+    try:
+        lines = report.decode("utf-8").strip().splitlines()
+    except UnicodeError as exc:
+        raise ValueError("authoring_native_plan_check_invalid") from exc
+    if (check["verdict"] != "VERIFICATION PASSED" or not lines
+            or lines[0] != "## VERIFICATION PASSED" or "## ISSUES FOUND" in lines):
+        raise ValueError("authoring_checker_failed")
+    return digest_ref(canonical_json(check))
 
 
 def prepare_authoring_import(scope: AuthoringScope) -> AuthoringImportPreview:
@@ -368,7 +497,7 @@ def prepare_authoring_import(scope: AuthoringScope) -> AuthoringImportPreview:
     interface = parse_json_object(interface_bytes)
     if (
         pin.get("version") != "1.11.0"
-        or pin.get("git_commit") != "182f60b4c170785d96f1deb87fea8b108e9b985f"
+        or pin.get("git_commit") != GSD_REVISION
         or interface.get("version") != pin.get("version")
         or interface.get("git_commit") != pin.get("git_commit")
         or interface.get("supported_scope") != "authoring_context_only"
@@ -388,7 +517,8 @@ def prepare_authoring_import(scope: AuthoringScope) -> AuthoringImportPreview:
         if not path.is_file():
             raise ValueError("frozen_authority_missing")
         frozen_digests[safe] = digest_ref(path.read_bytes())
-    return AuthoringImportPreview(
+    central = _central_authority(authority) if scope.binding_root is not None else None
+    preview = AuthoringImportPreview(
         repo=repo,
         canonical_root=str(repo),
         operation_id=scope.operation_id,
@@ -402,10 +532,14 @@ def prepare_authoring_import(scope: AuthoringScope) -> AuthoringImportPreview:
         disposition="operator_invoke_required",
         active_plan_id=scope.active_plan_id,
         binding_root=str(authority) if scope.binding_root is not None else None,
-        authority_bindings=_central_authority_bindings(authority) if scope.binding_root is not None else None,
+        authority_bindings=central.bindings if central is not None else None,
         profile_digest=_central_profile(repo, digest_ref(pin_bytes), digest_ref(interface_bytes))
         if scope.binding_root is not None else None,
+        authority_inputs_digest=central.inputs_digest if central is not None else None,
     )
+    if central is not None:
+        validate_runtime_binding(preview)
+    return preview
 
 
 def validate_authoring_result(
@@ -437,8 +571,16 @@ def validate_authoring_result(
         path = contained_path(preview.repo, relative)
         if not path.is_file() or digest_ref(path.read_bytes()) != expected:
             raise ValueError("contradictory_authority")
-    if any(path.endswith("-PLAN.md") for path in result.outputs) and not result.checker_passed:
-        raise ValueError("authoring_checker_failed")
+    plans = {path: content for path, content in result.outputs.items() if path.endswith("-PLAN.md")}
+    checker_inputs = ()
+    checker_digest = None
+    if plans:
+        if not result.checker_passed:
+            raise ValueError("authoring_checker_failed")
+        checker_digest = _native_plan_check_digest(preview, result)
+        checker_inputs = run_plan_structure_checks(plans)
+    elif result.native_plan_check is not None or result.native_report is not None:
+        raise ValueError("authoring_native_plan_check_invalid")
     if not actions:
         raise ValueError("authoring_result_empty")
     config = read_repository_config(preview.repo)
@@ -453,6 +595,8 @@ def validate_authoring_result(
     pin_path, interface_path = _runtime_paths(authority)
     observe(pin_path, preview.pin_digest)
     observe(interface_path, preview.interface_digest)
+    for item in checker_inputs:
+        observe(Path(item.path), item.digest)
     for mapping in (preview.input_digests, preview.frozen_digests):
         for relative, expected in mapping.items():
             # Co-written inputs use transaction preimages/postimages so an exact
@@ -462,16 +606,11 @@ def validate_authoring_result(
     if preview.binding_root is not None:
         profile = contained_path(preview.repo, ".planning/doc-warden.json")
         observe(profile, preview.profile_digest)
-        schema_dir = _central_schema_directory(authority)
-        observe(schema_dir, directory_input_digest(schema_dir))
-        relatives = ["_ops/doc-warden/POLICY.md", "_ops/doc-warden/triggers.v2.json",
-                     "_ops/plans/doc-warden-execution-plan-v2.md"]
-        relatives += [str(path.relative_to(authority)) for path in schema_dir.glob("*.schema.json")]
-        for relative in relatives:
-            path = contained_path(authority, relative)
-            observe(path, digest_ref(path.read_bytes()))
-        # Refuse visible drift during observed-input collection as well.
-        validate_runtime_binding(preview)
+        for item in _recheck_central_authority(preview, authority).inputs:
+            observe(Path(item.path), item.digest)
+    bindings = preview.authority_bindings if preview.binding_root is not None else _bindings(preview.repo)
+    if checker_digest is not None:
+        bindings = {**bindings, "native_plan_check_digest": checker_digest}
     transaction = preview_transaction(
         MutationRequest(
             repo=preview.repo,
@@ -479,7 +618,7 @@ def validate_authoring_result(
             github_repository_id=config["github_repository_id"],
             transition="draft_update",
             actions=tuple(actions),
-            bindings=preview.authority_bindings if preview.binding_root is not None else _bindings(preview.repo),
+            bindings=bindings,
             operation_id=preview.operation_id,
             require_write_enabled=True,
             observed_inputs=tuple(observed.values()),

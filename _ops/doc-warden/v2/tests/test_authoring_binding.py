@@ -10,10 +10,14 @@ import unittest
 import uuid
 from unittest.mock import patch
 
-from doc_warden.artifacts import apply_preview, consent_for, repository_profile
+from doc_warden.adrs import preview_adr_draft
+from doc_warden.artifacts import apply_preview, consent_for, draft_artifact, repository_profile
 from doc_warden.canonical import canonical_json, digest_ref
 from doc_warden.cli import main, _authoring_preview_json, _load_authoring_preview
-from doc_warden.gsd_adapter import AuthoringScope, AuthoringResult, prepare_authoring_import, validate_authoring_result
+from doc_warden.gsd_adapter import (
+    CENTRAL_REPOSITORY_ID, CENTRAL_REPOSITORY_KEY, CENTRAL_SELECTOR,
+    AuthoringScope, AuthoringResult, prepare_authoring_import, validate_authoring_result,
+)
 from doc_warden.operation_store import load_preview
 from fixture_factory import FixtureFactory
 
@@ -38,15 +42,44 @@ class AuthoringBindingTests(unittest.TestCase):
         self.environment.start();self.addCleanup(self.environment.stop)
         self.fixture = FixtureFactory.create();self.addCleanup(self.fixture.cleanup)
         self.repo = self.fixture.repo.resolve()
-        self.authority = self.state / 'authority'
+        owner = FixtureFactory.create('central-authority')
+        self.addCleanup(owner.cleanup)
+        self.authority = owner.repo.resolve()
         relatives = ['_ops/doc-warden/POLICY.md', '_ops/doc-warden/triggers.v2.json',
-                     '_ops/plans/doc-warden-execution-plan-v2.md',
                      '_ops/doc-warden/runtime/gsd-core/gsd-core-pin.json',
                      '_ops/doc-warden/runtime/gsd-core/runtime-interface.v1.json']
         relatives += [str(p.relative_to(ROOT)) for p in (ROOT / '_ops/doc-warden/schemas/v2').glob('*.schema.json')]
         for relative in relatives:
             path = self.authority / relative;path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes((ROOT / relative).read_bytes())
+        (self.authority / '.planning/doc-warden.json').write_bytes(canonical_json(repository_profile(
+            self.authority, CENTRAL_REPOSITORY_KEY, github_repository_id=CENTRAL_REPOSITORY_ID,
+        )))
+        owner.approve_prd('REQ-001')
+        plan = draft_artifact('plan', {
+            'title': 'Current owner plan', 'lifecycle': 'approved',
+            'approval': {'actor': 'fixture', 'date': '2026-01-01'},
+        }, repo=self.authority)
+        apply_preview(plan, consent_for(plan.transaction))
+        self.central_plan = self.authority / plan.artifact_path
+        self.central_plan_digest = digest_ref(self.central_plan.read_bytes())
+        body = '# Select fixture plan\n\nUse the approved current fixture plan.\n'
+        decision = preview_adr_draft({
+            'title': 'Select fixture plan', 'body': body,
+            'approval': {'actor': 'fixture', 'date': '2026-01-01', 'review_sha256': digest_ref(body.encode())[7:]},
+            'parents': {
+                'observed_at': '2026-01-01T00:10:00Z',
+                'parents': [{'kind': 'plan', 'id': plan.artifact_id, 'version': 1,
+                             'digest': self.central_plan_digest}],
+            },
+        }, repo=self.authority)
+        apply_preview(decision, consent_for(decision.transaction))
+        self.selector = self.authority / CENTRAL_SELECTOR
+        self.selector.write_bytes(canonical_json({
+            'schema': 'doc-warden/current-plan-authority/v1', 'repository_key': CENTRAL_REPOSITORY_KEY,
+            'github_repository_id': CENTRAL_REPOSITORY_ID, 'plan_id': plan.artifact_id, 'plan_version': 1,
+            'plan_receipt_id': plan.transaction.operation_id, 'decision_id': decision.artifact_id,
+        }))
         self.profile = self.repo / '.planning/doc-warden.json'
         self.profile.write_bytes(canonical_json(repository_profile(self.repo, self.fixture.repository_key,
                                                                    binding_root=self.authority)))
@@ -68,6 +101,7 @@ class AuthoringBindingTests(unittest.TestCase):
         self.assertEqual(preview.binding_root, str(self.authority.resolve()))
         self.assertEqual(preview.profile_digest, digest_ref(before))
         self.assertEqual(preview.authority_bindings['gsd_pin_digest'], preview.pin_digest)
+        self.assertEqual(preview.authority_bindings['approved_plan_digest'], self.central_plan_digest)
         self.assertNotEqual(preview.authority_bindings['policy_digest'], 'sha256:' + '0'*64)
         self.assertEqual(self.profile.read_bytes(), before)
 
@@ -153,8 +187,33 @@ class AuthoringBindingTests(unittest.TestCase):
             apply_preview(plan.transaction, consent_for(plan.transaction))
 
     def test_missing_authority_does_not_fall_back_to_zero_bindings(self):
-        (self.authority / '_ops/doc-warden/POLICY.md').unlink()
+        self.selector.unlink()
         with self.assertRaisesRegex(ValueError, 'authoring_authority_unavailable'):self.prepare()
+
+    def test_selection_rejects_wrong_owner_missing_receipt_or_changed_sidecar(self):
+        selector = json.loads(self.selector.read_bytes())
+        for field, value, code in (
+            ('github_repository_id', 145, 'authoring_authority_selector_invalid'),
+            ('plan_receipt_id', str(uuid.uuid4()), 'authoring_authority_selector_mismatch'),
+        ):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, code):
+                self.selector.write_bytes(canonical_json(selector | {field: value}))
+                self.prepare()
+        self.selector.write_bytes(canonical_json(selector))
+        sidecar = self.central_plan.with_suffix('.governance.json')
+        sidecar.write_bytes(sidecar.read_bytes() + b'\n')
+        with self.assertRaisesRegex(ValueError, 'authority_freeze_mismatch'):
+            self.prepare()
+
+    def test_prepare_refuses_a_selected_plan_after_an_approved_successor(self):
+        selector = json.loads(self.selector.read_bytes())
+        successor = draft_artifact('plan', {
+            'title': 'Successor plan', 'lifecycle': 'approved', 'version': 2, 'supersedes': selector['plan_id'],
+            'approval': {'actor': 'fixture', 'date': '2026-01-01'},
+        }, repo=self.authority)
+        apply_preview(successor, consent_for(successor.transaction))
+        with self.assertRaisesRegex(ValueError, 'authority_artifact_required'):
+            self.prepare()
 
     def test_symlinked_runtime_binding_refuses(self):
         original = self.state / 'pin.json';original.write_bytes(self.pin.read_bytes())

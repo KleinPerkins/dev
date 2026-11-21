@@ -6,7 +6,7 @@
 # idempotent, NON-CLOBBERING symlink into each tool's skills dir. Nothing here is tracked; the
 # symlinks live under ~/.cursor /.claude /.codex, like the agent-rule symlink.
 #
-# Usage:  _ops/bin/install-skills.sh   (or: make install-skills)
+# Usage:  _ops/bin/install-skills.sh [--only doc-warden]   (or: make install-skills)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"   # _ops/bin
@@ -18,6 +18,16 @@ DEV_SKILLS=(dev-doctor dev-new-repo dev-remove-repo doc-warden)
 CURSOR_SKILLS=(dev-doctor dev-new-repo dev-remove-repo doc-warden)
 CLAUDE_SKILLS=(dev-doctor dev-new-repo dev-remove-repo doc-warden)
 CODEX_SKILLS=(dev-doctor dev-new-repo dev-remove-repo doc-warden)
+if [ "$#" -ne 0 ]; then
+  if [ "$#" -ne 2 ] || [ "$1" != "--only" ] || [ "$2" != "doc-warden" ]; then
+    printf 'usage: install-skills.sh [--only doc-warden]\n' >&2
+    exit 2
+  fi
+  DEV_SKILLS=(doc-warden)
+  CURSOR_SKILLS=(doc-warden)
+  CLAUDE_SKILLS=(doc-warden)
+  CODEX_SKILLS=(doc-warden)
+fi
 
 log() { printf '[install-skills] %s\n' "$*"; }
 

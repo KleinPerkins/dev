@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # _ops/bin/doc-warden.sh — doc-warden CLI
 #
-# The two-verb operator/caller-facing surface.
+# Operator-facing v2 commands with a legacy structural compatibility surface.
 # Policy: _ops/doc-warden/POLICY.md §8
 # Execution plan: _ops/plans/doc-warden-execution-plan-v1.md §18 WI-M1-03
 #
@@ -39,13 +39,13 @@ elif [ "${1:-}" = "v2-preview" ]; then
   shift
   V2_ROOT="$SELF_DIR/../doc-warden/v2"
   exec env PYTHONPATH="$V2_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
-    python3 -m doc_warden.cli "$@"
+    python3 -B -m doc_warden.cli "$@"
 else
   case "${1:-}" in
-    doctor|view|draft|adr|prioritize|sequence|reconcile|migrate|runtime|prepare-authoring|validate-authoring|checkpoint|resume-authoring|verify|apply)
+    doctor|view|intent|draft|adr|prioritize|sequence|reconcile|migrate|runtime|prepare-authoring|validate-authoring|checkpoint|handoff|pause-with-continuity|resume-authoring|verify|apply)
       V2_ROOT="$SELF_DIR/../doc-warden/v2"
       exec env PYTHONPATH="$V2_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
-        python3 -m doc_warden.cli "$@"
+        python3 -B -m doc_warden.cli "$@"
       ;;
   esac
 fi
@@ -60,8 +60,14 @@ source "$SELF_DIR/doc-warden-lib.sh"
 usage() {
   cat >&2 <<'USAGE'
 Usage:
-  doc-warden.sh doctor|view|draft|adr|prioritize|sequence|reconcile|migrate ...
+  doc-warden.sh doctor|view|intent|draft|adr|prioritize|sequence|reconcile|migrate ...
       Active v2 governance commands.
+
+  doc-warden.sh checkpoint|handoff|pause-with-continuity|resume-authoring ...
+      Governed authoring continuity previews.
+
+  doc-warden.sh prepare-authoring|validate-authoring|verify|runtime|apply ...
+      Authoring import, runtime qualification and transaction apply commands.
 
   doc-warden.sh v2-preview <v2-command> ...
       Compatibility spelling retained for pre-activation scripts.

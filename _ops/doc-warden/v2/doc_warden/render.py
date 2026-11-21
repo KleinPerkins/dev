@@ -20,4 +20,6 @@ def render_logical_repository(repository: LogicalRepository) -> dict[str, Any]:
         "mutation_eligible": repository.mutation_eligible,
         "docs_only": repository.docs_only,
         "checkout_count": len(repository.observations),
+        "source_revision": repository.source_revision,
+        "observed_at": repository.observed_at,
     }

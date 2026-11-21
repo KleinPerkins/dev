@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -971,7 +971,7 @@ def _target_node(
             edge.target_id,
         )
         repository_key = match.group(1) if match else None
-    available = (
+    available = edge.target_kind not in ARTIFACT_NODE_KINDS and (
         repository_key in known_repositories
         if (
             repository_key is not None
@@ -1005,7 +1005,9 @@ def resolve_graph(repositories: Iterable[Path]) -> GeneratedGraph:
     known_keys = {config["repository_key"] for config in configs.values()}
     nodes: dict[str, GraphNode] = {}
     edges: list[DependencyEdge] = []
+    retired: dict[str, tuple[str, str]] = {}
     for repo, config in configs.items():
+        revision = _head(repo)
         repository_id = f"REPO-{config['repository_key']}"
         nodes[repository_id] = GraphNode(
             id=repository_id,
@@ -1013,7 +1015,7 @@ def resolve_graph(repositories: Iterable[Path]) -> GeneratedGraph:
             repository_key=config["repository_key"],
             version=None,
             lifecycle="active",
-            revision=_head(repo),
+            revision=revision,
             provider_revision=None,
             available=True,
         )
@@ -1025,11 +1027,15 @@ def resolve_graph(repositories: Iterable[Path]) -> GeneratedGraph:
                 repository_key=metadata["repository_key"],
                 version=metadata["version"],
                 lifecycle=metadata["lifecycle"],
-                revision=_head(repo),
+                revision=revision,
                 provider_revision=None,
                 available=True,
             )
-            nodes[source.id] = _merge_node(nodes.get(source.id), source)
+            if source.id in nodes and nodes[source.id] != source:
+                raise ValueError("dependency_artifact_identity_conflict")
+            nodes[source.id] = source
+            if metadata["lifecycle"] == "approved" and metadata["supersedes"] is not None:
+                retired[metadata["supersedes"]] = (source.kind, metadata["repository_key"])
             for record in metadata["relations"]:
                 edge = DependencyEdge.from_record(
                     {
@@ -1040,8 +1046,6 @@ def resolve_graph(repositories: Iterable[Path]) -> GeneratedGraph:
                     }
                 )
                 edges.append(edge)
-                target = _target_node(edge, known_keys)
-                nodes[target.id] = _merge_node(nodes.get(target.id), target)
         roadmap_items = parse_roadmap(repo / ".planning/ROADMAP.md")
         roadmap_ids = {item["id"] for item in roadmap_items}
         for item in roadmap_items:
@@ -1100,6 +1104,15 @@ def resolve_graph(repositories: Iterable[Path]) -> GeneratedGraph:
                         provider_revision=None,
                         available=False,
                     )
+    for identifier, owner in retired.items():
+        predecessor = nodes.get(identifier)
+        if predecessor and (predecessor.kind, predecessor.repository_key) == owner:
+            nodes[identifier] = replace(predecessor, lifecycle="superseded")
+    inspected = set(nodes)
+    for edge in edges:
+        if edge.target_id not in inspected:
+            target = _target_node(edge, known_keys)
+            nodes[target.id] = _merge_node(nodes.get(target.id), target)
     planned = tuple(
         sorted(
             (edge for edge in edges if edge.authority == "planned"),
@@ -1646,6 +1659,7 @@ def _observe_requirement_assumption(
         current_revision,
     )
     try:
+        from .artifact_authority import resolve_approved_artifact
         from .gsd_adapter import (
             BEGIN_REQUIREMENTS,
             END_REQUIREMENTS,
@@ -1705,6 +1719,7 @@ def _observe_requirement_assumption(
             or digest_ref(authority_path.read_bytes()) != source["digest"]
         ):
             return unresolved
+        resolve_approved_artifact(repo, "prd", metadata["id"], version=source["version"], digest=source["digest"])
     except (KeyError, OSError, TypeError, UnicodeError, ValueError):
         return unresolved
     observed = assumption.binding()

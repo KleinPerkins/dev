@@ -2,12 +2,13 @@ import json
 import unittest
 import uuid
 
+from doc_warden.adrs import preview_adr_draft
 from doc_warden.artifacts import (
     apply_preview,
     consent_for,
     draft_artifact,
 )
-from doc_warden.canonical import canonical_json, parse_artifact
+from doc_warden.canonical import canonical_json, digest_ref, parse_artifact
 from doc_warden.validators import parse_validated_artifact
 from fixture_factory import FixtureFactory
 
@@ -55,6 +56,81 @@ class ArtifactTests(unittest.TestCase):
     def test_feature_plan_refused_without_approved_prd(self):
         with self.assertRaisesRegex(ValueError, "approved_prd_required"):
             draft_artifact("plan", {"title": "Plan"}, repo=self.fixture.repo)
+        for kind in ("spec", "plan"):
+            with self.subTest(kind=kind), self.assertRaisesRegex(ValueError, "approved_prd_required"):
+                draft_artifact(kind, {"title": "Plan", "approved_prd": True}, repo=self.fixture.repo)
+
+    def test_feature_plan_uses_selected_approved_prd_requirements_and_observed_bytes(self):
+        self.fixture.approve_prd("REQ-001")
+        selected = self.fixture.approve_prd("REQ-002", "REQ-003")
+        with self.assertRaisesRegex(ValueError, "authority_artifact_ambiguous"):
+            draft_artifact("plan", {"title": "Ambiguous plan"}, repo=self.fixture.repo)
+        with self.assertRaisesRegex(ValueError, "approved_prd_requirement_set_mismatch"):
+            draft_artifact("plan", {"title": "Incomplete plan", "prd_id": selected,
+                                    "requirement_ids": ["REQ-002"]}, repo=self.fixture.repo)
+        plan = draft_artifact("plan", {"title": "Bound plan", "prd_id": selected}, repo=self.fixture.repo)
+        sidecar = next(action for action in plan.transaction.actions if action.path.endswith(".governance.json"))
+        self.assertEqual(json.loads(sidecar.content)["requirement_ids"], ["REQ-002", "REQ-003"])
+        prd = self.fixture.repo / ".planning/artifacts" / f"{selected}-v1.md"
+        prd.write_bytes(prd.read_bytes() + b"Unapproved change.\n")
+        with self.assertRaisesRegex(ValueError, "observed_input_drift"):
+            apply_preview(plan, consent_for(plan.transaction))
+        self.assertFalse((self.fixture.repo / plan.artifact_path).exists())
+
+    def test_changed_or_deleted_frozen_prd_successor_cannot_restore_authority_to_its_predecessor(self):
+        predecessor = self.fixture.approve_prd("REQ-001")
+        successor = draft_artifact("prd", {
+            "title": "Current requirements", "version": 2, "supersedes": predecessor,
+            "lifecycle": "approved", "approval": {"actor": "fixture", "date": "2026-01-01"},
+            "requirements": [{"id": "REQ-002", "statement": "Current behavior."}],
+        }, repo=self.fixture.repo)
+        apply_preview(successor, consent_for(successor.transaction))
+        plan = draft_artifact("plan", {"title": "Current plan"}, repo=self.fixture.repo)
+        sidecar = next(action for action in plan.transaction.actions if action.path.endswith(".governance.json"))
+        self.assertEqual(json.loads(sidecar.content)["requirement_ids"], ["REQ-002"])
+
+        path = self.fixture.repo / successor.artifact_path
+        document = parse_artifact(path)
+        metadata = document.metadata | {"lifecycle": "draft", "approval": None}
+        path.write_bytes(b"---\n" + canonical_json(metadata) + b"---\n" + document.body.encode("utf-8"))
+        for loss in ("edited", "deleted"):
+            if loss == "deleted":
+                path.unlink()
+            for selection in ({}, {"prd_id": predecessor}):
+                with self.subTest(loss=loss, selection=selection), self.assertRaisesRegex(
+                    ValueError, "^authority_freeze_mismatch$",
+                ):
+                    draft_artifact("plan", {"title": "Invalid plan"} | selection, repo=self.fixture.repo)
+
+    def test_authoring_rigor_requires_approved_sensitive_decision_and_rejects_unknown_signals(self):
+        self.fixture.approve_prd("REQ-001")
+        with self.assertRaisesRegex(ValueError, "rigor_signal_invalid:sensitive"):
+            draft_artifact("plan", {"title": "Ambiguous", "rigor_signals": {"sensitive": None}},
+                           repo=self.fixture.repo)
+        inputs = {"title": "Sensitive plan", "rigor_signals": {"sensitive": True, "sessions": 2}}
+        with self.assertRaisesRegex(ValueError, "sensitive_authoring_requires_approved_adr"):
+            draft_artifact("plan", inputs, repo=self.fixture.repo)
+        body = "# Sensitive decision\n\nApproved fixture data flow.\n"
+        decision = preview_adr_draft({"title": "Sensitive decision", "body": body, "approval": {
+            "actor": "fixture", "date": "2026-01-01", "review_sha256": digest_ref(body.encode())[7:],
+        }}, repo=self.fixture.repo)
+        apply_preview(decision, consent_for(decision.transaction))
+        plan = draft_artifact("plan", inputs | {"sensitive_adr_id": decision.artifact_id}, repo=self.fixture.repo)
+        apply_preview(plan, consent_for(plan.transaction))
+        metadata = parse_artifact(self.fixture.repo / plan.artifact_path).metadata
+        rigor = next(item["rigor"] for item in metadata["provenance"] if "rigor" in item)
+        self.assertEqual(rigor["base_class"], "multi_session_cross_component")
+        self.assertEqual(rigor["dimensions"], ["sensitive"])
+        self.assertIn("security_verification", rigor["required_artifacts"])
+
+    def test_feature_authoring_cannot_claim_trivial_rigor_from_one_negative_signal(self):
+        self.fixture.approve_prd("REQ-001")
+        inputs = {"title": "Unclassified scope", "rigor_signals": {"new_user_value": False}}
+        with self.assertRaisesRegex(ValueError, "feature_rigor_scope_unresolved"):
+            draft_artifact("plan", inputs, repo=self.fixture.repo)
+        with self.assertRaisesRegex(ValueError, "defect_and_feature_authoring_conflict"):
+            draft_artifact("plan", {"title": "Mixed routes", "defect_id": "DEF-unknown", "approved_prd": True},
+                           repo=self.fixture.repo)
 
     def test_uuid_artifact_id_is_bound_in_preview_and_reused_on_retry(self):
         operation_id = str(uuid.uuid4())
@@ -169,6 +245,7 @@ class ArtifactTests(unittest.TestCase):
         )
 
     def test_plan_draft_emits_governance_sidecar(self):
+        self.fixture.approve_prd("REQ-001")
         preview = draft_artifact(
             "plan",
             {"title": "Plan", "approved_prd": True},

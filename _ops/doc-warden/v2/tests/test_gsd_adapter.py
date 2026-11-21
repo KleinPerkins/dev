@@ -3,17 +3,21 @@ import os
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
-from doc_warden.canonical import digest_ref
+from doc_warden.canonical import canonical_json, digest_ref
 from doc_warden.gsd_adapter import (
     ALLOWED_OUTPUTS,
     AuthoringResult,
     AuthoringScope,
     apply_authoring_result,
+    authoring_preview_record,
     authoring_result_from_envelope,
     prepare_authoring_import,
     validate_authoring_result,
 )
+from doc_warden.gsd_plan_check import CHECKER_DESCRIPTOR_DIGEST, GSD_REVISION, run_plan_structure_checks
+from doc_warden.transactions import ObservedInput
 from fixture_factory import FixtureFactory
 
 
@@ -193,6 +197,107 @@ class GsdAdapterTests(unittest.TestCase):
                     checker_passed=False,
                 ),
             )
+
+    def test_native_plan_requires_checker_report_for_exact_preview_and_output(self):
+        preview = prepare_authoring_import(self.scope())
+        plan_path = ".planning/phases/01/01-PLAN.md"
+        outputs = {plan_path: b"example plan\n", ".planning/STATE.md": b"draft state\n"}
+        report = b"## VERIFICATION PASSED\n\nThe draft covers the example requirement.\n"
+        proof = {
+            "schema": "doc-warden/gsd-native-plan-check/v1",
+            "preview_digest": authoring_preview_record(preview)["preview_digest"],
+            "changed_file_digests": {path: digest_ref(data) for path, data in outputs.items()},
+            "descriptor_digest": CHECKER_DESCRIPTOR_DIGEST,
+            "run_id": "independent-fixture-run",
+            "verdict": "VERIFICATION PASSED",
+            "report_digest": digest_ref(report),
+        }
+        with patch("doc_warden.gsd_adapter.run_plan_structure_checks") as structure:
+            for code, changed, extras in (
+                ("authoring_native_plan_check_required", outputs, {}),
+                ("authoring_native_plan_check_invalid", outputs | {plan_path: b"edited"}, {
+                    "native_plan_check": proof, "native_report": report,
+                }),
+                ("authoring_native_plan_check_invalid", outputs, {
+                    "native_plan_check": proof | {"preview_digest": digest_ref(b"another preview")},
+                    "native_report": report,
+                }),
+                ("authoring_native_plan_check_invalid", outputs, {
+                    "native_plan_check": proof | {"descriptor_digest": digest_ref(b"another release")},
+                    "native_report": report,
+                }),
+                ("authoring_native_plan_check_invalid", outputs, {
+                    "native_plan_check": proof, "native_report": b"changed report\n",
+                }),
+                ("authoring_checker_failed", outputs, {
+                    "native_plan_check": proof | {"report_digest": digest_ref(b"## ISSUES FOUND\n")},
+                    "native_report": b"## ISSUES FOUND\n",
+                }),
+            ):
+                with self.subTest(code=code, extras=extras), self.assertRaisesRegex(ValueError, code):
+                    validate_authoring_result(preview, self.result(preview, changed, **extras))
+            structure.assert_not_called()
+
+            installed = self.fixture.repo / "observed-checker"
+            installed.write_bytes(b"fixture native checker bytes")
+            structure.return_value = (ObservedInput(str(installed.resolve()), digest_ref(installed.read_bytes())),)
+            validated = validate_authoring_result(preview, self.result(
+                preview, outputs, native_plan_check=proof, native_report=report,
+            ))
+            structure.assert_called_once_with({plan_path: outputs[plan_path]})
+            self.assertIn("native_plan_check_digest", validated.transaction.bindings)
+            installed.write_bytes(b"different native checker bytes")
+            with self.assertRaisesRegex(ValueError, "observed_input_drift"):
+                apply_authoring_result(validated)
+            self.assertFalse((self.fixture.repo / plan_path).exists())
+            installed.write_bytes(b"fixture native checker bytes")
+            receipt = apply_authoring_result(validated)
+            self.assertEqual(receipt["bindings"]["native_plan_check_digest"],
+                             validated.transaction.bindings["native_plan_check_digest"])
+            self.assertEqual((self.fixture.repo / plan_path).read_bytes(), outputs[plan_path])
+
+    def test_non_plan_outputs_keep_normal_draft_import_without_checker(self):
+        preview = prepare_authoring_import(self.scope())
+        with patch("doc_warden.gsd_adapter.run_plan_structure_checks") as structure:
+            plan = validate_authoring_result(preview, self.result(
+                preview, {".planning/STATE.md": b"draft state\n"}, checker_passed=False,
+            ))
+        structure.assert_not_called()
+        self.assertNotIn("native_plan_check_digest", plan.transaction.bindings)
+
+    def test_installed_checker_observes_its_package_and_refuses_changed_helper(self):
+        data = self.fixture.repo / "data"
+        package = data / f"gsd-core/releases/{GSD_REVISION}/node_modules/@opengsd/gsd-core"
+        files = {
+            "package.json": b"{}\n",
+            "agents/gsd-plan-checker.md": b"native descriptor fixture\n",
+            "gsd-core/bin/gsd-tools.cjs": b"native CLI fixture\n",
+            "gsd-core/bin/lib/verify-command-router.cjs": b"native subcommand fixture\n",
+        }
+        for name, content in files.items():
+            destination = package / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(content)
+        plan = {".planning/phases/01/01-PLAN.md": b"exact draft\n"}
+        expected = {name: digest_ref(content) for name, content in files.items()}
+        node = self.fixture.repo / "fixture-node"
+        node.write_bytes(b"node fixture\n")
+        with patch.dict(os.environ, {"XDG_DATA_HOME": str(data)}), patch.multiple(
+            "doc_warden.gsd_plan_check",
+            CHECKER_DESCRIPTOR_DIGEST=expected["agents/gsd-plan-checker.md"],
+            GSD_PACKAGE_FILES_DIGEST=digest_ref(canonical_json(expected)),
+        ), patch("doc_warden.gsd_plan_check.shutil.which", return_value=str(node)), patch(
+            "doc_warden.gsd_plan_check.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, b'{"valid":true,"errors":[]}', b""),
+        ) as invoked:
+            observed = {Path(row.path): row.digest for row in run_plan_structure_checks(plan)}
+            self.assertIn(package.resolve(), observed)
+            for name, digest in expected.items():
+                self.assertEqual(observed[(package / name).resolve()], digest)
+            (package / "gsd-core/bin/lib/verify-command-router.cjs").write_bytes(b"edited helper\n")
+            with self.assertRaisesRegex(ValueError, "authoring_checker_pin_mismatch"):
+                run_plan_structure_checks(plan)
+        invoked.assert_called_once()
 
     def test_plan_assumption_change_pauses_for_refinement(self):
         preview = prepare_authoring_import(self.scope())

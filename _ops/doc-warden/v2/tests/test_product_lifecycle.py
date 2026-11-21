@@ -119,7 +119,17 @@ class ProductLifecycleTests(unittest.TestCase):
             "approval": self.approval(),
         }
 
-    def persist_design(self, *, lifecycle="approved", version=1, supersedes=None):
+    def persist_visual_asset(self):
+        record = self.external_asset()
+        asset = draft_artifact("asset", {
+            "title": "Fixture visual", "lifecycle": "approved", "approval": self.approval(),
+            "external_asset": record,
+            "external_asset_observations": [self.external_asset_observation(record)],
+        }, repo=self.fixture.repo)
+        apply_preview(asset, consent_for(asset.transaction))
+        return asset.artifact_id
+
+    def persist_design(self, *, lifecycle="approved", version=1, supersedes=None, visual_asset=None):
         inputs = {
             "title": "Design",
             "lifecycle": lifecycle,
@@ -129,6 +139,8 @@ class ProductLifecycleTests(unittest.TestCase):
         if lifecycle == "approved":
             inputs["approval"] = self.approval()
             inputs["design"] = self.design_contract()
+            if visual_asset:
+                inputs["design"]["visual_assets"] = [visual_asset]
         preview = draft_artifact("design", inputs, repo=self.fixture.repo)
         apply_preview(preview, consent_for(preview.transaction))
         return preview
@@ -294,6 +306,7 @@ class ProductLifecycleTests(unittest.TestCase):
         )
 
     def test_spec_requires_every_prd_requirement_or_explicit_nonimplementation(self):
+        self.fixture.approve_prd("REQ-001", "REQ-002")
         with self.assertRaisesRegex(ValueError, "requirement_coverage_incomplete"):
             draft_artifact(
                 "spec",
@@ -441,6 +454,7 @@ class ProductLifecycleTests(unittest.TestCase):
                 )
 
     def test_nonimplemented_requirements_support_canonical_lists_and_reason_maps(self):
+        self.fixture.approve_prd("REQ-001", "REQ-002")
         for value in (
             ["REQ-002"],
             ["REQ-002", "REQ-002"],
@@ -463,6 +477,7 @@ class ProductLifecycleTests(unittest.TestCase):
                 self.assertTrue(preview.artifact_id.startswith("SPEC-"))
 
     def test_requirement_coverage_deduplicates_and_preserves_sorted_missing_order(self):
+        self.fixture.approve_prd("REQ-001", "REQ-002")
         self.assertEqual(
             _missing_requirement_coverage(
                 {
@@ -499,6 +514,8 @@ class ProductLifecycleTests(unittest.TestCase):
             ("prototype", "PROTO-"),
             ("sketch", "SKETCH-"),
             ("spike", "SPIKE-"),
+            ("verification", "VER-"),
+            ("uat", "UAT-"),
             ("release", "REL-"),
         ):
             inputs = {
@@ -514,6 +531,8 @@ class ProductLifecycleTests(unittest.TestCase):
                 ]
             if kind == "design":
                 inputs["design"] = self.design_contract()
+            if kind in {"verification", "uat", "release"}:
+                inputs["lifecycle"] = "draft"
             preview = draft_artifact(
                 kind,
                 inputs,
@@ -572,6 +591,8 @@ class ProductLifecycleTests(unittest.TestCase):
         )
 
     def test_design_version_semantic_equality_is_canonicalized(self):
+        self.fixture.approve_prd("REQ-001")
+        uxr_id = self.fixture.approve_uxr()
         design_id = f"DESIGN-{self.fixture.repository_key}-{self.fixture.id_for('design')}"
         self.assertEqual(
             validate_plan_design_bindings(
@@ -593,12 +614,13 @@ class ProductLifecycleTests(unittest.TestCase):
             ),
             [],
         )
-        persisted = self.persist_design(version=2)
+        persisted = self.persist_design(version=2, visual_asset=self.persist_visual_asset())
         preview = draft_artifact(
             "plan",
             {
                 "title": "Plan",
                 "approved_prd": True,
+                "uxr_id": uxr_id,
                 "design_ids": [persisted.artifact_id],
                 "design_versions": {persisted.artifact_id: "2"},
             },
@@ -611,6 +633,7 @@ class ProductLifecycleTests(unittest.TestCase):
         )
 
     def test_design_version_normalization_rejects_malformed_values(self):
+        self.fixture.approve_prd("REQ-001")
         design_id = f"DESIGN-{self.fixture.repository_key}-{self.fixture.id_for('design')}"
         malformed = (True, False, 2.0, "2.0", " 2", "02", 0, -1, None, [], {})
         for value in malformed:
@@ -661,6 +684,7 @@ class ProductLifecycleTests(unittest.TestCase):
         )
 
     def test_null_design_versions_are_empty_only_without_design_ids(self):
+        self.fixture.approve_prd("REQ-001")
         plan_id = f"PLAN-{self.fixture.repository_key}-{self.fixture.id_for('plan')}"
         design_id = f"DESIGN-{self.fixture.repository_key}-{self.fixture.id_for('design')}"
         with self.assertRaisesRegex(ValueError, "^plan_design_binding_incomplete$"):
@@ -713,6 +737,7 @@ class ProductLifecycleTests(unittest.TestCase):
         )
 
     def test_plan_draft_refuses_incomplete_or_malformed_design_bindings(self):
+        self.fixture.approve_prd("REQ-001")
         design_id = f"DESIGN-{self.fixture.repository_key}-{self.fixture.id_for('design')}"
         other_id = f"DESIGN-{self.fixture.repository_key}-{self.fixture.id_for('other-design')}"
         incomplete = (
@@ -763,6 +788,8 @@ class ProductLifecycleTests(unittest.TestCase):
                 )
 
     def test_plan_draft_requires_active_approved_on_disk_design(self):
+        self.fixture.approve_prd("REQ-001")
+        uxr_id = self.fixture.approve_uxr()
         missing_id = (
             f"DESIGN-{self.fixture.repository_key}-{self.fixture.id_for('missing-design')}"
         )
@@ -773,6 +800,7 @@ class ProductLifecycleTests(unittest.TestCase):
                     "plan",
                     {
                         "title": "Missing design",
+                        "uxr_id": uxr_id,
                         "approved_prd": True,
                         "design_ids": [missing_id],
                         "design_versions": {missing_id: 1},
@@ -786,6 +814,7 @@ class ProductLifecycleTests(unittest.TestCase):
                 "plan",
                 {
                     "title": "Unapproved design",
+                    "uxr_id": uxr_id,
                     "approved_prd": True,
                     "design_ids": [unapproved.artifact_id],
                     "design_versions": {unapproved.artifact_id: 1},
@@ -798,6 +827,7 @@ class ProductLifecycleTests(unittest.TestCase):
                 "plan",
                 {
                     "title": "Mismatched design version",
+                    "uxr_id": uxr_id,
                     "approved_prd": True,
                     "design_ids": [approved.artifact_id],
                     "design_versions": {approved.artifact_id: 2},
@@ -807,12 +837,14 @@ class ProductLifecycleTests(unittest.TestCase):
         successor = self.persist_design(
             version=2,
             supersedes=approved.artifact_id,
+            visual_asset=self.persist_visual_asset(),
         )
         with self.assertRaisesRegex(ValueError, "^plan_design_binding_stale$"):
             draft_artifact(
                 "plan",
                 {
                     "title": "Superseded design",
+                    "uxr_id": uxr_id,
                     "approved_prd": True,
                     "design_ids": [approved.artifact_id],
                     "design_versions": {approved.artifact_id: 1},
@@ -827,6 +859,7 @@ class ProductLifecycleTests(unittest.TestCase):
             "plan",
             {
                 "title": "Active design",
+                "uxr_id": uxr_id,
                 "approved_prd": True,
                 "design_ids": [successor.artifact_id, successor.artifact_id],
                 "design_versions": {successor.artifact_id: 2},
@@ -841,6 +874,8 @@ class ProductLifecycleTests(unittest.TestCase):
         )
 
     def test_plan_draft_refuses_malformed_design_artifact_state(self):
+        self.fixture.approve_prd("REQ-001")
+        uxr_id = self.fixture.approve_uxr()
         design_id = f"DESIGN-{self.fixture.repository_key}-{self.fixture.id_for('design')}"
         artifact_root = self.fixture.repo / ".planning/artifacts"
         artifact_root.mkdir(parents=True, exist_ok=True)
@@ -850,6 +885,7 @@ class ProductLifecycleTests(unittest.TestCase):
                 "plan",
                 {
                     "title": "Plan",
+                    "uxr_id": uxr_id,
                     "approved_prd": True,
                     "design_ids": [design_id],
                     "design_versions": {design_id: 1},
@@ -862,25 +898,56 @@ class ProductLifecycleTests(unittest.TestCase):
         )
 
     def test_release_artifact_binds_plan_verification_uat_commit_and_pr(self):
-        preview = draft_artifact(
-            "release",
-            {
-                "title": "Release",
-                "lifecycle": "approved",
-                "approval": self.approval(),
-                "release_evidence": {
-                    "plan": "PLAN-001",
-                    "verification": "VER-001",
-                    "uat": "UAT-001",
-                    "commit": "a" * 40,
-                    "pull_request": "https://github.com/KleinPerkins/dev/pull/1",
-                },
-            },
-            repo=self.fixture.repo,
-        )
+        repo = self.fixture.repo
+        self.fixture.approve_prd("REQ-001")
+        lifecycle = {"lifecycle": "approved", "approval": self.approval()}
+        plan = draft_artifact("plan", {"title": "Plan", **lifecycle}, repo=repo)
+        apply_preview(plan, consent_for(plan.transaction))
+        head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        proof = {"path": "README.md", "digest": digest_ref((repo / "README.md").read_bytes())}
+        outcomes = {}
+        for kind, result in (("verification", "passed"), ("uat", "accepted")):
+            record = draft_artifact(kind, {"title": kind, **lifecycle, "outcome_evidence": {
+                "plan": plan.artifact_id, "source_revision": head,
+                "requirements": {"REQ-001": proof | {"result": result}}, "visual_checks": {},
+            }}, repo=repo)
+            apply_preview(record, consent_for(record.transaction))
+            outcomes[kind] = record.artifact_id
+        evidence = {"plan": plan.artifact_id, "commit": head,
+                    "pull_request": "https://github.com/KleinPerkins/dev/pull/1", **outcomes}
+        preview = draft_artifact("release", {"title": "Release", **lifecycle, "release_evidence": evidence}, repo=repo)
         apply_preview(preview, consent_for(preview.transaction))
         metadata = parse_artifact(self.fixture.repo / preview.artifact_path).metadata
         self.assertEqual(metadata["type"], "release")
+        (repo / "README.md").write_text("Modified evidence.\n")
+        with self.assertRaisesRegex(ValueError, "outcome_evidence_changed"):
+            draft_artifact("release", {"title": "Stale proof", **lifecycle, "release_evidence": evidence}, repo=repo)
+
+    def test_visual_acceptance_requires_complete_scope_and_exact_design_revision(self):
+        repo = self.fixture.repo
+        self.fixture.approve_prd("REQ-001")
+        uxr = self.fixture.approve_uxr()
+        asset = self.persist_visual_asset()
+        design = self.persist_design(visual_asset=asset)
+        lifecycle = {"lifecycle": "approved", "approval": self.approval()}
+        plan = draft_artifact("plan", {"title": "Visual plan", **lifecycle, "uxr_id": uxr,
+                                       "design_ids": [design.artifact_id], "design_versions": {design.artifact_id: 1}},
+                              repo=repo)
+        apply_preview(plan, consent_for(plan.transaction))
+        head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        row = {"path": "README.md", "digest": digest_ref((repo / "README.md").read_bytes()), "result": "accepted"}
+        fields = {"plan": plan.artifact_id, "source_revision": head,
+                  "requirements": {"REQ-001": row}, "visual_checks": {}}
+        with self.assertRaisesRegex(ValueError, "outcome_coverage_incomplete"):
+            draft_artifact("uat", {"title": "Incomplete visual UAT", **lifecycle, "outcome_evidence": fields}, repo=repo)
+        fields["visual_checks"] = {item: row for item in (
+            "comparison", "states", "accessibility", "responsive", "copy", "recovery", "assets",
+        )}
+        approved = draft_artifact("uat", {"title": "Visual UAT", **lifecycle, "outcome_evidence": fields}, repo=repo)
+        apply_preview(approved, consent_for(approved.transaction))
+        self.persist_design(version=2, supersedes=design.artifact_id, visual_asset=asset)
+        with self.assertRaisesRegex(ValueError, "authority_artifact_required"):
+            draft_artifact("uat", {"title": "Stale visual UAT", **lifecycle, "outcome_evidence": fields}, repo=repo)
 
 
 if __name__ == "__main__":
