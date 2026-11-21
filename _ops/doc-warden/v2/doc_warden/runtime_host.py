@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import platform
 import shutil
 import socket
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,11 +21,12 @@ from .validators import read_repository_config
 QUALIFICATION = "doc-warden/gsd-host-qualification/v1"
 RUNTIME = "_ops/doc-warden/runtime/gsd-core"
 VERIFIER = "tests/verify-binding.sh"
+TOOLCHAIN_NAMES = ("node", "npm", "python3", "bash")
 
 
 def _toolchain() -> dict:
     executables = {}
-    for name in ("node", "npm", "python3", "bash"):
+    for name in TOOLCHAIN_NAMES:
         selected = shutil.which(name)
         if selected is None:
             raise ValueError("runtime_toolchain_unavailable")
@@ -35,6 +38,42 @@ def _toolchain() -> dict:
             raise ValueError("runtime_toolchain_changed")
         executables[name] = {"path": str(path), "digest": before, "version": version}
     return {"executables": executables, "platform": platform.system(), "machine": platform.machine()}
+
+
+def _bound_tool_paths(toolchain: dict) -> dict[str, Path]:
+    paths = {}
+    try:
+        for name in TOOLCHAIN_NAMES:
+            record = toolchain["executables"][name]
+            path = Path(record["path"])
+            if path.resolve(strict=True) != path or digest_ref(path.read_bytes()) != record["digest"]:
+                raise ValueError("runtime_toolchain_changed")
+            paths[name] = path
+    except (KeyError, OSError, TypeError) as exc:
+        raise ValueError("runtime_toolchain_changed") from exc
+    return paths
+
+
+def run_runtime_script(script: Path, *arguments: str, toolchain: dict | None, env: dict | None = None,
+                       **options) -> subprocess.CompletedProcess:
+    if toolchain is None:
+        return subprocess.run([str(script), *arguments], env=env, **options)
+    environment = dict(os.environ if env is None else env)
+    # Prevent a startup file or inherited Bash function from shadowing the
+    # verified process tools. Keep the rest of the host environment scoped.
+    for name in tuple(environment):
+        if name in {"BASH_ENV", "ENV"} or name.startswith("BASH_FUNC_"):
+            del environment[name]
+    paths = _bound_tool_paths(toolchain)
+    with tempfile.TemporaryDirectory(prefix="doc-warden-toolchain-") as directory:
+        for name, path in paths.items():
+            (Path(directory) / name).symlink_to(path)
+        environment["PATH"] = os.pathsep.join((directory, environment.get("PATH", os.defpath)))
+        try:
+            _bound_tool_paths(toolchain)
+            return subprocess.run([str(paths["bash"]), str(script), *arguments], env=environment, **options)
+        finally:
+            _bound_tool_paths(toolchain)
 
 
 def installation_context(repo: Path, home: Path, data_home: Path) -> dict:
@@ -83,7 +122,8 @@ def qualify_destination(repo: Path, *, home: Path, data_home: Path) -> dict:
         )
         if digest_ref(content) != digest:
             raise ValueError("runtime_qualification_source_drift")
-    completed = subprocess.run(["bash", str(verifier)], cwd=repo, capture_output=True, timeout=240, check=False)
+    completed = run_runtime_script(verifier, toolchain=context["toolchain"], cwd=repo,
+                                   capture_output=True, timeout=240, check=False)
     if completed.returncode != 0:
         raise ValueError("runtime_destination_qualification_failed")
     if (before != _runtime_source(repo) or verifier_digest != digest_ref(verifier.read_bytes())

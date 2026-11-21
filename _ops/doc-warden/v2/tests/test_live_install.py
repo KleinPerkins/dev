@@ -36,7 +36,7 @@ from doc_warden.live_install import (
     validate_doctor_observation,
     validate_global_hooks,
 )
-from doc_warden.runtime_host import _toolchain, qualify_destination
+from doc_warden.runtime_host import _toolchain, qualify_destination, run_runtime_script
 from doc_warden.scm import RepositoryIdentity
 from fixture_factory import ROOT
 
@@ -415,6 +415,46 @@ class LiveInstallTests(unittest.TestCase):
                              changed["executables"]["python3"]["version"])
             self.assertNotEqual(initial, changed)
 
+    def test_runtime_script_dispatch_binds_shell_and_child_tools(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            shell = root / "measured-bash"
+            shell.write_text('#!/bin/sh\nprintf "qualified bash\\n"\nexec /bin/bash "$@"\n')
+            paths = {"bash": shell}
+            for tool, filename in (("node", "node-binary"), ("npm", "npm-cli.js"), ("python3", "python3.13")):
+                path = root / filename
+                path.write_text(f"#!/bin/sh\nprintf 'qualified {tool}\\n'\n")
+                paths[tool] = path
+            for path in paths.values():
+                path.chmod(0o700)
+            toolchain = {"executables": {tool: {"path": str(path), "digest": digest_ref(path.read_bytes())}
+                                        for tool, path in paths.items()}}
+            other = root / "other"
+            other.mkdir()
+            for tool in paths:
+                replacement = other / tool
+                replacement.write_text("#!/bin/sh\nprintf 'wrong executable\\n'\nexit 1\n")
+                replacement.chmod(0o700)
+            startup = root / "startup.sh"
+            startup.write_text("exit 42\n")
+            script = root / "verifier.sh"
+            script.write_text("set -e\nnode\nnpm\npython3\nbash -c 'printf nested'\n")
+            result = run_runtime_script(script, toolchain=toolchain,
+                                        env={"PATH": str(other), "BASH_ENV": str(startup)},
+                                        check=True, capture_output=True, text=True)
+            self.assertEqual(result.stdout.splitlines(),
+                             ["qualified bash", "qualified node", "qualified npm", "qualified python3",
+                              "qualified bash", "nested"])
+
+            def replace_measured_shell(argv, **_options):
+                self.assertEqual(argv[0], str(shell))
+                shell.write_text("#!/bin/sh\nexit 0\n")
+                return subprocess.CompletedProcess(argv, 0)
+
+            with mock.patch("doc_warden.runtime_host.subprocess.run", side_effect=replace_measured_shell):
+                with self.assertRaisesRegex(ValueError, "^runtime_toolchain_changed$"):
+                    run_runtime_script(script, toolchain=toolchain)
+
     def test_exact_install_replay_reads_the_record_and_recovers_before_completion_record(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -567,11 +607,14 @@ class LiveInstallTests(unittest.TestCase):
             profile.write_bytes(canonical_json(repository_profile(
                 repo, CURRENT_REPOSITORY_KEY, github_repository_id=CENTRAL_REPOSITORY_ID,
             )))
+            shell = Path("/bin/bash").resolve(strict=True)
+            executable = {"path": str(shell), "digest": digest_ref(shell.read_bytes()), "version": "fixture"}
+            toolchain = {"executables": {name: executable for name in ("node", "npm", "python3", "bash")}}
             with mock.patch.dict("os.environ", {"XDG_STATE_HOME": str(root / "state")}), mock.patch(
                 "doc_warden.runtime_host.observe_repository_identity",
                 return_value=RepositoryIdentity("KleinPerkins/dev", CENTRAL_REPOSITORY_ID),
             ) as identity, mock.patch(
-                "doc_warden.runtime_host._toolchain", return_value={"node": "fixture", "npm": "fixture"},
+                "doc_warden.runtime_host._toolchain", return_value=toolchain,
             ):
                 with self.assertRaisesRegex(ValueError, "runtime_destination_qualification_required"):
                     prepare_install(repo, home=home, data_home=data)
@@ -589,6 +632,7 @@ class LiveInstallTests(unittest.TestCase):
                     result = apply_prepared_install(operation, live_install_consent(operation), real_home=home)
                     self.assertEqual(result["status"], "applied")
                     installer.assert_called_once()
+                    self.assertEqual(installer.call_args.kwargs["toolchain"], toolchain)
                     readback.assert_called_once()
                 identity.return_value = RepositoryIdentity("KleinPerkins/dev", 111)
                 with self.assertRaisesRegex(ValueError, "runtime_install_repository_identity_mismatch"):

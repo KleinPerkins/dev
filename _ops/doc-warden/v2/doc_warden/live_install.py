@@ -24,7 +24,7 @@ from .canonical import (
 )
 from .operation_store import operation_path, private_state_root
 from .gsd_adapter import CENTRAL_REPOSITORY_ID, CENTRAL_REPOSITORY_KEY as CURRENT_REPOSITORY_KEY
-from .runtime_host import read_destination_qualification
+from .runtime_host import read_destination_qualification, run_runtime_script
 from .scm import observe_repository_identity
 from .transactions import (
     MutationAction,
@@ -136,6 +136,7 @@ class RuntimeQualification:
     runtime_digests: dict[str, str]
     path: Path
     basis: str
+    toolchain: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -360,12 +361,13 @@ def preview_install(
     home: Path,
     data_home: Path,
     proposed_hooks: list[dict[str, Any]] | None = None,
+    toolchain: dict | None = None,
 ) -> dict[str, Any]:
     validate_global_hooks(proposed_hooks or [])
     runtime = _runtime(repo)
     before = _sentinels(home, data_home)
-    subprocess.run(
-        [str(runtime / "install.sh"), "--check"],
+    run_runtime_script(
+        runtime / "install.sh", "--check", toolchain=toolchain,
         check=True,
         capture_output=True,
         env=_environment(home, data_home),
@@ -414,7 +416,7 @@ def _prepare_runtime_change(
     if str(uuid.UUID(operation)) != operation:
         raise ValueError("operation_id_invalid")
     repository_key, github_repository_id, qualification = _destination_installation(repo, home, data_home)
-    preview = preview_install(repo, home=home, data_home=data_home)
+    preview = preview_install(repo, home=home, data_home=data_home, toolchain=qualification.toolchain)
     if consequence == UNINSTALL_CONSEQUENCE:
         _validate_uninstall_destinations(home, data_home)
         wrapper = _wrapper_path(data_home)
@@ -542,10 +544,10 @@ def _destination_installation(repo: Path, home: Path, data_home: Path):
         return CENTRAL_REPOSITORY_KEY, None, _validate_runtime_qualification(repo)
     context, digest, runtime_digests, path = read_destination_qualification(repo, home=home, data_home=data_home)
     return (context["repository_key"], context["github_repository_id"],
-            RuntimeQualification(digest, runtime_digests, path, "host_destination_qualification"))
+            RuntimeQualification(digest, runtime_digests, path, "host_destination_qualification", context["toolchain"]))
 
 
-def _validate_install_operation(operation: LiveInstallOperation, *, require_preimages: bool = True) -> None:
+def _validate_install_operation(operation: LiveInstallOperation, *, require_preimages: bool = True) -> RuntimeQualification:
     try:
         repo = operation.repo.resolve(strict=True)
         home = operation.home.expanduser().resolve()
@@ -593,6 +595,7 @@ def _validate_install_operation(operation: LiveInstallOperation, *, require_prei
         or action_digest != operation.action_digest
     ):
         raise ValueError("operation_specification_mismatch")
+    return qualification
 
 
 @contextmanager
@@ -659,16 +662,17 @@ def apply_prepared_install(
     state = private_state_root()
     outcome = contained_path(state, f"runtime/{verb}-{operation.operation_id}.json")
     with _runtime_writer(home, data_home):
-        _validate_install_operation(operation, require_preimages=False)
+        qualification = _validate_install_operation(operation, require_preimages=False)
         if removing:
-            _apply_uninstall_with_receipt(operation, outcome, result, allow_live_home=home == real_home.resolve())
+            _apply_uninstall_with_receipt(operation, outcome, result, toolchain=qualification.toolchain,
+                                          allow_live_home=home == real_home.resolve())
             return result
         if outcome.is_file():
             saved = parse_json_object(outcome.read_bytes())
             if saved != {"result": result, "postimages": _sentinels(home, data_home)}:
                 raise ValueError("live_install_postimage_changed")
             return result
-        _apply_install_with_readback(operation, operation_binding, real_home=real_home)
+        _apply_install_with_readback(operation, operation_binding, real_home=real_home, toolchain=qualification.toolchain)
         evidence = canonical_json({"result": result, "postimages": _sentinels(home, data_home)})
         atomic_write(state, outcome.relative_to(state).as_posix(), evidence)
         if outcome.read_bytes() != evidence:
@@ -678,6 +682,7 @@ def apply_prepared_install(
 
 def _apply_uninstall_with_receipt(
     operation: LiveInstallOperation, outcome: Path, result: dict[str, Any], *, allow_live_home: bool,
+    toolchain: dict | None,
 ) -> None:
     home, data_home = operation.home, operation.data_home
     wrapper = _wrapper_path(data_home)
@@ -723,13 +728,14 @@ def _apply_uninstall_with_receipt(
         _validated_runtime_files(operation.repo, operation.runtime_digests)
         atomic_write(state, pending.relative_to(state).as_posix(), pending_payload)
         _uninstall_locked(operation.repo, home=home, data_home=data_home,
-                          record_completion=record_completion, allow_live_home=allow_live_home)
+                          record_completion=record_completion, allow_live_home=allow_live_home, toolchain=toolchain)
         verify_completion()
     except OSError as exc:
         raise ValueError("live_uninstall_recovery_required") from exc
 
 
-def _apply_install_with_readback(operation: LiveInstallOperation, binding: dict[str, str], *, real_home: Path) -> None:
+def _apply_install_with_readback(operation: LiveInstallOperation, binding: dict[str, str], *, real_home: Path,
+                                 toolchain: dict | None) -> None:
     home, data_home = operation.home, operation.data_home
     wrapper = _wrapper_path(data_home)
     if wrapper.is_file():
@@ -744,6 +750,7 @@ def _apply_install_with_readback(operation: LiveInstallOperation, binding: dict[
             operation.repo, home=home, data_home=data_home,
             isolated_home_qualified=True, host_signer_qualified=True, real_home=real_home,
             expected_runtime_digests=operation.runtime_digests, operation_binding=binding,
+            toolchain=toolchain,
         )
     if operation.github_repository_id is not None:
         try:
@@ -751,7 +758,7 @@ def _apply_install_with_readback(operation: LiveInstallOperation, binding: dict[
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
             try:
                 _uninstall_locked(operation.repo, home=home, data_home=data_home,
-                                  allow_live_home=home == real_home.resolve())
+                                  allow_live_home=home == real_home.resolve(), toolchain=toolchain)
             except (OSError, ValueError, subprocess.SubprocessError) as rollback_error:
                 raise ValueError("live_install_rollback_incomplete") from rollback_error
             raise ValueError("live_install_readback_failed") from exc
@@ -767,6 +774,7 @@ def apply_install(
     real_home: Path,
     expected_runtime_digests: dict[str, str],
     operation_binding: dict[str, str] | None = None,
+    toolchain: dict | None = None,
 ) -> None:
     if not isolated_home_qualified:
         raise ValueError("isolated_home_not_qualified")
@@ -808,14 +816,14 @@ def apply_install(
         wrapper_receipt.unlink()
         raise
     try:
-        subprocess.run(
-            [str(installer), "--apply"], check=True, capture_output=True, env=env
+        run_runtime_script(
+            installer, "--apply", toolchain=toolchain, check=True, capture_output=True, env=env
         )
     except (OSError, subprocess.SubprocessError) as install_error:
         try:
             receipt["postimages"] = _wrapper_images(home)
             atomic_write(wrapper_receipt.parent, wrapper_receipt.name, canonical_json(receipt))
-            _uninstall_locked(repo, home=home, data_home=data_home, allow_live_home=is_live)
+            _uninstall_locked(repo, home=home, data_home=data_home, allow_live_home=is_live, toolchain=toolchain)
         except (OSError, subprocess.SubprocessError, ValueError) as rollback_error:
             raise ValueError("live_install_rollback_incomplete") from rollback_error
         raise install_error
@@ -871,6 +879,7 @@ def uninstall(repo: Path, *, home: Path, data_home: Path) -> None:
 def _uninstall_locked(
     repo: Path, *, home: Path, data_home: Path, record_completion: Callable[[], None] | None = None,
     allow_live_home: bool = False,
+    toolchain: dict | None = None,
 ) -> None:
     owner_home, owner_data = _validate_uninstall_destinations(home, data_home)
     wrapper_receipt = _wrapper_path(data_home)
@@ -878,8 +887,8 @@ def _uninstall_locked(
     if receipt is not None:
         _check_wrapper_postimages(home, receipt)
     try:
-        subprocess.run(
-            [str(_runtime(repo) / "install.sh"), "--uninstall"],
+        run_runtime_script(
+            _runtime(repo) / "install.sh", "--uninstall", toolchain=toolchain,
             check=True, capture_output=True,
             env=_environment(owner_home, owner_data, allow_live_home=allow_live_home),
         )
@@ -974,8 +983,8 @@ def _live_doctor_state(
     else:
         qualification = _validate_runtime_qualification(root)
     runtime = _runtime(root)
-    subprocess.run(
-        [str(runtime / "install.sh"), "--doctor"],
+    run_runtime_script(
+        runtime / "install.sh", "--doctor", toolchain=qualification.toolchain,
         check=True,
         capture_output=True,
         text=True,

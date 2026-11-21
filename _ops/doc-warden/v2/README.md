@@ -220,7 +220,9 @@ retained shell helper provides the pinned Cursor integration and its isolated
 verification harness.
 `runtime qualify-gsd` runs the existing isolated binding verifier for the
 selected `--home` and `--data-home`. It binds the result to the source revision,
-runtime files, toolchain and destination. Then use `runtime install-gsd --preview`
+runtime files, toolchain and destination. Qualified operations launch the
+measured Bash and expose the measured Node, npm and Python to child commands.
+Then use `runtime install-gsd --preview`
 for those same destinations and apply the exact consent envelope. Apply verifies
 the resulting install and restores its preimage if verification fails. The
 historical runtime record remains available for isolated compatibility checks.
