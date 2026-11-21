@@ -138,9 +138,10 @@ same plan and source revision. An approved release verifies that its pull
 request delivered the declared commit to the repository’s live default branch.
 Dev releases also require the enrolled originating-account review at App
 approval time, App-owned merge provenance, and successful required CI for the
-final PR head. The retained logs of the pinned Reviewer App workflow must
-show admission and either a direct squash or an App-owned auto-merge request
-confirmed by the PR timeline. Apply rechecks this evidence before recording an
+final PR head. The verifier reads the protected helper from the verified
+squash parent on GitHub. The retained logs of the pinned Reviewer App workflow
+must show admission and either a direct squash or an App-owned auto-merge
+request confirmed by the PR timeline. Apply rechecks this evidence before recording an
 approved release. Repositories with a different required Reviewer App policy
 need a qualified owner verification route before Doc-Warden can record an
 approved release. For acceptance via `--approval-file`, the

@@ -7,7 +7,6 @@ import json
 import re
 import subprocess
 import tempfile
-from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable
 
@@ -18,18 +17,18 @@ APP_SCRIPT_DIGEST = "sha256:73ec3d0ebe18e61bfa04bb1ecbdcc76792ecd043d914d2584324
 APP_WORKFLOW_DIGEST = "sha256:5846f782da247434d452633762bb7bbb3faa59ca6c807521fda6a565063c2398"
 APP_WORKFLOW_ID = 420920692
 APP_WORKFLOW_PATH = ".github/workflows/reviewer-app.yml"
+APP_SCRIPT_PATH = "scripts/reviewer_app.py"
 
 
-def _dev_reviewer():
-    source = Path(__file__).resolve().parents[4] / "scripts/reviewer_app.py"
-    # Pin the exact source from the trusted public Dev base. Execute the same
-    # verified bytes without reopening a candidate-controlled path.
-    content = source.read_bytes()
+def _dev_reviewer(content: bytes, workflow_base: str):
+    # The caller supplies the protected public workflow's script from the
+    # verified squash parent. This pin selects the supported helper version.
     if digest_ref(content) != APP_SCRIPT_DIGEST:
         raise ValueError("release_delivery_review_unverified")
+    source = f"github.com/KleinPerkins/dev/{workflow_base}/{APP_SCRIPT_PATH}"
     reviewer = ModuleType("doc_warden_dev_reviewer")
-    reviewer.__file__ = str(source)
-    exec(compile(content, str(source), "exec"), reviewer.__dict__)
+    reviewer.__file__ = source
+    exec(compile(content, source, "exec"), reviewer.__dict__)
     reviewer.REPOSITORY = "KleinPerkins/dev"
     return reviewer
 
@@ -121,8 +120,7 @@ def _dev_workflow_witness(reviewer, read: Callable[[str], Any], read_log: Callab
     base = current["base_sha"]
     workflow = read(f"/actions/workflows/{APP_WORKFLOW_ID}")
     if (workflow.get("id") != APP_WORKFLOW_ID or workflow.get("path") != APP_WORKFLOW_PATH
-            or digest_ref(_historical_source(read, APP_WORKFLOW_PATH, base)) != APP_WORKFLOW_DIGEST
-            or digest_ref(_historical_source(read, "scripts/reviewer_app.py", base)) != APP_SCRIPT_DIGEST):
+            or digest_ref(_historical_source(read, APP_WORKFLOW_PATH, base)) != APP_WORKFLOW_DIGEST):
         raise ValueError("release_delivery_review_unverified")
     listing = read(f"/actions/workflows/{APP_WORKFLOW_ID}/runs?head_sha={base}&branch=main&per_page=100")
     rows = listing["workflow_runs"]
@@ -169,18 +167,21 @@ def verify_dev_review(
     pull: dict[str, Any], approval: dict[str, Any], *, commit: str, head: str, base: str, armed: bool,
 ) -> str:
     try:
-        reviewer = _dev_reviewer()
-    except (ImportError, OSError) as exc:
+        # observe_merged_delivery has already proved this exact merge reached
+        # the live default branch. Its sole parent is the workflow's trusted
+        # base. Only read protected helper bytes from that authenticated Git
+        # object, never from the PR head or the mutable local checkout.
+        merged = read(f"/git/commits/{commit}")
+        if merged["sha"] != commit or [parent["sha"] for parent in merged["parents"]] != [base]:
+            raise ValueError("release_delivery_review_unverified")
+        reviewer = _dev_reviewer(_historical_source(read, APP_SCRIPT_PATH, base), base)
+    except (ImportError, SyntaxError, ValueError, TypeError, AttributeError, KeyError, OSError) as exc:
         raise ValueError("release_delivery_review_unverified") from exc
 
     try:
         approved_at = reviewer.timestamp(approval["submitted_at"])
         if approved_at > reviewer.timestamp(pull["merged_at"]):
             raise ValueError("release_delivery_review_unverified")
-        merged = read(f"/git/commits/{commit}")
-        if [parent["sha"] for parent in merged["parents"]] != [base]:
-            raise ValueError("release_delivery_review_unverified")
-
         policy_bytes = _historical_source(read, ".github/review-enrollments.json", base)
         policy = json.loads(policy_bytes)
         if (policy["schema"] != "g1-review-enrollments/v1" or policy["enabled"] is not True

@@ -22,7 +22,7 @@ from doc_warden.gsd_adapter import (
     requirements_current_view,
 )
 from doc_warden.operation_store import load_preview, store_preview
-from doc_warden.review_admission import _dev_reviewer, _job_proves_delivery, _public_dev_git_tuple
+from doc_warden.review_admission import _dev_reviewer, _job_proves_delivery, _public_dev_git_tuple, verify_dev_review
 from fixture_factory import FixtureFactory
 
 
@@ -900,8 +900,8 @@ class ProductLifecycleTests(unittest.TestCase):
         )
 
     def test_dev_review_reads_public_git_objects_before_using_them(self):
-        reviewer = _dev_reviewer()
         head, base = "a" * 40, "b" * 40
+        reviewer = _dev_reviewer((ROOT / "scripts/reviewer_app.py").read_bytes(), base)
         # Simulate the subprocess replies while using the real App helper for
         # the case where the first shallow fetch cannot establish the merge base.
         with patch("doc_warden.review_admission.subprocess.run") as git:
@@ -928,9 +928,17 @@ class ProductLifecycleTests(unittest.TestCase):
             self.assertEqual(git.call_count, 6)
 
     def test_dev_review_refuses_modified_helper_before_execution(self):
-        with patch.object(Path, "read_bytes", return_value=b"raise AssertionError('unverified code ran')\n"):
-            with self.assertRaisesRegex(ValueError, "^release_delivery_review_unverified$"):
-                _dev_reviewer()
+        with self.assertRaisesRegex(ValueError, "^release_delivery_review_unverified$"):
+            _dev_reviewer(b"raise AssertionError('unverified code ran')\n", "a" * 40)
+
+    def test_dev_review_checks_squash_parent_before_reading_any_helper(self):
+        head, base, commit = "a" * 40, "b" * 40, "c" * 40
+        read = unittest.mock.Mock(return_value={"sha": commit, "parents": [{"sha": head}]})
+        read_log = unittest.mock.Mock()
+        with self.assertRaisesRegex(ValueError, "^release_delivery_review_unverified$"):
+            verify_dev_review(read, read_log, {}, {}, commit=commit, head=head, base=base, armed=False)
+        read.assert_called_once_with(f"/git/commits/{commit}")
+        read_log.assert_not_called()
 
     def test_dev_review_requires_protected_witness_for_direct_squash_or_armed_delivery(self):
         current = {"repository_id": 1459458379, "head_sha": "a" * 40, "base_sha": "b" * 40}
