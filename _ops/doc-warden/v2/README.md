@@ -198,10 +198,11 @@ PLAN files use the ordinary import route.
 Use `checkpoint`, `handoff`, `pause-with-continuity` or `resume-authoring` with
 `--state`, `--event`, a fresh `--operation-id` and `--preview`. Apply the exact
 operation through `apply` with its lifecycle consent envelope. An exact replay
-can read the committed result after expiry while the live authority still
-matches. The first apply requires a fresh preview and consent. Use the returned
-closed authoring state for the next request in the same session. Doc-Warden
-keeps the last valid state in the machine-local XDG state directory. Each
+can read that operation's committed result after expiry and after later
+transitions while the live authority still matches. The first apply requires a
+fresh preview and consent. Use the current closed authoring state for each new
+request in the same session. Doc-Warden keeps current state and completed
+receipts together in the machine-local XDG state directory. Each
 checkpoint request has a typed Save-Game scope that stays stable on exact retry.
 
 Checkpoint, handoff and pause require a qualified, enabled Save-Game owner

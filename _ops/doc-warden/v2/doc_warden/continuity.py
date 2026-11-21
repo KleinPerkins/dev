@@ -1,4 +1,4 @@
-"""Exact consent and single-file private state for governed authoring continuity."""
+"""Exact consent, current state and durable receipts for authoring continuity."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from .validators import require_valid
 
 OPERATION_SCHEMA = "doc-warden/continuity-operation/v1"
 RECORD_SCHEMA = "doc-warden/continuity-record/v1"
+SESSION_SCHEMA = "doc-warden/continuity-session/v2"
 INTENTS = frozenset({"checkpoint", "handoff", "pause-with-continuity", "resume-authoring"})
 NEXT_ACTION = {
     "continuity_preview_required": "prepare_continuity_preview",
@@ -64,19 +65,39 @@ def _record_path(root: Path, state: dict[str, Any]) -> Path:
     return contained_path(root, f"continuity/{state['repository_key']}/{state['operation_id']}.json")
 
 
-def _read_record(path: Path) -> tuple[dict[str, Any] | None, str | None]:
+def _validate_record(record: dict[str, Any], operation: str, scope: dict[str, Any]) -> None:
+    if (not isinstance(record, dict) or set(record) != {"schema", "operation_id", "action_digest", "state"}
+            or record["schema"] != RECORD_SCHEMA or record["operation_id"] != operation):
+        raise ValueError("continuity_state_invalid")
+    state = record["state"]
+    require_valid("authoring-state", state)
+    if state["repository_key"] != scope["repository_key"] or state["operation_id"] != scope["operation_id"]:
+        raise ValueError("continuity_state_invalid")
+    validate_pointer(state["save_game_pointer"])
+
+
+def _read_session(path: Path, scope: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any], str | None]:
     if not path.is_file():
-        return None, None
+        return None, {}, None
     if path.stat().st_mode & 0o077:
         raise ValueError("continuity_state_permissions_invalid")
     content = path.read_bytes()
-    record = parse_json_object(content)
-    if (set(record) != {"schema", "operation_id", "action_digest", "state"}
-            or record["schema"] != RECORD_SCHEMA or content != canonical_json(record)):
+    session = parse_json_object(content)
+    if content != canonical_json(session):
         raise ValueError("continuity_state_invalid")
-    require_valid("authoring-state", record["state"])
-    validate_pointer(record["state"]["save_game_pointer"])
-    return record, digest_ref(content)
+    if session.get("schema") == RECORD_SCHEMA and isinstance(session.get("operation_id"), str):
+        current = session["operation_id"]
+        receipts = {current: session}
+    elif (session.get("schema") == SESSION_SCHEMA and set(session) == {"schema", "current_operation_id", "receipts"}
+            and isinstance(session["current_operation_id"], str) and isinstance(session["receipts"], dict)):
+        current, receipts = session["current_operation_id"], session["receipts"]
+    else:
+        raise ValueError("continuity_state_invalid")
+    if current not in receipts:
+        raise ValueError("continuity_state_invalid")
+    for operation, record in receipts.items():
+        _validate_record(record, operation, scope)
+    return receipts[current], receipts, digest_ref(content)
 
 
 def _summary(payload: dict[str, Any], *, status: str) -> dict[str, Any]:
@@ -94,7 +115,7 @@ def preview_continuity(repo: Path, state: dict[str, Any], event: dict[str, Any],
     if state["save_game_pointer"] is not None:
         validate_pointer(state["save_game_pointer"])
     path = operation_path(operation_id)
-    existing, preimage = _read_record(_record_path(_state_root(path), state))
+    existing, _, preimage = _read_session(_record_path(_state_root(path), state), state)
     if existing is not None and existing["state"] != state:
         raise ValueError("continuity_state_changed")
     if intent == "resume-authoring" and existing is None:
@@ -158,9 +179,12 @@ def apply_continuity(operation_id: str, action_digest: str, consent: dict[str, A
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise ValueError("continuity_operation_busy") from exc
-        record, preimage = _read_record(target)
-        if record and record["operation_id"] == operation_id and record["action_digest"] == action_digest:
-            return _summary(payload, status="applied") | {"state": record["state"]}
+        record, receipts, preimage = _read_session(target, state)
+        completed = receipts.get(operation_id)
+        if completed is not None:
+            if completed["action_digest"] != action_digest:
+                raise ValueError("operation_replay_mismatch")
+            return _summary(payload, status="applied") | {"state": completed["state"]}
         # Expired authorization can identify a completed receipt. It cannot
         # authorize the first provider call or state write for an operation.
         if expires <= datetime.now(timezone.utc):
@@ -178,9 +202,12 @@ def apply_continuity(operation_id: str, action_digest: str, consent: dict[str, A
             raise ValueError("authoring_live_state_changed")
         committed = {"schema": RECORD_SCHEMA, "operation_id": operation_id, "action_digest": action_digest,
                      "state": updated}
-        atomic_write(state_root, target.relative_to(state_root).as_posix(), canonical_json(committed))
-        observed_record, _ = _read_record(target)
-        if observed_record != committed:
+        # Advance the current pointer and retain prior receipts in one atomic write.
+        receipts[operation_id] = committed
+        session = {"schema": SESSION_SCHEMA, "current_operation_id": operation_id, "receipts": receipts}
+        atomic_write(state_root, target.relative_to(state_root).as_posix(), canonical_json(session))
+        observed_record, observed_receipts, _ = _read_session(target, state)
+        if observed_record != committed or observed_receipts != receipts:
             raise ValueError("continuity_state_readback_failed")
         return _summary(payload, status="applied") | {"state": updated}
     finally:

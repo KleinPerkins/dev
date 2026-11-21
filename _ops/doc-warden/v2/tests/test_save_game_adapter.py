@@ -125,6 +125,39 @@ class SaveGameAdapterTests(unittest.TestCase):
         self.assertEqual(self.calls, ["checkpoint"])
         self.assertEqual((record.read_bytes(), record.stat().st_mtime_ns), prior)
 
+    def test_completed_continuity_replays_after_later_transitions_and_legacy_state_upgrade(self):
+        pause = self.preview("pause-with-continuity")
+        consent = self.consent(pause)
+        operation = (pause["operation_id"], pause["action_digest"])
+        adapter = SaveGameAdapter(root=self.root, runner=self.success)
+        paused = apply_continuity(*operation, consent, adapter=adapter)
+        record, = (self.staging / "state/doc-warden/continuity").rglob("*.json")
+        # Simulate the prior on-disk format without altering its committed state.
+        record.write_bytes(canonical_json({"schema": "doc-warden/continuity-record/v1",
+                                           "operation_id": operation[0], "action_digest": operation[1],
+                                           "state": paused["state"]}))
+        self.assertEqual(apply_continuity(*operation, consent, adapter=adapter), paused)
+        resumed = self.apply(self.preview("resume-authoring", paused["state"]))
+        handoff = self.apply(self.preview("handoff", resumed["state"]))
+        self.assertEqual(self.calls, ["checkpoint", "reconcile", "checkpoint"])
+        before = (record.read_bytes(), record.stat().st_mtime_ns)
+        session = json.loads(before[0])
+        self.assertEqual(len(session["receipts"]), 3)
+        self.assertEqual(session["receipts"][session["current_operation_id"]]["state"], handoff["state"])
+
+        later = datetime.now(timezone.utc) + timedelta(minutes=11)
+        with patch("doc_warden.continuity.datetime", wraps=datetime) as operation_clock, patch(
+            "doc_warden.artifacts.datetime", wraps=datetime,
+        ) as consent_clock:
+            operation_clock.now.return_value = later
+            consent_clock.now.return_value = later
+            self.assertEqual(apply_continuity(*operation, consent, adapter=adapter), paused)
+            (self.root / "README.md").write_text("Changed live authority.\n")
+            with self.assertRaisesRegex(ValueError, "authoring_live_state_changed"):
+                apply_continuity(*operation, consent, adapter=adapter)
+        self.assertEqual(self.calls, ["checkpoint", "reconcile", "checkpoint"])
+        self.assertEqual((record.read_bytes(), record.stat().st_mtime_ns), before)
+
     def test_unapplied_expired_continuity_never_calls_provider(self):
         preview = self.preview()
         consent = self.consent(preview)
