@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import subprocess
@@ -22,7 +23,7 @@ from doc_warden.gsd_adapter import (
     requirements_current_view,
 )
 from doc_warden.operation_store import load_preview, store_preview
-from doc_warden.review_admission import _dev_reviewer, _job_proves_delivery, _public_dev_git_tuple, verify_dev_review
+from doc_warden.review_admission import _job_proves_delivery, _public_dev_git_tuple, _published_review, verify_dev_review
 from fixture_factory import FixtureFactory
 
 
@@ -901,9 +902,7 @@ class ProductLifecycleTests(unittest.TestCase):
 
     def test_dev_review_reads_public_git_objects_before_using_them(self):
         head, base = "a" * 40, "b" * 40
-        reviewer = _dev_reviewer((ROOT / "scripts/reviewer_app.py").read_bytes(), base)
-        # Simulate the subprocess replies while using the real App helper for
-        # the case where the first shallow fetch cannot establish the merge base.
+        # Simulate a shallow fetch that cannot establish the merge base.
         with patch("doc_warden.review_admission.subprocess.run") as git:
             first_search = subprocess.CompletedProcess([], 1)
             success = subprocess.CompletedProcess([], 0)
@@ -923,13 +922,19 @@ class ProductLifecycleTests(unittest.TestCase):
                 return success
 
             git.side_effect = write
-            self.assertEqual(_public_dev_git_tuple(reviewer, head, base),
-                             (base, reviewer.digest(b"exact fixture diff\n")))
+            self.assertEqual(_public_dev_git_tuple(head, base),
+                             (base, digest_ref(b"exact fixture diff\n").removeprefix("sha256:")))
             self.assertEqual(git.call_count, 6)
 
-    def test_dev_review_refuses_modified_helper_before_execution(self):
+    def test_dev_review_refuses_unqualified_protected_source_data(self):
+        head, base, commit = (letter * 40 for letter in "abc")
+        changed_source = base64.b64encode(b"raise AssertionError('provider code executed')\n").decode("ascii")
+        read = unittest.mock.Mock(side_effect=[
+            {"sha": commit, "parents": [{"sha": base}]}, {"encoding": "base64", "content": changed_source},
+        ])
         with self.assertRaisesRegex(ValueError, "^release_delivery_review_unverified$"):
-            _dev_reviewer(b"raise AssertionError('unverified code ran')\n", "a" * 40)
+            verify_dev_review(read, unittest.mock.Mock(), {}, {}, commit=commit, head=head, armed=False)
+        self.assertEqual(read.call_count, 2)
 
     def test_dev_review_checks_squash_parent_before_reading_any_helper(self):
         head, base, commit = "a" * 40, "b" * 40, "c" * 40
@@ -942,18 +947,21 @@ class ProductLifecycleTests(unittest.TestCase):
 
     def test_dev_review_reads_helper_at_immutable_parent_after_default_branch_advances(self):
         head, original_base, commit, tip = (letter * 40 for letter in "abcd")
-        pull = {"base": {"sha": tip}}
+        timestamp = "2026-11-21T12:00:00Z"
+        pull = {"base": {"sha": tip}, "merged_at": timestamp}
+        protected_source = base64.b64encode((ROOT / "scripts/reviewer_app.py").read_bytes()).decode("ascii")
         read = unittest.mock.Mock(side_effect=[
-            {"sha": commit, "parents": [{"sha": original_base}]}, {"encoding": "base64", "content": "eA=="},
+            {"sha": commit, "parents": [{"sha": original_base}]},
+            {"encoding": "base64", "content": protected_source}, ValueError("stop after source verification"),
         ])
-        with patch("doc_warden.review_admission._dev_reviewer", side_effect=ValueError) as load:
-            with self.assertRaisesRegex(ValueError, "^release_delivery_review_unverified$"):
-                verify_dev_review(read, unittest.mock.Mock(), pull, {}, commit=commit, head=head, armed=False)
+        with self.assertRaisesRegex(ValueError, "^release_delivery_review_unverified$"):
+            verify_dev_review(read, unittest.mock.Mock(), pull, {"submitted_at": timestamp},
+                              commit=commit, head=head, armed=False)
         self.assertEqual(read.call_args_list, [
             unittest.mock.call(f"/git/commits/{commit}"),
             unittest.mock.call(f"/contents/scripts/reviewer_app.py?ref={original_base}"),
+            unittest.mock.call(f"/contents/.github/review-enrollments.json?ref={original_base}"),
         ])
-        load.assert_called_once_with(b"x", original_base)
 
     def test_dev_review_requires_protected_witness_for_direct_squash_or_armed_delivery(self):
         current = {"repository_id": 1459458379, "head_sha": "a" * 40, "base_sha": "b" * 40}
@@ -978,6 +986,37 @@ class ProductLifecycleTests(unittest.TestCase):
         ):
             with self.subTest(log=log, armed=armed):
                 self.assertFalse(_job_proves_delivery(log, current, number=10, commit=commit, armed=armed))
+
+    def test_dev_review_binds_unchanged_public_witnesses_to_the_admitted_origin(self):
+        from datetime import datetime
+
+        timestamp = "2026-11-21T10:30:00Z"
+        pull = {"number": 10, "node_id": "fixture-node"}
+        current = {"repository": "KleinPerkins/dev", "repository_id": 1459458379, "head_sha": "a" * 40}
+        origin = {"schema": "g1-pr-origin/v1", "repository": current["repository"], "repository_id": 1459458379,
+                  "pull_request": 10, "pull_request_node_id": pull["node_id"], "github_user_id": 49759187,
+                  "origin_account": "origin-fixture", "creator_enrollment_id": "enrollment-fixture"}
+        receipt = {"schema": "g1-local-review/v1", "tuple": current | {"origin_account": origin["origin_account"]},
+                   "reviewer_origin_account": origin["origin_account"], "reviewer_enrollment_id": "enrollment-fixture",
+                   "review": {"verdict": "pass", "coverage": "complete", "findings": [], "unresolved_findings": []}}
+
+        def comment(index, marker, row):
+            return {"id": index, "created_at": timestamp, "updated_at": timestamp,
+                    "user": {"id": 49759187, "type": "User"}, "body": f"<!-- {marker}:v1 -->\n" + json.dumps(row)}
+
+        origin_comment = comment(1, "g1-pr-origin", origin)
+        review_comment = comment(2, "g1-review-receipt", receipt)
+        approval = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        self.assertEqual(_published_review(lambda _: [origin_comment, review_comment], pull, current, approval),
+                         (origin, receipt))
+        for changed in (
+            review_comment | {"updated_at": "2026-11-21T10:30:01Z"},
+            review_comment | {"user": {"id": 998, "type": "User"}},
+            comment(2, "g1-review-receipt", receipt | {"reviewer_origin_account": "another-origin"}),
+            comment(2, "g1-review-receipt", receipt | {"tuple": receipt["tuple"] | {"head_sha": "b" * 40}}),
+        ):
+            with self.subTest(changed=changed), self.assertRaisesRegex(ValueError, "^release_delivery_review_unverified$"):
+                _published_review(lambda _: [origin_comment, changed], pull, current, approval)
 
     def test_release_artifact_binds_plan_verification_uat_commit_and_pr(self):
         repo = self.fixture.repo

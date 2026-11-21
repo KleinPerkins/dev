@@ -7,10 +7,10 @@ import json
 import re
 import subprocess
 import tempfile
-from types import ModuleType
+from datetime import datetime
 from typing import Any, Callable
 
-from .canonical import digest_ref
+from .canonical import canonical_json, digest_ref, parse_json_object
 
 
 APP_SCRIPT_DIGEST = "sha256:73ec3d0ebe18e61bfa04bb1ecbdcc76792ecd043d914d25843241b17d5cde0ad"
@@ -18,22 +18,22 @@ APP_WORKFLOW_DIGEST = "sha256:5846f782da247434d452633762bb7bbb3faa59ca6c807521fd
 APP_WORKFLOW_ID = 420920692
 APP_WORKFLOW_PATH = ".github/workflows/reviewer-app.yml"
 APP_SCRIPT_PATH = "scripts/reviewer_app.py"
+REPOSITORY = "KleinPerkins/dev"
+REPOSITORY_ID = 1459458379
+OWNER_ID = 49759187
+MAX_DIFF = 5_000_000
+ORIGIN_MARKER = "<!-- g1-pr-origin:v1 -->\n"
+REVIEW_MARKER = "<!-- g1-review-receipt:v1 -->\n"
 
 
-def _dev_reviewer(content: bytes, workflow_base: str):
-    # The caller supplies the protected public workflow's script from the
-    # verified squash parent. This pin selects the supported helper version.
-    if digest_ref(content) != APP_SCRIPT_DIGEST:
+def _timestamp(value: str) -> datetime:
+    result = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if result.tzinfo is None:
         raise ValueError("release_delivery_review_unverified")
-    source = f"github.com/KleinPerkins/dev/{workflow_base}/{APP_SCRIPT_PATH}"
-    reviewer = ModuleType("doc_warden_dev_reviewer")
-    reviewer.__file__ = source
-    exec(compile(content, source, "exec"), reviewer.__dict__)
-    reviewer.REPOSITORY = "KleinPerkins/dev"
-    return reviewer
+    return result
 
 
-def _public_dev_git_tuple(reviewer, head: str, base: str) -> tuple[str, str]:
+def _public_dev_git_tuple(head: str, base: str) -> tuple[str, str]:
     # Work only with public Git objects and the same tuple rules as the App.
     with tempfile.TemporaryDirectory(prefix="doc-warden-delivery-") as work:
         environment = {
@@ -55,24 +55,26 @@ def _public_dev_git_tuple(reviewer, head: str, base: str) -> tuple[str, str]:
                 if result.returncode != 0:
                     raise ValueError("release_delivery_review_unverified")
                 output.seek(0)
-                data = output.read(reviewer.MAX_DIFF + 1)
-                if len(data) > reviewer.MAX_DIFF:
+                data = output.read(MAX_DIFF + 1)
+                if len(data) > MAX_DIFF:
                     raise ValueError("release_delivery_review_unverified")
                 return data
 
         command("init", "--bare", ".")
-        command("fetch", "--no-tags", "--no-recurse-submodules", "--depth=256",
-                "https://github.com/KleinPerkins/dev.git", base, head)
-        common_history = command("merge-base", base, head, no_common_base_ok=True)
-        # The App helper repeats the public fetch with progressively deeper history
-        # when a shallow checkout cannot establish a common ancestor.
-        merge_base = (common_history.decode("ascii").strip() if common_history is not None
-                      else reviewer.bounded_merge_base(command, base, head))
+        for depth in (256, 512, 1024, 2048, 4096):
+            command("fetch", "--no-tags", "--no-recurse-submodules", f"--depth={depth}",
+                    f"https://github.com/{REPOSITORY}.git", base, head)
+            common_history = command("merge-base", base, head, no_common_base_ok=True)
+            if common_history is not None:
+                break
+        else:
+            raise ValueError("release_delivery_review_unverified")
+        merge_base = common_history.decode("ascii").strip()
         if len(merge_base) != 40 or any(character not in "0123456789abcdef" for character in merge_base):
             raise ValueError("release_delivery_review_unverified")
         diff = command("-c", "color.ui=false", "diff", "--no-ext-diff", "--no-textconv", "--binary",
                        f"{base}...{head}", "--")
-        return merge_base, reviewer.digest(diff)
+        return merge_base, digest_ref(diff).removeprefix("sha256:")
 
 
 def _historical_source(read: Callable[[str], Any], name: str, base: str) -> bytes:
@@ -80,6 +82,41 @@ def _historical_source(read: Callable[[str], Any], name: str, base: str) -> byte
     if document["encoding"] != "base64":
         raise ValueError("release_delivery_review_unverified")
     return base64.b64decode("".join(document["content"].split()), validate=True)
+
+
+def _published_review(read: Callable[[str], Any], pull: dict[str, Any], current: dict[str, Any],
+                      approved_at: datetime) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Bind the public receipts to the tuple accepted by the protected workflow."""
+    comments = read(f"/issues/{pull['number']}/comments?per_page=100")
+    if not isinstance(comments, list) or len(comments) >= 100:
+        raise ValueError("release_delivery_review_unverified")
+    records: dict[str, list[tuple[int, dict[str, Any]]]] = {ORIGIN_MARKER: [], REVIEW_MARKER: []}
+    for comment in comments:
+        body, sender = comment.get("body"), comment.get("user", {})
+        if not isinstance(body, str) or sender.get("id") != OWNER_ID or sender.get("type") != "User":
+            continue
+        marker = next((value for value in records if body.startswith(value)), None)
+        if marker is None or _timestamp(comment["created_at"]) > approved_at:
+            continue
+        if (comment["created_at"] != comment["updated_at"] or type(comment["id"]) is not int
+                or len(body.encode("utf-8")) > 60_000):
+            raise ValueError("release_delivery_review_unverified")
+        records[marker].append((comment["id"], parse_json_object(body.removeprefix(marker))))
+    if len(records[ORIGIN_MARKER]) != 1 or not records[REVIEW_MARKER]:
+        raise ValueError("release_delivery_review_unverified")
+    origin = records[ORIGIN_MARKER][0][1]
+    _, receipt = max(records[REVIEW_MARKER], key=lambda row: row[0])
+    origin_id = origin["origin_account"]
+    if (origin["schema"] != "g1-pr-origin/v1" or origin["repository"] != REPOSITORY
+            or origin["repository_id"] != REPOSITORY_ID or origin["pull_request"] != pull["number"]
+            or origin["pull_request_node_id"] != pull["node_id"] or origin["github_user_id"] != OWNER_ID
+            or receipt["schema"] != "g1-local-review/v1" or receipt["tuple"] != (current | {"origin_account": origin_id})
+            or receipt["reviewer_origin_account"] != origin_id
+            or receipt["reviewer_enrollment_id"] != origin["creator_enrollment_id"]
+            or receipt["review"]["verdict"] != "pass" or receipt["review"]["coverage"] != "complete"
+            or receipt["review"]["findings"] != [] or receipt["review"]["unresolved_findings"] != []):
+        raise ValueError("release_delivery_review_unverified")
+    return origin, receipt
 
 
 def _job_proves_delivery(log: bytes, current: dict[str, Any], *, number: int, commit: str, armed: bool) -> bool:
@@ -114,7 +151,7 @@ def _job_proves_delivery(log: bytes, current: dict[str, Any], *, number: int, co
             and result.get("merge_sha") == commit)
 
 
-def _dev_workflow_witness(reviewer, read: Callable[[str], Any], read_log: Callable[[str], bytes],
+def _dev_workflow_witness(read: Callable[[str], Any], read_log: Callable[[str], bytes],
                           current: dict[str, Any], *, pull: dict[str, Any], commit: str,
                           approved_at, armed: bool) -> tuple[int, int]:
     base = current["base_sha"]
@@ -131,9 +168,9 @@ def _dev_workflow_witness(reviewer, read: Callable[[str], Any], read_log: Callab
         if (run.get("workflow_id") != APP_WORKFLOW_ID or run.get("path") != APP_WORKFLOW_PATH
                 or run.get("head_sha") != base or run.get("head_branch") != "main"
                 or run.get("event") not in {"issue_comment", "workflow_run"}
-                or run.get("repository", {}).get("id") != reviewer.REPOSITORY_ID
-                or run.get("head_repository", {}).get("id") != reviewer.REPOSITORY_ID
-                or not reviewer.timestamp(run["created_at"]) <= approved_at <= reviewer.timestamp(run["updated_at"])):
+                or run.get("repository", {}).get("id") != REPOSITORY_ID
+                or run.get("head_repository", {}).get("id") != REPOSITORY_ID
+                or not _timestamp(run["created_at"]) <= approved_at <= _timestamp(run["updated_at"])):
             continue
         run_id = run["id"]
         if type(run_id) is not int or run_id <= 0:
@@ -145,7 +182,7 @@ def _dev_workflow_witness(reviewer, read: Callable[[str], Any], read_log: Callab
             if (job.get("run_id") != run_id or job.get("head_sha") != base
                     or job.get("name") != "admit" or job.get("workflow_name") != "Reviewer App"
                     or job.get("status") != "completed" or job.get("conclusion") != "success"
-                    or not reviewer.timestamp(job["started_at"]) <= approved_at <= reviewer.timestamp(job["completed_at"])):
+                    or not _timestamp(job["started_at"]) <= approved_at <= _timestamp(job["completed_at"])):
                 continue
             successful = {step["name"] for step in job["steps"] if step.get("conclusion") == "success"}
             if not {"Qualify current receipt, CI, controls and trusted source without writes",
@@ -169,43 +206,30 @@ def verify_dev_review(
     try:
         # observe_merged_delivery has already proved this exact merge reached
         # the live default branch. Its sole parent is the workflow's trusted
-        # base. Only read protected helper bytes from that authenticated Git
-        # object, never from the PR head or the mutable local checkout.
+        # base. Verify the protected script as data. Its authenticated job
+        # already evaluated the full enrollment and independent receipt rules.
         merged = read(f"/git/commits/{commit}")
         parents = [parent["sha"] for parent in merged["parents"]]
         if merged["sha"] != commit or len(parents) != 1 or re.fullmatch(r"[0-9a-f]{40}", parents[0]) is None:
             raise ValueError("release_delivery_review_unverified")
         base = parents[0]
-        reviewer = _dev_reviewer(_historical_source(read, APP_SCRIPT_PATH, base), base)
-    except (ImportError, SyntaxError, ValueError, TypeError, AttributeError, KeyError, OSError) as exc:
-        raise ValueError("release_delivery_review_unverified") from exc
-
-    try:
-        approved_at = reviewer.timestamp(approval["submitted_at"])
-        if approved_at > reviewer.timestamp(pull["merged_at"]):
+        if digest_ref(_historical_source(read, APP_SCRIPT_PATH, base)) != APP_SCRIPT_DIGEST:
+            raise ValueError("release_delivery_review_unverified")
+        approved_at = _timestamp(approval["submitted_at"])
+        if approved_at > _timestamp(pull["merged_at"]):
             raise ValueError("release_delivery_review_unverified")
         policy_bytes = _historical_source(read, ".github/review-enrollments.json", base)
-        policy = json.loads(policy_bytes)
+        policy = parse_json_object(policy_bytes)
         if (policy["schema"] != "g1-review-enrollments/v1" or policy["enabled"] is not True
-                or policy["repository_id"] != reviewer.REPOSITORY_ID
-                or reviewer.REPOSITORY not in policy["repository_names"]):
+                or policy["repository_id"] != REPOSITORY_ID or REPOSITORY not in policy["repository_names"]):
             raise ValueError("release_delivery_review_unverified")
-        comments = read(f"/issues/{pull['number']}/comments?per_page=100")
-        if not isinstance(comments, list) or len(comments) >= 100:
-            raise ValueError("release_delivery_review_unverified")
-        comments = [row for row in comments if isinstance(row.get("body"), str)
-                    and row["body"].startswith((reviewer.ORIGIN_MARKER, reviewer.MARKER))
-                    and reviewer.timestamp(row["created_at"]) <= approved_at]
-        policy_hash = reviewer.digest(policy_bytes)
-        origin = reviewer.choose_origin(comments, policy, pull, approved_at)
-        merge_base, diff_hash = _public_dev_git_tuple(reviewer, head, base)
-        current = {"repository": reviewer.REPOSITORY, "repository_id": reviewer.REPOSITORY_ID,
+        merge_base, diff_hash = _public_dev_git_tuple(head, base)
+        current = {"repository": REPOSITORY, "repository_id": REPOSITORY_ID,
                    "head_sha": head, "base_sha": base, "merge_base_sha": merge_base,
-                   "diff_sha256": diff_hash, "policy_sha256": policy_hash}
-        receipt = reviewer.choose_receipt(comments, policy, current, policy_hash, approved_at, origin)
-        run, job = _dev_workflow_witness(reviewer, read, read_log, current, pull=pull, commit=commit,
+                   "diff_sha256": diff_hash, "policy_sha256": digest_ref(policy_bytes).removeprefix("sha256:")}
+        origin, receipt = _published_review(read, pull, current, approved_at)
+        run, job = _dev_workflow_witness(read, read_log, current, pull=pull, commit=commit,
                                          approved_at=approved_at, armed=armed)
-        return digest_ref(reviewer.canonical({"origin": origin, "review": receipt, "run_id": run, "job_id": job}))
-    except (reviewer.Rejected, ValueError, TypeError, AttributeError, KeyError, OSError,
-            subprocess.SubprocessError) as exc:
+        return digest_ref(canonical_json({"origin": origin, "review": receipt, "run_id": run, "job_id": job}))
+    except (ValueError, TypeError, AttributeError, KeyError, OSError, subprocess.SubprocessError) as exc:
         raise ValueError("release_delivery_review_unverified") from exc
