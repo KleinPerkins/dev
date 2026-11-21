@@ -22,6 +22,7 @@ from doc_warden.gsd_adapter import (
     requirements_current_view,
 )
 from doc_warden.operation_store import load_preview, store_preview
+from doc_warden.review_admission import _dev_reviewer, _public_dev_git_tuple
 from fixture_factory import FixtureFactory
 
 
@@ -897,6 +898,34 @@ class ProductLifecycleTests(unittest.TestCase):
             list(artifact_root.glob("PLAN-*.md")),
             [],
         )
+
+    def test_dev_review_reads_public_git_objects_before_using_them(self):
+        reviewer = _dev_reviewer()
+        head, base = "a" * 40, "b" * 40
+        # Simulate the subprocess replies while using the real App helper for
+        # the case where the first shallow fetch cannot establish the merge base.
+        with patch("doc_warden.review_admission.subprocess.run") as git:
+            first_search = subprocess.CompletedProcess([], 1)
+            success = subprocess.CompletedProcess([], 0)
+
+            def write(command, *, stdout, **options):
+                previous = len(git.call_args_list)
+                expected = ("init", "fetch", "merge-base", "fetch", "merge-base", "diff")
+                self.assertIn(expected[previous - 1], command)
+                if "fetch" in command:
+                    self.assertEqual(command[-3:], ["https://github.com/KleinPerkins/dev.git", base, head])
+                elif "merge-base" in command:
+                    if previous == 3:
+                        return first_search
+                    stdout.write((base + "\n").encode("ascii"))
+                elif "diff" in command:
+                    stdout.write(b"exact fixture diff\n")
+                return success
+
+            git.side_effect = write
+            self.assertEqual(_public_dev_git_tuple(reviewer, head, base),
+                             (base, reviewer.digest(b"exact fixture diff\n")))
+            self.assertEqual(git.call_count, 6)
 
     def test_release_artifact_binds_plan_verification_uat_commit_and_pr(self):
         repo = self.fixture.repo

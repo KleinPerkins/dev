@@ -52,7 +52,15 @@ def _public_dev_git_tuple(reviewer, head: str, base: str) -> tuple[str, str]:
                 return data
 
         command("init", "--bare", ".")
-        merge_base = reviewer.bounded_merge_base(command, base, head)
+        command("fetch", "--no-tags", "--no-recurse-submodules", "--depth=256",
+                "https://github.com/KleinPerkins/dev.git", base, head)
+        common_history = command("merge-base", base, head, no_common_base_ok=True)
+        # The App helper repeats the public fetch with progressively deeper history
+        # when a shallow checkout cannot establish a common ancestor.
+        merge_base = (common_history.decode("ascii").strip() if common_history is not None
+                      else reviewer.bounded_merge_base(command, base, head))
+        if len(merge_base) != 40 or any(character not in "0123456789abcdef" for character in merge_base):
+            raise ValueError("release_delivery_review_unverified")
         diff = command("-c", "color.ui=false", "diff", "--no-ext-diff", "--no-textconv", "--binary",
                        f"{base}...{head}", "--")
         return merge_base, reviewer.digest(diff)
