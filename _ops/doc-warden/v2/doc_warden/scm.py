@@ -98,10 +98,10 @@ def _fixture_github_cli(repo: Path) -> str:
     return str(candidate)
 
 
-def github_json(endpoint: str, *, github_cli: str, unavailable: str) -> object:
+def github_json(endpoint: str, *, github_cli: str, unavailable: str, parameters: tuple[str, ...] = ()) -> object:
     try:
         result = subprocess.run(
-            [github_cli, "api", endpoint], check=False, capture_output=True, timeout=20,
+            [github_cli, "api", endpoint, *parameters], check=False, capture_output=True, timeout=20,
         )
         if result.returncode != 0 or len(result.stdout) > 2_000_000:
             raise ValueError(unavailable)

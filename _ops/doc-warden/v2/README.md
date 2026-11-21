@@ -136,8 +136,11 @@ Each evidence row carries a repository-relative path, SHA-256 digest, and
 result. `draft release` binds the accepted verification and UAT records to the
 same plan and source revision. An approved release verifies that its pull
 request delivered the declared commit to the repository’s live default branch.
-Dev releases also require the Reviewer App approval and successful required CI
-for the final PR head. Apply rechecks this delivery evidence before recording an
+Dev releases also require the enrolled originating-account review at App
+approval time, App-owned merge provenance, and successful required CI for the
+final PR head. Apply rechecks this delivery evidence before recording an
+approved release. Repositories with a different required Reviewer App policy
+need a qualified owner verification route before Doc-Warden can record an
 approved release. For acceptance via `--approval-file`, the
 review hash covers the canonical JSON object with `kind`, `title`, `body`, and
 `evidence`. Apply the resulting preview with separate exact consent.

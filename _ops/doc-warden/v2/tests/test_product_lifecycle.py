@@ -921,12 +921,13 @@ class ProductLifecycleTests(unittest.TestCase):
             outcomes[kind] = record.artifact_id
         evidence = {"plan": plan.artifact_id, "commit": head,
                     "pull_request": "https://github.com/KleinPerkins/dev/pull/1", **outcomes}
-        reviewed_head, tip = "a" * 40, "b" * 40
+        reviewed_head, tip, admitted_base = "a" * 40, "b" * 40, "c" * 40
         prefix = "repos/KleinPerkins/dev"
         delivery_rows = {
             prefix: {"id": 1459458379, "full_name": "KleinPerkins/dev", "default_branch": "main"},
             prefix + "/pulls/1": {
-                "number": 1, "base": {"ref": "main", "repo": {"id": 1459458379}},
+                "number": 1, "node_id": "fixture-pull-node", "auto_merge": None,
+                "base": {"ref": "main", "sha": admitted_base, "repo": {"id": 1459458379}},
                 "head": {"sha": reviewed_head}, "merge_commit_sha": head,
                 "merged": True, "state": "closed", "merged_at": "2026-08-30T00:00:00Z",
                 "merged_by": {"id": 299927791},
@@ -941,6 +942,14 @@ class ProductLifecycleTests(unittest.TestCase):
                  "status": "completed", "conclusion": "success"},
             ]},
         }
+        app_actor = {"__typename": "Bot", "login": "chaos-scheduler-automerge", "databaseId": 299927791}
+        timeline = {"pageInfo": {"hasNextPage": False}, "nodes": [
+            {"__typename": "MergedEvent", "actor": app_actor, "commit": {"oid": head}},
+        ]}
+        delivery_rows["graphql"] = {"data": {"repository": {"databaseId": 1459458379, "pullRequest": {
+            "id": "fixture-pull-node", "merged": True, "mergeCommit": {"oid": head},
+            "autoMergeRequest": None, "timelineItems": timeline,
+        }}}}
 
         def draft(**changes):
             return draft_artifact("release", {"title": "Release", **lifecycle,
@@ -949,7 +958,10 @@ class ProductLifecycleTests(unittest.TestCase):
         def github(endpoint, **options):
             return delivery_rows[endpoint]
 
-        with patch("doc_warden.release_delivery.github_json", side_effect=github) as remote:
+        review_digest = digest_ref(b"fixture originating-account review evidence")
+        with patch("doc_warden.release_delivery.github_json", side_effect=github) as remote, patch(
+            "doc_warden.release_delivery.verify_dev_review", return_value=review_digest,
+        ) as originating_review:
             with self.assertRaisesRegex(ValueError, "release_delivery_repository_mismatch"):
                 draft(pull_request="https://github.com/another/repo/pull/1")
             remote.assert_not_called()
@@ -965,6 +977,15 @@ class ProductLifecycleTests(unittest.TestCase):
                     delivery_rows[prefix + endpoint], updates,
                 ), self.assertRaisesRegex(ValueError, code):
                     draft()
+            for actor in (None, {"__typename": "User", "login": "another-actor"}):
+                armed = {"__typename": "AutoMergeEnabledEvent", "actor": actor}
+                with self.subTest(actor=actor), patch.dict(timeline, {"nodes": [armed, *timeline["nodes"]]}):
+                    with self.assertRaisesRegex(ValueError, "release_delivery_automation_unverified"):
+                        draft()
+            with patch("doc_warden.release_delivery.verify_dev_review",
+                       side_effect=ValueError("release_delivery_review_unverified")):
+                with self.assertRaisesRegex(ValueError, "release_delivery_review_unverified"):
+                    draft()
 
             preview = draft()
             consent = consent_for(preview.transaction)
@@ -977,6 +998,12 @@ class ProductLifecycleTests(unittest.TestCase):
                 self.assertFalse((repo / preview.artifact_path).exists())
                 receipt = apply_preview(resumed, consent)
                 self.assertEqual(receipt["bindings"]["release_delivery"]["reviewed_commit"], reviewed_head)
+                self.assertEqual(receipt["bindings"]["release_delivery"]["review_receipt_digest"], review_digest)
+                originating_review.assert_called_with(
+                    unittest.mock.ANY, delivery_rows[prefix + "/pulls/1"],
+                    delivery_rows[prefix + "/pulls/1/reviews?per_page=100"][0],
+                    commit=head, head=reviewed_head, base=admitted_base,
+                )
                 remote.side_effect = ValueError("release_delivery_unavailable")
                 self.assertEqual(apply_preview(resumed, consent), receipt)
         metadata = parse_artifact(self.fixture.repo / preview.artifact_path).metadata
