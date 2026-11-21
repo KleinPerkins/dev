@@ -779,6 +779,8 @@ def draft_artifact(
     if outcome_provenance is not None:
         metadata["provenance"].append(outcome_provenance)
     require_valid("artifact", metadata)
+    if approved and metadata["supersedes"] is not None:
+        evidence.append(resolve_approved_artifact(repo, kind, metadata["supersedes"]))
     for relation in metadata["relations"]:
         validate_relation_record(relation)
         if relation["source_id"] != artifact_id:

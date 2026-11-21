@@ -12,7 +12,9 @@ from typing import Any
 from .artifact_discovery import ADR_NAME, adr_directory, artifact_paths
 from .canonical import contained_path, digest_ref, parse_json_object
 from .transactions import ObservedInput, directory_input_digest
-from .validators import parse_validated_artifact, read_repository_config, require_valid, validate_relation_record
+from .validators import (
+    parse_validated_artifact, read_repository_config, record_approved_successor, require_valid, validate_relation_record,
+)
 
 
 AUTHORITY_PREFIXES = {
@@ -165,7 +167,9 @@ def resolve_approved_artifact(
     if {record[0] for record in approved.values()} != set(frozen):
         raise ValueError("authority_freeze_mismatch")
 
-    retired = {record[1]["supersedes"] for record in approved.values()}
+    retired: dict[str, tuple[str, str, str]] = {}
+    for _, metadata, _ in approved.values():
+        record_approved_successor(retired, metadata)
     active = [record for identifier, record in approved.items()
               if identifier not in retired and (artifact_id is None or artifact_id == identifier)]
     if len(active) != 1:

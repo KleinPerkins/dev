@@ -16,6 +16,7 @@ from .validators import (
     active_approved_artifacts,
     parse_validated_artifact,
     read_repository_config,
+    record_approved_successor,
     require_valid,
     validate_egress,
     validate_relation_record,
@@ -1005,7 +1006,7 @@ def resolve_graph(repositories: Iterable[Path]) -> GeneratedGraph:
     known_keys = {config["repository_key"] for config in configs.values()}
     nodes: dict[str, GraphNode] = {}
     edges: list[DependencyEdge] = []
-    retired: dict[str, tuple[str, str]] = {}
+    retired: dict[str, tuple[str, str, str]] = {}
     for repo, config in configs.items():
         revision = _head(repo)
         repository_id = f"REPO-{config['repository_key']}"
@@ -1034,8 +1035,7 @@ def resolve_graph(repositories: Iterable[Path]) -> GeneratedGraph:
             if source.id in nodes and nodes[source.id] != source:
                 raise ValueError("dependency_artifact_identity_conflict")
             nodes[source.id] = source
-            if metadata["lifecycle"] == "approved" and metadata["supersedes"] is not None:
-                retired[metadata["supersedes"]] = (source.kind, metadata["repository_key"])
+            record_approved_successor(retired, metadata)
             for record in metadata["relations"]:
                 edge = DependencyEdge.from_record(
                     {
@@ -1104,9 +1104,9 @@ def resolve_graph(repositories: Iterable[Path]) -> GeneratedGraph:
                         provider_revision=None,
                         available=False,
                     )
-    for identifier, owner in retired.items():
+    for identifier, (_, kind, repository_key) in retired.items():
         predecessor = nodes.get(identifier)
-        if predecessor and (predecessor.kind, predecessor.repository_key) == owner:
+        if predecessor and (predecessor.kind, predecessor.repository_key) == (kind, repository_key):
             nodes[identifier] = replace(predecessor, lifecycle="superseded")
     inspected = set(nodes)
     for edge in edges:
