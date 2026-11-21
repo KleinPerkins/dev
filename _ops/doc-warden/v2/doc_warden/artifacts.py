@@ -957,6 +957,7 @@ def validate_consent(
     source_revision: str,
     action_digest: str,
     consequence_class: str | None = None,
+    allow_expired: bool = False,
 ) -> None:
     if consent is None:
         raise ValueError("fresh_exact_consent_required")
@@ -974,7 +975,7 @@ def validate_consent(
     if any(consent.get(key) != value for key, value in expected.items()):
         raise ValueError("fresh_exact_consent_required")
     expires = datetime.fromisoformat(str(consent["expires_at"]))
-    if expires.tzinfo is None or expires <= datetime.now(timezone.utc):
+    if expires.tzinfo is None or (not allow_expired and expires <= datetime.now(timezone.utc)):
         raise ValueError("fresh_exact_consent_required")
 
 

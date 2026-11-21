@@ -105,6 +105,40 @@ class SaveGameAdapterTests(unittest.TestCase):
         self.assertEqual(self.calls, ["checkpoint"])
         self.assertEqual(first["state"]["next_action_code"], "review")
 
+    def test_completed_continuity_replay_survives_preview_and_consent_expiry(self):
+        preview = self.preview("pause-with-continuity")
+        consent = self.consent(preview)
+        adapter = SaveGameAdapter(root=self.root, runner=self.success)
+        operation = (preview["operation_id"], preview["action_digest"])
+        applied = apply_continuity(*operation, consent, adapter=adapter)
+        record, = (self.staging / "state/doc-warden/continuity").rglob("*.json")
+        prior = (record.read_bytes(), record.stat().st_mtime_ns)
+        later = datetime.now(timezone.utc) + timedelta(minutes=11)
+        with patch("doc_warden.continuity.datetime", wraps=datetime) as operation_clock, patch(
+            "doc_warden.artifacts.datetime", wraps=datetime,
+        ) as consent_clock:
+            operation_clock.now.return_value = later
+            consent_clock.now.return_value = later
+            self.assertEqual(apply_continuity(*operation, consent, adapter=adapter), applied)
+            with self.assertRaisesRegex(ValueError, "fresh_exact_consent_required"):
+                apply_continuity(*operation, consent | {"action_digest": REQUEST}, adapter=adapter)
+        self.assertEqual(self.calls, ["checkpoint"])
+        self.assertEqual((record.read_bytes(), record.stat().st_mtime_ns), prior)
+
+    def test_unapplied_expired_continuity_never_calls_provider(self):
+        preview = self.preview()
+        consent = self.consent(preview)
+        adapter = SaveGameAdapter(root=self.root, runner=self.success)
+        with patch("doc_warden.continuity.datetime", wraps=datetime) as clock:
+            clock.now.return_value = datetime.now(timezone.utc) + timedelta(minutes=11)
+            with self.assertRaisesRegex(ValueError, "operation_specification_expired"):
+                apply_continuity(preview["operation_id"], preview["action_digest"], consent, adapter=adapter)
+        with patch("doc_warden.artifacts.datetime", wraps=datetime) as clock:
+            clock.now.return_value = datetime.now(timezone.utc) + timedelta(minutes=2)
+            with self.assertRaisesRegex(ValueError, "fresh_exact_consent_required"):
+                apply_continuity(preview["operation_id"], preview["action_digest"], consent, adapter=adapter)
+        self.assertEqual(self.calls, [])
+
     def test_same_operation_cannot_be_reused_for_changed_intent(self):
         first = self.preview()
         with self.assertRaisesRegex(ValueError, "operation_replay_mismatch"):

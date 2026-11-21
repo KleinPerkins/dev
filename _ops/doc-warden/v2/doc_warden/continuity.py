@@ -132,15 +132,16 @@ def apply_continuity(operation_id: str, action_digest: str, consent: dict[str, A
                                           if key not in {"action_digest", "expires_at"}})) != action_digest):
         raise ValueError("operation_specification_mismatch")
     expires = datetime.fromisoformat(payload["expires_at"])
-    if expires.tzinfo is None or expires <= datetime.now(timezone.utc):
+    if expires.tzinfo is None:
         raise ValueError("operation_specification_expired")
     state = payload["authoring_state"]
     require_valid("authoring-state", state)
     event = event_from_envelope(payload["event"])
     repo = Path(payload["repo"]).resolve(strict=True)
-    validate_consent(consent, operation_id=operation_id, repository_key=state["repository_key"],
-                     canonical_root=str(repo), source_revision=state["source_revision"],
-                     action_digest=action_digest, consequence_class="lifecycle")
+    consent_scope = {"operation_id": operation_id, "repository_key": state["repository_key"],
+                     "canonical_root": str(repo), "source_revision": state["source_revision"],
+                     "action_digest": action_digest, "consequence_class": "lifecycle"}
+    validate_consent(consent, **consent_scope, allow_expired=True)
     if str(repo) != payload["repo"] or live_binding(repo, state, event) != payload["observed_live_binding"]:
         raise ValueError("authoring_live_state_changed")
     state_root = _state_root(path)
@@ -160,6 +161,11 @@ def apply_continuity(operation_id: str, action_digest: str, consent: dict[str, A
         record, preimage = _read_record(target)
         if record and record["operation_id"] == operation_id and record["action_digest"] == action_digest:
             return _summary(payload, status="applied") | {"state": record["state"]}
+        # Expired authorization can identify a completed receipt. It cannot
+        # authorize the first provider call or state write for an operation.
+        if expires <= datetime.now(timezone.utc):
+            raise ValueError("operation_specification_expired")
+        validate_consent(consent, **consent_scope)
         if preimage != payload["record_preimage"] or (record is not None and record["state"] != state):
             raise ValueError("continuity_state_changed")
         if live_binding(repo, state, event) != payload["observed_live_binding"]:
