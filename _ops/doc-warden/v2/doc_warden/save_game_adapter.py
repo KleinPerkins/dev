@@ -505,8 +505,9 @@ def prepare_authoring_resume(
     prior = validate_pointer(authoring_state["save_game_pointer"])
     if prior["status"] == "unavailable":
         raise ValueError("save_game_checkpoint_required")
-    if any(prior[field] != list(getattr(event, field))
-           for field in ("artifact_ids", "blocker_ids", "authority_pointers")):
+    if (prior["next_action_code"] != event.next_action_code
+            or any(prior[field] != list(getattr(event, field))
+                   for field in ("artifact_ids", "blocker_ids", "authority_pointers"))):
         raise ValueError("save_game_pointer_identity_mismatch")
     pointer = adapter.reconcile(event, request_digest=authoring_state["checkpoint_request_digest"])
     if (pointer["checkpoint_id"], pointer["checkpoint_digest"]) != (prior["checkpoint_id"], prior["checkpoint_digest"]):

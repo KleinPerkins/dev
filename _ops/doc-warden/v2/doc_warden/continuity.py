@@ -44,6 +44,7 @@ NEXT_ACTION = {
     "save_game_workstream_unavailable": "select_current_qualified_checkpoint",
     "save_game_checkpoint_required": "prepare_checkpoint_preview",
     "save_game_checkpoint_stale": "select_current_qualified_checkpoint",
+    "save_game_pointer_identity_mismatch": "reload_current_authoring_state",
     "save_game_live_conflict": "resolve_git_conflict_before_retry",
     "authoring_git_conflict": "resolve_git_conflict_before_retry",
     "authoring_live_state_changed": "review_live_authority_and_prepare_new_preview",

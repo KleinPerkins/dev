@@ -237,6 +237,21 @@ class SaveGameAdapterTests(unittest.TestCase):
             prepare_checkpoint(self.root, self.state, self.event, adapter, request_digest=REQUEST)
         self.assertIsNone(self.state["save_game_pointer"])
 
+    def test_resume_refuses_changed_next_action_before_owner_call(self):
+        state = self.apply(self.preview("pause-with-continuity"))["state"]
+        record, = (self.staging / "state/doc-warden/continuity").rglob("*.json")
+        prior = (record.read_bytes(), record.stat().st_mtime_ns)
+        self.event_input["next_action_code"] = "author"
+        preview = self.preview("resume-authoring", state=state)
+        with self.assertRaisesRegex(ValueError, "^save_game_pointer_identity_mismatch$"):
+            self.apply(preview)
+        self.assertEqual(self.calls, ["checkpoint"])
+        self.assertEqual((record.read_bytes(), record.stat().st_mtime_ns), prior)
+        self.event_input["next_action_code"] = state["save_game_pointer"]["next_action_code"]
+        resumed = self.apply(self.preview("resume-authoring", state=state))["state"]
+        self.assertEqual(resumed["next_action_code"], "review")
+        self.assertEqual(self.calls, ["checkpoint", "reconcile"])
+
     def test_resume_without_a_prior_checkpoint_fails_before_owner_call(self):
         with self.assertRaisesRegex(ValueError, "save_game_checkpoint_required"):
             prepare_authoring_resume(self.root, self.state, self.event,
