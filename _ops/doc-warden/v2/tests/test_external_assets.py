@@ -504,6 +504,7 @@ class ExternalAssetTests(unittest.TestCase):
         self.assertEqual(self.metadata_for(preview)["provenance"], [record])
 
     def test_invalid_external_asset_input_is_checked_for_every_artifact_kind(self):
+        self.fixture.approve_prd("REQ-001")
         invalid = self.record()
         invalid.pop("export_sha256")
         for kind in sorted(KINDS - {"defect"}):
@@ -755,6 +756,7 @@ class ExternalAssetTests(unittest.TestCase):
         self.assertEqual(self.metadata_for(preview)["provenance"], [record])
 
     def test_asset_like_provenance_without_schema_is_rejected_for_every_artifact_kind(self):
+        self.fixture.approve_prd("REQ-001")
         fake = {
             "provider": "figma",
             "canonical_url": "https://example.invalid/moving",
@@ -849,7 +851,7 @@ class ExternalAssetTests(unittest.TestCase):
                 repo=self.fixture.repo,
             )
         record = self.record()
-        ordinary = {"release_evidence": "verified"}
+        ordinary = {"review_context": "fixture"}
         preview = draft_artifact(
             "release",
             {
@@ -863,6 +865,15 @@ class ExternalAssetTests(unittest.TestCase):
             self.metadata_for(preview)["provenance"],
             [record, ordinary],
         )
+
+    def test_outcome_authority_cannot_be_supplied_as_external_asset_provenance(self):
+        for kind, field in (("release", "release_evidence"), ("uat", "outcome_evidence")):
+            with self.subTest(kind=kind), self.assertRaisesRegex(
+                ValueError, "outcome_authority_provenance_is_derived"
+            ):
+                draft_artifact(kind, {
+                    "title": kind, "external_asset": self.record(), "provenance": [{field: "verified"}],
+                }, repo=self.fixture.repo)
 
     def test_valid_final_external_asset_provenance_allows_artifacts(self):
         asset = draft_artifact(

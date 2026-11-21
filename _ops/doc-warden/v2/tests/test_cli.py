@@ -730,6 +730,9 @@ class CliTests(unittest.TestCase):
             str(state),
             "--event",
             str(event),
+            "--operation-id",
+            str(uuid.uuid4()),
+            "--preview",
             check=False,
         )
         self.assertEqual(json.loads(result.stdout)["code"], "invalid_input")

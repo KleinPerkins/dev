@@ -22,6 +22,30 @@ class FixtureContext:
     def id_for(self, label: str) -> str:
         return str(uuid.uuid5(uuid.UUID(self.repository_key), label))
 
+    def approve_prd(self, *requirement_ids: str) -> str:
+        from doc_warden.artifacts import apply_preview, consent_for, draft_artifact
+
+        ids = requirement_ids or ("REQ-001",)
+        preview = draft_artifact("prd", {
+            "title": "Fixture requirements", "lifecycle": "approved",
+            "approval": {"actor": "fixture", "date": "2026-01-01"},
+            "requirements": [{"id": identifier, "statement": f"Fixture behavior for {identifier}."}
+                             for identifier in ids],
+        }, repo=self.repo, operation_id=self.id_for("approved-fixture-prd:" + ",".join(ids)))
+        apply_preview(preview, consent_for(preview.transaction))
+        return preview.artifact_id
+
+    def approve_uxr(self) -> str:
+        from doc_warden.artifacts import apply_preview, consent_for, draft_artifact
+
+        preview = draft_artifact("uxr", {
+            "title": "Fixture UX requirements", "lifecycle": "approved",
+            "approval": {"actor": "fixture", "date": "2026-01-01"},
+            "requirements": [{"id": "REQ-001", "statement": "Open the dashboard."}],
+        }, repo=self.repo)
+        apply_preview(preview, consent_for(preview.transaction))
+        return preview.artifact_id
+
     def cleanup(self) -> None:
         self.temporary.cleanup()
 

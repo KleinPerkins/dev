@@ -91,6 +91,8 @@ class PlanInvalidationTests(unittest.TestCase):
             for assumption in assumptions
             if assumption["kind"] == "requirement"
         ]
+        if not list((self.fixture.repo / ".planning/artifacts").glob("PRD-*.md")):
+            self.fixture.approve_prd(*requirement_ids)
         return draft_artifact(
             "plan",
             {
@@ -103,7 +105,7 @@ class PlanInvalidationTests(unittest.TestCase):
                     "approved_by": "operator",
                     "approved_at": "2026-08-31T20:00:00Z",
                 },
-                "requirement_ids": requirement_ids,
+                **({"requirement_ids": requirement_ids} if requirement_ids else {}),
                 "task_ids": ["M2-T03"],
                 "assumptions": assumptions,
             },
@@ -120,8 +122,10 @@ class PlanInvalidationTests(unittest.TestCase):
         self,
         assumptions,
         mutate,
+        *,
+        operation_label="accepted-plan-operation",
     ):
-        preview = self.accepted_plan_preview(assumptions)
+        preview = self.accepted_plan_preview(assumptions, operation_label=operation_label)
         original = preview.transaction
         actions = []
         for action in original.actions:
@@ -464,8 +468,11 @@ class PlanInvalidationTests(unittest.TestCase):
         return record
 
     def test_accepted_plan_sidecar_binds_every_required_assumption_kind(self):
+        prd = self.persist_approved_prd(
+            [{"id": "REQ-001", "statement": "Keep a current requirement binding."}], label="matrix-prd",
+        )
         assumptions = [
-            self.assumption("requirement", "REQ-001"),
+            self.requirement_assumption(prd, "REQ-001"),
             self.assumption("design", "DESIGN-1", target_kind="design"),
             self.assumption("adr", "ADR-1", target_kind="adr"),
             self.assumption(
@@ -685,11 +692,11 @@ class PlanInvalidationTests(unittest.TestCase):
 
     def test_accepted_empty_plan_cannot_mask_assumption_bearing_plan(self):
         self.persist_drifting_code_plan()
-        empty = self.accepted_plan_preview(
+        empty = self.persist_accepted_plan_with_sidecar_mutation(
             [],
+            lambda sidecar: sidecar.update(assumptions=[]),
             operation_label="accepted-empty-plan-operation",
         )
-        apply_preview(empty, consent_for(empty.transaction))
         preview = prepare_authoring_import(
             AuthoringScope(
                 repo=self.fixture.repo,
@@ -1025,9 +1032,8 @@ class PlanInvalidationTests(unittest.TestCase):
             [{"id": "REQ-001", "statement": "Use the original behavior."}],
             label="original-requirement-prd",
         )
-        plan = self.persist_accepted_plan(
-            [self.requirement_assumption(original, "REQ-001")]
-        )
+        plan = self.persist_accepted_plan([])
+        assert_plan_assumptions_current(self.fixture.repo, plan.artifact_id)
         successor = self.persist_approved_prd(
             [{"id": "REQ-001", "statement": "Use the changed behavior."}],
             label="successor-requirement-prd",

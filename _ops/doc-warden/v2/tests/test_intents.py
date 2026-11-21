@@ -35,6 +35,10 @@ class IntentTests(unittest.TestCase):
             "run",
             "pause",
             "resume",
+            "checkpoint_authoring",
+            "handoff_authoring",
+            "pause_with_continuity",
+            "resume_authoring",
             "verify",
         }
         self.assertEqual(set(INTENT_SPECS), expected)
@@ -113,6 +117,25 @@ class IntentTests(unittest.TestCase):
         self.assertEqual(set(proposal.candidates), {"view_fleet", "apply_reconciliation"})
         self.assertIn("different consequences", proposal.message.lower())
         self.assertFalse(proposal.authorized)
+
+    def test_explicit_continuity_proposes_the_same_preview_as_the_direct_cli(self):
+        for utterance, command in (
+            ("Checkpoint this authoring session.", "checkpoint"),
+            ("Hand off this authoring session.", "handoff"),
+            ("Pause the work with continuity.", "pause-with-continuity"),
+            ("Resume this authoring session.", "resume-authoring"),
+        ):
+            with self.subTest(command=command):
+                proposal = map_intent(utterance, {})
+                self.assertEqual(proposal.status, "proposed")
+                self.assertIn(f"doc-warden.sh {command} ", proposal.cli_equivalent)
+                self.assertTrue(proposal.consent_required)
+                self.assertEqual(proposal.next_action, "run_preview")
+                self.assertFalse(proposal.authorized)
+                self.assertEqual(proposal.repository_writes, ())
+        ambiguous = map_intent("Checkpoint this authoring session and pause with continuity.", {})
+        self.assertEqual(ambiguous.status, "ambiguous")
+        self.assertIsNone(ambiguous.cli_equivalent)
 
     def test_execution_family_is_proposal_only_without_native_execution(self):
         for utterance, expected in (
@@ -193,6 +216,10 @@ class IntentTests(unittest.TestCase):
                 "pause",
                 "resume",
                 "verify",
+                "checkpoint",
+                "handoff",
+                "pause-with-continuity",
+                "resume-authoring",
             }.issubset(operations)
         )
 

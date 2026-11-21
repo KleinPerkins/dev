@@ -5,12 +5,15 @@ from __future__ import annotations
 import hashlib
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from .canonical import canonical_json, digest_file_manifest, digest_ref
+from .artifact_authority import ApprovedArtifact, resolve_approved_artifact
+from .canonical import canonical_json, digest_file_manifest, digest_ref, parse_artifact
+from .rigor import RigorSignals, authoring_rigor_signals, compute_rigor
+from .outcomes import outcome_binding
 from .transactions import (
     MutationAction,
     MutationRequest,
@@ -47,6 +50,8 @@ KINDS = {
     "sketch",
     "spike",
     "release",
+    "verification",
+    "uat",
     "defect",
 }
 TYPE_PREFIX = {
@@ -61,6 +66,8 @@ TYPE_PREFIX = {
     "sketch": "SKETCH",
     "spike": "SPIKE",
     "release": "REL",
+    "verification": "VER",
+    "uat": "UAT",
     "defect": "DEF",
 }
 _REQUIREMENT_ID = re.compile(r"REQ-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*")
@@ -347,9 +354,82 @@ def _validate_m2_inputs(kind: str, inputs: dict[str, Any]) -> None:
         missing = _missing_requirement_coverage(inputs)
         if missing:
             raise ValueError("requirement_coverage_incomplete")
-    if kind == "plan" and _canonical_ui_visual(inputs):
+    if kind in {"plan", "spec"} and _canonical_ui_visual(inputs):
         if not isinstance(inputs.get("uxr_id"), str) or not inputs["uxr_id"]:
             raise ValueError("ui_plan_requires_uxr_and_approved_design")
+
+
+def _approved_requirements(authority: ApprovedArtifact, *, field: str) -> tuple[str, ...]:
+    from .gsd_adapter import _requirement_rows
+
+    document = parse_artifact(authority.path)
+    rows = _requirement_rows(document.metadata, document.body)
+    required = _canonical_requirement_ids({field: [row["id"] for row in rows]}, field)
+    if (not required or len(required) != len(rows) or any(
+        not isinstance(row.get("statement"), str) or not row["statement"].strip() for row in rows
+    )):
+        raise ValueError(f"approved_{field}_invalid")
+    return required
+
+
+def _feature_prd(repo: Path, inputs: dict[str, Any]) -> tuple[ApprovedArtifact, tuple[str, ...]]:
+    try:
+        authority = resolve_approved_artifact(repo, "prd", inputs.get("prd_id"))
+    except ValueError as exc:
+        if str(exc) in {"authority_artifact_required", "v2_repository_profile_required"}:
+            raise ValueError("approved_prd_required") from exc
+        raise
+    required = _approved_requirements(authority, field="prd_requirements")
+    for field in ("prd_requirements", "requirement_ids"):
+        if field in inputs and set(_canonical_requirement_ids(inputs, field)) != set(required):
+            raise ValueError("approved_prd_requirement_set_mismatch")
+    if {"implemented_requirements", "nonimplemented_requirements"}.intersection(inputs):
+        implemented = set(_canonical_requirement_ids(inputs, "implemented_requirements"))
+        nonimplemented = set(_canonical_nonimplemented_requirement_ids(inputs))
+        if implemented & nonimplemented or (implemented | nonimplemented) - set(required):
+            raise ValueError("approved_prd_requirement_set_mismatch")
+        if set(required) - implemented - nonimplemented:
+            raise ValueError("requirement_coverage_incomplete")
+    return authority, required
+
+
+def _ui_authorities(
+    repo: Path, inputs: dict[str, Any], feature_requirements: tuple[str, ...],
+    designs: dict[str, ApprovedDesignArtifact],
+) -> tuple[tuple[str, ...], list[ApprovedArtifact]]:
+    scoped = (_canonical_requirement_ids(inputs, "ui_requirement_ids")
+              if "ui_requirement_ids" in inputs else feature_requirements)
+    if not scoped or set(scoped) - set(feature_requirements):
+        raise ValueError("ui_requirement_scope_invalid")
+    try:
+        uxr = resolve_approved_artifact(repo, "uxr", inputs["uxr_id"])
+    except ValueError as exc:
+        if str(exc) == "authority_artifact_required":
+            raise ValueError("ui_plan_requires_approved_uxr") from exc
+        raise
+    if set(scoped) - set(_approved_requirements(uxr, field="uxr_requirements")):
+        raise ValueError("ui_uxr_coverage_incomplete")
+    covered: set[str] = set()
+    asset_ids: set[str] = set()
+    authorities = [uxr]
+    for identifier, design in designs.items():
+        authorities.append(resolve_approved_artifact(repo, "design", identifier,
+                                                     version=design.metadata["version"], digest=design.digest))
+        covered.update(design.contract["requirements"])
+        asset_ids.update(design.contract["visual_assets"])
+    if set(scoped) - covered:
+        raise ValueError("ui_design_requirement_coverage_incomplete")
+    for identifier in sorted(asset_ids):
+        try:
+            asset = resolve_approved_artifact(repo, "asset", identifier)
+        except ValueError as exc:
+            if str(exc) == "authority_artifact_required":
+                raise ValueError("ui_visual_asset_unavailable") from exc
+            raise
+        if not any(is_external_asset_record(row) for row in asset.metadata["provenance"]):
+            raise ValueError("ui_visual_asset_provenance_required")
+        authorities.append(asset)
+    return scoped, authorities
 
 
 def _provenance_for(
@@ -375,6 +455,11 @@ def _provenance_for(
         for record in candidate_provenance:
             if not isinstance(record, dict):
                 raise ValueError("provenance_items_must_be_objects")
+            if kind in {"plan", "spec"} and {"approved_prd", "rigor", "recorded_signals",
+                                               "ui_authorities", "sensitive_decision"}.intersection(record):
+                raise ValueError("authoring_authority_provenance_is_derived")
+            if kind in {"release", "verification", "uat"} and {"release_evidence", "outcome_evidence"}.intersection(record):
+                raise ValueError("outcome_authority_provenance_is_derived")
             if is_external_asset_observation(record):
                 raise ValueError(
                     "external_asset_observation_requires_explicit_input"
@@ -396,13 +481,10 @@ def _provenance_for(
             observations.append(observation)
 
     generated: list[dict[str, Any]] = []
-    if kind == "prd" and inputs.get("requirements"):
+    if kind in {"prd", "uxr"} and inputs.get("requirements"):
         generated.append({"requirements": list(inputs["requirements"])})
     if supplied_external_asset is not None:
         generated.append(supplied_external_asset)
-    if inputs.get("release_evidence"):
-        generated.append({"release_evidence": inputs["release_evidence"]})
-
     # Generated records keep their historical order; additional caller records follow
     # in caller order. The first exact-equal record wins.
     provenance: list[dict[str, Any]] = []
@@ -489,15 +571,23 @@ def draft_artifact(
         raise ValueError("unsupported artifact kind")
     if kind == "defect":
         raise ValueError("use_create_defect")
-    if kind == "spec" and not inputs.get("approved_prd"):
-        raise ValueError("approved_prd_required")
-    if (
-        kind == "plan"
-        and not inputs.get("approved_prd")
-        and isinstance(inputs.get("defect_id"), str)
-        and inputs["defect_id"]
-        and _canonical_ui_visual(inputs)
-    ):
+    if "approved_prd" in inputs and not isinstance(inputs["approved_prd"], bool):
+        raise ValueError("approved_prd_must_be_boolean")
+    authoring = kind in {"plan", "spec"}
+    rigor_facts = authoring_rigor_signals(inputs.get("rigor_signals", {})) if authoring else {}
+    design_ids, design_versions = _canonical_plan_design_bindings(inputs) if authoring else ((), None)
+    ui_visual = authoring and (
+        _canonical_ui_visual(inputs) or bool(rigor_facts.get("ui_visual") or design_ids)
+        or bool({"uxr_id", "ui_requirement_ids", "design"}.intersection(inputs))
+    )
+    if authoring:
+        inputs = {**inputs, "ui_visual": ui_visual}
+    defect_id = inputs.get("defect_id")
+    defect_plan = "defect_id" in inputs
+    if defect_plan and (kind != "plan" or not isinstance(defect_id, str) or not defect_id
+                        or inputs.get("approved_prd") or "prd_id" in inputs):
+        raise ValueError("defect_and_feature_authoring_conflict")
+    if defect_plan and ui_visual:
         raise ValueError("defect_scope_promotion_required:ui_visual")
     _validate_m2_inputs(kind, inputs)
     repo = repo.resolve(strict=True)
@@ -508,24 +598,43 @@ def draft_artifact(
     )
     persisted = read_repository_config(repo)
     defect_authority = None
-    if kind == "plan" and not inputs.get("approved_prd"):
-        defect_id = inputs.get("defect_id")
-        if not isinstance(defect_id, str) or not defect_id:
-            raise ValueError("approved_prd_required")
+    feature_prd = None
+    feature_requirements = ()
+    if defect_plan:
         defect_authority = require_ready_defect(repo, defect_id)
+    elif authoring:
+        feature_prd, feature_requirements = _feature_prd(repo, inputs)
     lifecycle = str(inputs.get("lifecycle", "draft"))
     approved = lifecycle == "approved"
     approval = inputs.get("approval") if approved else None
     if approved and not isinstance(approval, dict):
         raise ValueError("approval_record_required")
-    design_ids: tuple[str, ...] = ()
-    design_versions: dict[str, int] | None = None
+    outcome_provenance, outcome_inputs = outcome_binding(kind, inputs, repo, approved=approved)
     design_digests: dict[str, str] = {}
     design_authorities: dict[str, ApprovedDesignArtifact] = {}
     design_authority: dict[str, Any] | None = None
-    if kind == "plan":
-        design_ids, design_versions = _canonical_plan_design_bindings(inputs)
-        ui_visual = _canonical_ui_visual(inputs)
+    ui_requirements = ()
+    ui_proofs: list[ApprovedArtifact] = []
+    evidence: list[ApprovedArtifact] = [feature_prd] if feature_prd else []
+    rigor = None
+    sensitive_authority = None
+    if authoring:
+        scope = defect_authority.record["scope"] if defect_authority else None
+        defaults = ({"change_kind": "defect", "restores_approved_behavior": True,
+                     "repositories": scope["repositories"], "components": len(scope["components"]),
+                     "sessions": scope["sessions"], "reversible": scope["reversible"]}
+                    if scope else {"change_kind": "feature", "new_user_value": True})
+        rigor = compute_rigor(RigorSignals(**(defaults | rigor_facts | {"ui_visual": ui_visual})))
+        if feature_prd is not None and rigor.base_class == "trivial_maintenance":
+            raise ValueError("feature_rigor_scope_unresolved")
+        if scope and (rigor.base_class != "hotfix_defect" or rigor.dimensions or rigor_facts.get("new_user_value")):
+            raise ValueError("defect_scope_promotion_required:rigor")
+        if "sensitive" in rigor.dimensions:
+            decision = inputs.get("sensitive_adr_id")
+            if not isinstance(decision, str) or not decision:
+                raise ValueError("sensitive_authoring_requires_approved_adr")
+            sensitive_authority = resolve_approved_artifact(repo, "adr", decision)
+            evidence.append(sensitive_authority)
         if ui_visual and not design_ids:
             raise ValueError("ui_plan_requires_active_design_binding")
         if design_ids:
@@ -576,6 +685,9 @@ def draft_artifact(
                 authority.contract
             ):
                 raise ValueError("inline_design_mismatch")
+        if ui_visual:
+            ui_requirements, ui_proofs = _ui_authorities(repo, inputs, feature_requirements, design_authorities)
+            evidence.extend(ui_proofs)
     operation = operation_id or str(uuid.uuid4())
     uuid.UUID(operation)
     if repository_key_override is not None:
@@ -647,7 +759,28 @@ def draft_artifact(
             "defect_digest": defect_authority.digest,
         }
         metadata["provenance"].append({"ready_defect": defect_binding})
+    if feature_prd is not None:
+        metadata["provenance"].append({"approved_prd": {
+            "artifact_id": feature_prd.metadata["id"], "version": feature_prd.metadata["version"],
+            "content_digest": feature_prd.digest, "requirement_ids": list(feature_requirements),
+        }})
+    if ui_proofs:
+        metadata["provenance"].append({"ui_authorities": [{
+            "type": authority.metadata["type"], "artifact_id": authority.metadata["id"],
+            "version": authority.metadata["version"], "content_digest": authority.digest,
+        } for authority in ui_proofs], "ui_requirement_ids": list(ui_requirements)})
+    if rigor is not None:
+        metadata["provenance"].append({"rigor": asdict(rigor), "recorded_signals": rigor_facts})
+    if sensitive_authority is not None:
+        metadata["provenance"].append({"sensitive_decision": {
+            "artifact_id": sensitive_authority.metadata["id"], "version": sensitive_authority.metadata["version"],
+            "content_digest": sensitive_authority.digest,
+        }})
+    if outcome_provenance is not None:
+        metadata["provenance"].append(outcome_provenance)
     require_valid("artifact", metadata)
+    if approved and metadata["supersedes"] is not None:
+        evidence.append(resolve_approved_artifact(repo, kind, metadata["supersedes"]))
     for relation in metadata["relations"]:
         validate_relation_record(relation)
         if relation["source_id"] != artifact_id:
@@ -676,6 +809,30 @@ def draft_artifact(
             for item in supplied_task_ids
         ):
             raise ValueError("plan_task_ids_invalid")
+        if feature_prd is not None:
+            existing_requirements = {item["target_id"]: item for item in assumptions if item["kind"] == "requirement"}
+            scope_bindings = {
+                "version": feature_prd.metadata["version"], "digest": feature_prd.digest,
+                "repository_key": repository_key, "path": feature_prd.path.relative_to(repo).as_posix(),
+            }
+            for identifier in feature_requirements:
+                supplied = existing_requirements.get(identifier)
+                if supplied is not None:
+                    if supplied["target_kind"] != "requirement" or any(
+                        supplied[key] != value for key, value in scope_bindings.items()
+                        if key != "path" or supplied[key] is not None
+                    ):
+                        raise ValueError("approved_prd_assumption_mismatch")
+                    continue
+                assumptions.append({
+                    "schema": "doc-warden/plan-assumption/v1",
+                    "id": f"ASM-{uuid.uuid5(uuid.UUID(operation), 'approved-prd:' + identifier)}",
+                    "kind": "requirement", "source_id": artifact_id, "target_id": identifier,
+                    "target_kind": "requirement", "revision": feature_prd.source_revision,
+                    "provider_revision": None, "symbol": None, "relation": None,
+                    "task_ids": sorted(set(supplied_task_ids)), "requirement_ids": [identifier], **scope_bindings,
+                })
+            assumptions = _canonical_plan_assumptions({"assumptions": assumptions})
         task_ids = sorted(
             set(supplied_task_ids)
             | {
@@ -686,6 +843,7 @@ def draft_artifact(
         )
         plan_requirement_ids = sorted(
             set(_canonical_requirement_ids(inputs, "requirement_ids"))
+            | set(feature_requirements)
             | {
                 requirement_id
                 for assumption in assumptions
@@ -714,16 +872,23 @@ def draft_artifact(
             )
         )
     bindings = _bindings(binding_source)
-    observed_input_rows: list[ObservedInput] = []
+    observed_input_rows: dict[str, ObservedInput] = {}
+    for item in outcome_inputs:
+        if observed_input_rows.setdefault(item.path, item) != item:
+            raise ValueError("observed_input_drift")
+    for authority in evidence:
+        for item in authority.observed_inputs:
+            if observed_input_rows.setdefault(item.path, item) != item:
+                raise ValueError("observed_input_drift")
+    if approved and kind == "release" and outcome_provenance is not None:
+        bindings["release_delivery"] = outcome_provenance["release_evidence"]["delivery"]
     if design_authority is not None:
         bindings["design_authority"] = design_authority
-        observed_input_rows.extend(
-            ObservedInput(
-                path=str(design_authorities[design_id].path),
-                digest=design_digests[design_id],
-            )
-            for design_id in design_ids
-        )
+        for design_id in design_ids:
+            path = str(design_authorities[design_id].path)
+            item = ObservedInput(path, design_digests[design_id])
+            if observed_input_rows.setdefault(path, item) != item:
+                raise ValueError("observed_input_drift")
     if defect_authority is not None:
         bindings["defect_authority"] = {
             "defect_id": defect_authority.record["id"],
@@ -731,12 +896,8 @@ def draft_artifact(
             "event_id": defect_authority.record["history_head"]["event_id"],
             "defect_digest": defect_authority.digest,
         }
-        observed_input_rows.append(
-            ObservedInput(
-                path=str(defect_authority.path),
-                digest=defect_authority.digest,
-            )
-        )
+        path = str(defect_authority.path)
+        observed_input_rows[path] = ObservedInput(path, defect_authority.digest)
     transaction = preview_transaction(
         MutationRequest(
             repo=repo,
@@ -746,7 +907,7 @@ def draft_artifact(
             actions=tuple(actions),
             bindings=bindings,
             operation_id=operation,
-            observed_inputs=tuple(observed_input_rows),
+            observed_inputs=tuple(observed_input_rows.values()),
             require_write_enabled=True,
         )
     )
@@ -798,6 +959,7 @@ def validate_consent(
     source_revision: str,
     action_digest: str,
     consequence_class: str | None = None,
+    allow_expired: bool = False,
 ) -> None:
     if consent is None:
         raise ValueError("fresh_exact_consent_required")
@@ -815,7 +977,7 @@ def validate_consent(
     if any(consent.get(key) != value for key, value in expected.items()):
         raise ValueError("fresh_exact_consent_required")
     expires = datetime.fromisoformat(str(consent["expires_at"]))
-    if expires.tzinfo is None or expires <= datetime.now(timezone.utc):
+    if expires.tzinfo is None or (not allow_expired and expires <= datetime.now(timezone.utc)):
         raise ValueError("fresh_exact_consent_required")
 
 

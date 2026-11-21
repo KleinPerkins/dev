@@ -7,6 +7,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from .artifact_authority import APPROVED_PARENTS_SCHEMA, approved_parent_relations
 from .artifact_discovery import ADR_NAME, adr_directory, artifact_paths
 from .artifacts import ArtifactPreview, _bindings
 from .canonical import canonical_json, contained_path, digest_ref, parse_json_object
@@ -267,6 +268,28 @@ def _approval_evidence(approval: object, reviewed: bytes) -> dict[str, Any]:
     return approval
 
 
+def _bind_numbered_adr_parents(repo: Path, inputs: dict[str, Any], metadata: dict[str, Any]) -> tuple[ObservedInput, ...]:
+    existing = [record for record in metadata["provenance"] if record.get("schema") == APPROVED_PARENTS_SCHEMA]
+    if len(existing) > 1:
+        raise ValueError("approved_parents_invalid")
+    if "parents" not in inputs and not existing:
+        return ()
+    if "parents" in inputs:
+        requested = inputs["parents"]
+        if not existing and metadata["relations"]:
+            raise ValueError("approved_parent_relations_conflict")
+    else:
+        requested = {key: value for key, value in existing[0].items() if key != "schema"}
+    relations, observed = approved_parent_relations(repo, metadata, requested)
+    if "parents" not in inputs and metadata["relations"] != relations:
+        raise ValueError("approved_parent_relations_conflict")
+    if "parents" in inputs:
+        metadata["relations"] = relations
+        metadata["provenance"] = [record for record in metadata["provenance"] if record not in existing]
+        metadata["provenance"].append({"schema": APPROVED_PARENTS_SCHEMA, **requested})
+    return observed
+
+
 def _preview(mode: str, inputs: dict[str, Any], *, repo: Path,
              operation_id: str | None = None, binding_root: Path | None = None,
              artifact_id: str | None = None) -> ArtifactPreview:
@@ -347,6 +370,7 @@ def _preview(mode: str, inputs: dict[str, Any], *, repo: Path,
         approval = _approval_evidence(inputs["approval"], body.encode("utf-8"))
         metadata.update(lifecycle="approved", approval=approval)
         transition = "accepted_freeze"
+    parent_inputs = _bind_numbered_adr_parents(repo, inputs, metadata)
     require_valid("artifact", metadata)
     index = f"{owner}/README.md"
     legacy_inputs: list[ObservedInput] = []
@@ -391,6 +415,13 @@ def _preview(mode: str, inputs: dict[str, Any], *, repo: Path,
     for path, meta in rows:
         if path.relative_to(repo).as_posix() != relative:
             observe(path)
+    for item in parent_inputs:
+        # The transaction already binds both preimage and postimage of its own
+        # ADR/index. Recording those as parent inputs would reject exact replay.
+        if item.path in {str(repo / relative), str(repo / index)}:
+            continue
+        if observed.setdefault(item.path, item) != item:
+            raise ValueError("observed_input_drift")
     transaction = preview_transaction(MutationRequest(repo=repo, repository_key=profile["repository_key"],
         github_repository_id=profile["github_repository_id"], transition=transition,
         actions=actions, bindings=_bindings(authority), operation_id=operation,

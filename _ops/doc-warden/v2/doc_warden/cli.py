@@ -18,8 +18,10 @@ from .artifacts import apply_preview, draft_artifact, preview_json
 from .canonical import canonical_json, contained_path, digest_ref, parse_json_object
 from .gsd_adapter import (
     ALLOWED_OUTPUTS,
+    MAX_NATIVE_REPORT_BYTES,
     AuthoringImportPreview,
     AuthoringScope,
+    authoring_preview_record as _authoring_preview_json,
     authoring_result_from_envelope,
     prepare_authoring_import,
     validate_authoring_result,
@@ -43,12 +45,16 @@ from .live_install import (
     doctor as doctor_live_install,
     load_install_operation,
     prepare_install,
+    prepare_uninstall,
     preview_doctor_receipt,
     read_doctor_observation_file,
-    uninstall as uninstall_live_install,
     validate_doctor_observation,
 )
+from .runtime_host import qualify_destination
 from .roadmap import roadmap_prioritize, roadmap_sequence, roadmap_view
+from .continuity import INTENTS as CONTINUITY_INTENTS, OPERATION_SCHEMA as CONTINUITY_OPERATION_SCHEMA
+from .continuity import NEXT_ACTION as CONTINUITY_NEXT_ACTION
+from .continuity import apply_continuity, preview_continuity
 from .operation_store import load_preview, operation_schema, store_preview
 from .receipts import (
     prepare_remote_identity_observation,
@@ -56,12 +62,6 @@ from .receipts import (
 )
 from .scaffold import greenfield_v2, verify_born_v2
 from .transactions import apply_transaction
-from .save_game_adapter import (
-    SaveGameAdapter,
-    event_from_envelope,
-    prepare_authoring_resume,
-    prepare_checkpoint,
-)
 from .triggers import (
     dispatch_trigger,
     hook_capability_report,
@@ -156,30 +156,6 @@ def _transaction_json(preview) -> dict[str, Any]:
     }
 
 
-def _authoring_preview_json(preview: AuthoringImportPreview) -> dict[str, Any]:
-    payload = {
-        "schema": "doc-warden/authoring-import-preview/v1",
-        "canonical_root": preview.canonical_root,
-        "operation_id": preview.operation_id,
-        "source_revision": preview.source_revision,
-        "pin_digest": preview.pin_digest,
-        "interface_digest": preview.interface_digest,
-        "input_digests": preview.input_digests,
-        "frozen_digests": preview.frozen_digests,
-        "allowed_outputs": list(preview.allowed_outputs),
-        "post_validator": preview.post_validator,
-        "disposition": preview.disposition,
-        "active_plan_id": preview.active_plan_id,
-    }
-    if preview.binding_root is not None:
-        payload.update(schema="doc-warden/authoring-import-preview/v2",
-                       binding_root=preview.binding_root,
-                       authority_bindings=preview.authority_bindings,
-                       profile_digest=preview.profile_digest)
-    payload["preview_digest"] = digest_ref(canonical_json(payload))
-    return payload
-
-
 def _load_authoring_preview(repo: Path, path: Path) -> AuthoringImportPreview:
     raw = parse_json_object(path.read_bytes())
     required = set(_authoring_preview_json(
@@ -199,14 +175,15 @@ def _load_authoring_preview(repo: Path, path: Path) -> AuthoringImportPreview:
     ))
     central = raw.get("schema") == "doc-warden/authoring-import-preview/v2"
     if central:
-        extra = {"binding_root", "authority_bindings", "profile_digest"}
+        extra = {"binding_root", "authority_bindings", "profile_digest", "authority_inputs_digest"}
         if (set(raw) != required | extra
                 or not isinstance(raw.get("binding_root"), str)
                 or not Path(raw["binding_root"]).is_absolute()
                 or str(Path(raw["binding_root"])) != raw["binding_root"]
                 or ".." in Path(raw["binding_root"]).parts
                 or not isinstance(raw.get("authority_bindings"), dict)
-                or re.fullmatch(r"sha256:[0-9a-f]{64}", str(raw.get("profile_digest", ""))) is None):
+                or any(re.fullmatch(r"sha256:[0-9a-f]{64}", str(raw.get(key, ""))) is None
+                       for key in ("profile_digest", "authority_inputs_digest"))):
             raise ValueError("authoring_preview_contract_invalid")
     elif (set(raw) not in (required, required - {"active_plan_id"})
             or raw.get("schema") != "doc-warden/authoring-import-preview/v1"):
@@ -263,6 +240,7 @@ def _load_authoring_preview(repo: Path, path: Path) -> AuthoringImportPreview:
         binding_root=raw["binding_root"] if central else None,
         authority_bindings=raw["authority_bindings"] if central else None,
         profile_digest=raw["profile_digest"] if central else None,
+        authority_inputs_digest=raw["authority_inputs_digest"] if central else None,
     )
     validate_runtime_binding(preview)
     return preview
@@ -708,6 +686,7 @@ def build_parser() -> argparse.ArgumentParser:
         else:
             command.add_argument("--title", required=True)
             command.add_argument("--body-file", type=Path)
+            command.add_argument("--parents-file", type=Path)
             if action == "draft":
                 command.add_argument("--approval-file", type=Path)
 
@@ -725,6 +704,8 @@ def build_parser() -> argparse.ArgumentParser:
             "prototype",
             "sketch",
             "spike",
+            "verification",
+            "uat",
             "release",
         ),
     )
@@ -732,6 +713,16 @@ def build_parser() -> argparse.ArgumentParser:
     draft.add_argument("--title", required=True)
     draft.add_argument("--body")
     draft.add_argument("--approved-prd", action="store_true")
+    draft.add_argument("--prd-id", help="Select one current approved PRD for feature authoring.")
+    draft.add_argument("--defect-id", help="Select the READY defect for a narrow fix plan.")
+    draft.add_argument("--ui-visual", action="store_true")
+    draft.add_argument("--uxr-id")
+    draft.add_argument("--design-binding", action="append", default=[], metavar="ID@VERSION")
+    draft.add_argument("--ui-requirement-id", action="append", default=[])
+    draft.add_argument("--rigor-file", type=Path)
+    draft.add_argument("--sensitive-adr-id")
+    draft.add_argument("--evidence-file", type=Path)
+    draft.add_argument("--approval-file", type=Path)
     draft.add_argument("--operation-id")
     draft.add_argument("--preview", action="store_true")
 
@@ -779,7 +770,7 @@ def build_parser() -> argparse.ArgumentParser:
     migrate.add_argument("--preview", action="store_true")
     runtime = sub.add_parser("runtime")
     runtime.add_argument(
-        "runtime_verb", choices=("install-gsd", "uninstall-gsd", "doctor-gsd")
+        "runtime_verb", choices=("qualify-gsd", "install-gsd", "uninstall-gsd", "doctor-gsd")
     )
     runtime.add_argument("--repo", type=Path, default=Path.cwd())
     runtime.add_argument("--home", type=Path, default=Path(os.environ["HOME"]))
@@ -814,14 +805,17 @@ def build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--repo", type=Path, default=Path.cwd())
     validate.add_argument("--preview", type=Path, required=True)
     validate.add_argument("--result", type=Path, required=True)
+    validate.add_argument("--native-check-report", type=Path)
     verify = sub.add_parser("verify")
     verify.add_argument("--repo", type=Path, default=Path.cwd())
     verify.add_argument("--preview", type=Path, required=True)
-    for verb in ("checkpoint", "resume-authoring"):
+    for verb in sorted(CONTINUITY_INTENTS):
         command = sub.add_parser(verb)
         command.add_argument("--repo", type=Path, default=Path.cwd())
         command.add_argument("--state", type=Path, required=True)
         command.add_argument("--event", type=Path, required=True)
+        command.add_argument("--operation-id")
+        command.add_argument("--preview", action="store_true")
     return parser
 
 
@@ -1046,6 +1040,8 @@ def _run(argv: list[str] | None = None) -> int:
             inputs = {"title": args.title}
             if args.body_file:
                 inputs["body"] = args.body_file.read_bytes().decode("utf-8")
+            if args.parents_file:
+                inputs["parents"] = parse_json_object(args.parents_file.read_bytes())
             if args.adr_action == "draft":
                 if args.approval_file:
                     inputs["approval"] = parse_json_object(args.approval_file.read_bytes())
@@ -1059,13 +1055,61 @@ def _run(argv: list[str] | None = None) -> int:
         print(canonical_json(value).decode("utf-8"), end="")
         return 0
     if args.verb == "draft":
+        inputs = {"title": args.title, "body": args.body or f"# {args.title}",
+                  "approved_prd": args.approved_prd}
+        if args.evidence_file is not None:
+            if args.kind not in {"verification", "uat", "release"}:
+                raise ValueError("outcome_evidence_wrong_artifact_kind")
+            field = "release_evidence" if args.kind == "release" else "outcome_evidence"
+            inputs[field] = parse_json_object(args.evidence_file.read_bytes())
+        if args.approval_file is not None:
+            if args.kind not in {"verification", "uat", "release"} or args.evidence_file is None:
+                raise ValueError("outcome_approval_requires_evidence")
+            from .adrs import _approval_evidence
+
+            reviewed = canonical_json({"kind": args.kind, "title": args.title, "body": inputs["body"],
+                                       "evidence": inputs[field]})
+            try:
+                approval = _approval_evidence(parse_json_object(args.approval_file.read_bytes()), reviewed)
+            except ValueError as exc:
+                raise ValueError("outcome_approval_evidence_required") from exc
+            inputs.update(lifecycle="approved", approval=approval)
+        if args.rigor_file or args.sensitive_adr_id:
+            if args.kind not in {"plan", "spec"}:
+                raise ValueError("rigor_requires_feature_authoring")
+            facts = parse_json_object(args.rigor_file.read_bytes()) if args.rigor_file else {}
+            if args.sensitive_adr_id:
+                if "sensitive" in facts and facts["sensitive"] is not True:
+                    raise ValueError("rigor_signal_conflict:sensitive")
+                facts["sensitive"] = True
+                inputs["sensitive_adr_id"] = args.sensitive_adr_id
+            inputs["rigor_signals"] = facts
+        if args.prd_id is not None:
+            if args.kind not in {"plan", "spec"}:
+                raise ValueError("prd_selector_requires_feature_authoring")
+            inputs["prd_id"] = args.prd_id
+        if args.defect_id is not None:
+            if args.kind != "plan" or args.prd_id is not None or args.approved_prd:
+                raise ValueError("defect_and_feature_authoring_conflict")
+            inputs["defect_id"] = args.defect_id
+        if args.ui_visual or args.uxr_id or args.design_binding or args.ui_requirement_id:
+            if args.kind not in {"plan", "spec"}:
+                raise ValueError("ui_bindings_require_feature_authoring")
+            bindings = [value.rpartition("@") for value in args.design_binding]
+            if any(not identifier or not separator or not version for identifier, separator, version in bindings):
+                raise ValueError("design_binding_requires_id_and_version")
+            versions = {}
+            for identifier, _, version in bindings:
+                if versions.setdefault(identifier, version) != version:
+                    raise ValueError("design_binding_version_conflict")
+            inputs.update(ui_visual=args.ui_visual, design_ids=list(versions), design_versions=versions)
+            if args.uxr_id is not None:
+                inputs["uxr_id"] = args.uxr_id
+            if args.ui_requirement_id:
+                inputs["ui_requirement_ids"] = args.ui_requirement_id
         preview = draft_artifact(
             args.kind,
-            {
-                "title": args.title,
-                "body": args.body or f"# {args.title}",
-                "approved_prd": args.approved_prd,
-            },
+            inputs,
             repo=args.repo,
             operation_id=args.operation_id,
         )
@@ -1111,10 +1155,13 @@ def _run(argv: list[str] | None = None) -> int:
         print(canonical_json(value).decode("utf-8"), end="")
         return 0
     if args.verb == "apply":
-        if (
-            operation_schema(args.operation_id)
-            == "doc-warden/live-install-operation/v1"
-        ):
+        schema = operation_schema(args.operation_id)
+        if schema == CONTINUITY_OPERATION_SCHEMA:
+            consent = parse_json_object(args.consent_envelope.read_bytes()) if args.consent_envelope else None
+            value = apply_continuity(args.operation_id, args.action_digest, consent)
+            print(canonical_json(value).decode("utf-8"), end="")
+            return 0
+        if schema == "doc-warden/live-install-operation/v1":
             if args.consent_envelope is None:
                 raise ValueError("fresh_exact_consent_required")
             consent = parse_json_object(args.consent_envelope.read_bytes())
@@ -1253,6 +1300,12 @@ def _run(argv: list[str] | None = None) -> int:
             and args.runtime_verb != "doctor-gsd"
         ):
             raise ValueError("doctor_observation_wrong_runtime_verb")
+        if args.runtime_verb == "qualify-gsd":
+            if args.preview:
+                raise ValueError("runtime_qualification_requires_isolated_execution")
+            value = qualify_destination(args.repo, home=args.home, data_home=args.data_home)
+            print(canonical_json(value).decode("utf-8"), end="")
+            return 0
         if args.runtime_verb == "install-gsd" and args.preview:
             value = prepare_install(
                 args.repo, home=args.home, data_home=args.data_home
@@ -1262,18 +1315,10 @@ def _run(argv: list[str] | None = None) -> int:
         if args.runtime_verb == "install-gsd":
             raise ValueError("runtime_apply_requires_generic_apply")
         if args.runtime_verb == "uninstall-gsd":
-            if args.preview:
-                value = {
-                    "schema": "doc-warden/live-uninstall-preview/v1",
-                    "status": "ready",
-                    "home": str(args.home),
-                    "ownership": "manifest_identity_matching_only",
-                }
-                print(canonical_json(value).decode("utf-8"), end="")
-                return 0
-            uninstall_live_install(
-                args.repo, home=args.home, data_home=args.data_home
-            )
+            if not args.preview:
+                raise ValueError("runtime_apply_requires_generic_apply")
+            value = prepare_uninstall(args.repo, home=args.home, data_home=args.data_home)
+            print(canonical_json(value).decode("utf-8"), end="")
             return 0
         if args.observation is not None:
             if args.preview:
@@ -1333,22 +1378,23 @@ def _run(argv: list[str] | None = None) -> int:
                 raise ValueError("authoring_source_revision_changed")
             if raw.get("pin_digest") != preview.pin_digest:
                 raise ValueError("wrong_gsd_pin")
-            result = authoring_result_from_envelope(args.repo, raw)
+            native_report = None
+            if args.native_check_report is not None:
+                with args.native_check_report.open("rb") as report:
+                    native_report = report.read(MAX_NATIVE_REPORT_BYTES + 1)
+            result = authoring_result_from_envelope(args.repo, raw, native_report=native_report)
             import_plan = validate_authoring_result(preview, result)
             value = _transaction_json(import_plan.transaction)
             value["expires_at"] = store_preview(import_plan.transaction)
             value["consent_required"] = True
         print(canonical_json(value).decode("utf-8"), end="")
         return 0
-    if args.verb in {"checkpoint", "resume-authoring"}:
-        state = parse_json_object(args.state.read_bytes())
-        raw_event = parse_json_object(args.event.read_bytes())
-        event = event_from_envelope(raw_event)
-        adapter = SaveGameAdapter(root=args.repo)
-        value = (
-            prepare_checkpoint(args.repo, state, event, adapter)
-            if args.verb == "checkpoint"
-            else prepare_authoring_resume(args.repo, state, event, adapter)
+    if args.verb in CONTINUITY_INTENTS:
+        if not args.preview or args.operation_id is None:
+            raise ValueError("continuity_preview_required")
+        value = preview_continuity(
+            args.repo, parse_json_object(args.state.read_bytes()), parse_json_object(args.event.read_bytes()),
+            intent=args.verb, operation_id=args.operation_id,
         )
         print(canonical_json(value).decode("utf-8"), end="")
         return 0
@@ -1392,6 +1438,11 @@ def main(argv: list[str] | None = None) -> int:
         )
     except (OSError, subprocess.SubprocessError):
         code = "input_unavailable"
+    runtime_next_action = {
+        "live_uninstall_recovery_required": "inspect_retained_runtime_recovery_evidence",
+        "live_install_rollback_incomplete": "inspect_retained_runtime_recovery_evidence",
+    }
+    next_action = CONTINUITY_NEXT_ACTION.get(code, runtime_next_action.get(code, "correct_input_and_retry"))
     print(
         canonical_json(
             {
@@ -1400,12 +1451,12 @@ def main(argv: list[str] | None = None) -> int:
                 "code": code,
                 "checked": ["closed_cli_contract"],
                 "uncertain": [code],
-                "next_action": "correct_input_and_retry",
+                "next_action": next_action,
                 "repository_writes": [],
                 "message": (
                     "I checked the closed doc-warden CLI contract. The requested "
-                    f"operation is uncertain because {code}. Next action: "
-                    "correct the named input or precondition and retry."
+                    f"operation is blocked because {code}. "
+                    f"Next action: {next_action.replace('_', ' ')}."
                 ),
             }
         ).decode("utf-8"),

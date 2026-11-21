@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from doc_warden.adrs import (preview_adr_draft, preview_adr_update, preview_adr_accept,
                              preview_adr_successor, frozen_semantic_postimages, _index_delta)
-from doc_warden.artifacts import apply_preview, consent_for
+from doc_warden.artifacts import apply_preview, consent_for, draft_artifact
 from doc_warden.artifact_discovery import artifact_paths
 from doc_warden.canonical import canonical_json, digest_ref, parse_artifact
 from doc_warden.dependencies import resolve_graph, PlanAssumption, _observe_assumption
@@ -618,6 +618,68 @@ class ADRTests(unittest.TestCase):
         self.apply(self.draft(title="Next decision"))
         with self.assertRaisesRegex(ValueError, "approval_evidence"):
             self.draft(body=body + "Changed", approval=approval)
+
+    def test_typed_parents_bind_numbered_adr_through_preview_accept_and_replay(self):
+        import contextlib
+        import io
+        from doc_warden.cli import main
+
+        parent_body = "# Parent decision\n\nApproved parent.\n"
+        parent = self.draft(title="Parent decision", body=parent_body, approval={
+            "actor": "operator", "date": "2026-10-27",
+            "review_sha256": digest_ref(parent_body.encode())[7:],
+        })
+        parent_receipt = self.apply(parent)
+        path = self.repo / parent.artifact_path
+        parents = Path(self.state.name) / "parents.json"
+        parents.write_bytes(canonical_json({
+            "observed_at": "2026-10-27T18:00:00Z",
+            "parents": [{"kind": "adr", "id": parent.artifact_id, "version": 1,
+                         "digest": digest_ref(path.read_bytes())}],
+        }))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["adr", "draft", "--repo", str(self.repo),
+                                   "--title", "Child decision", "--parents-file", str(parents), "--preview"]), 0)
+        result = json.loads(output.getvalue())
+        draft = load_preview(result["operation_id"], result["action_digest"])
+        apply_preview(draft, consent_for(draft))
+        child = self.repo / result["artifact_path"]
+        relation, = parse_artifact(child).metadata["relations"]
+        self.assertEqual(relation["target"], {"kind": "adr", "id": parent.artifact_id, "version": 1})
+        self.assertEqual(relation["provenance"], [{"digest": digest_ref(path.read_bytes())}])
+        accepted = preview_adr_accept(result["artifact_id"], {
+            "actor": "operator", "date": "2026-10-27", "review_sha256": digest_ref(child.read_bytes())[7:],
+        }, repo=self.repo)
+        observed = {item.path for item in accepted.transaction.observed_inputs}
+        self.assertIn(str(path), observed)
+        for kind in ("receipts", "events"):
+            identifier = parent_receipt["operation_id" if kind == "receipts" else "event_id"]
+            self.assertIn(str(self.repo / f"_ops/doc-warden/state/v2/{kind}/{identifier}.json"), observed)
+        store_preview(accepted.transaction)
+        receipt = self.apply(accepted)
+        retry = load_preview(accepted.transaction.operation_id, accepted.transaction.action_digest)
+        self.assertEqual(apply_preview(retry, consent_for(retry)), receipt)
+
+    def test_typed_prd_parent_requires_a_live_matching_freeze(self):
+        prd = draft_artifact("prd", {"title": "Product", "lifecycle": "approved",
+                                    "approval": {"actor": "operator"}}, repo=self.repo)
+        target = self.repo / prd.artifact_path
+        data = prd.transaction.actions[-1].content
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        request = {"observed_at": "2026-10-27T18:00:00Z", "parents": [{
+            "kind": "prd", "id": prd.artifact_id, "version": 1, "digest": digest_ref(data),
+        }]}
+        with self.assertRaisesRegex(ValueError, "authority_freeze_required"):
+            self.draft(parents=request)
+        target.unlink()
+        self.apply(prd)
+        draft = self.draft(parents=request)
+        target.write_bytes(data + b"Changed after preview.\n")
+        with self.assertRaisesRegex(ValueError, "observed_input_drift"):
+            self.apply(draft)
+        self.assertFalse((self.repo / draft.artifact_path).exists())
 
     def test_cli_approved_creation_preserves_exact_crlf_file(self):
         import contextlib

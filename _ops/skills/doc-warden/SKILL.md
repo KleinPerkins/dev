@@ -1,6 +1,6 @@
 ---
 name: doc-warden
-description: Route ordinary documentation-governance requests to doc-warden's read-only views, validated previews, and confirmation-bound CLI without embedding policy in the skill.
+description: Route documentation governance and authoring continuity requests to Doc-Warden views, validated previews, and the confirmation-bound CLI.
 ---
 
 # /doc-warden
@@ -10,6 +10,10 @@ documentation ownership, roadmap priority or sequence, governance health, drift,
 safe repair. Ordinary language and explicit CLI use the same closed intent map.
 The implementation and policy remain in `_ops/doc-warden/`; this skill does not
 restate or decide them.
+
+Resolve this installed skill to its source directory. Use the absolute path to
+`_ops/bin/doc-warden.sh` from that same source tree and run it from the target
+repository. The examples use the short path from a Dev checkout.
 
 ## Ordinary-language routes
 
@@ -33,8 +37,11 @@ restate or decide them.
 | `Resume the work.` | `bash _ops/bin/doc-warden.sh v2-preview intent "Resume the work."` |
 | `Verify this.` | `bash _ops/bin/doc-warden.sh v2-preview intent "Verify this."` |
 
-`Log`, `update`, `start`, `pause`, `resume`, and `verify` remain proposal-only
-routes. They do not authorize semantic changes or execute phase work.
+For an explicit authoring checkpoint, handoff, pause with continuity, or resume,
+run `bash _ops/bin/doc-warden.sh intent "<request>"` and use its exact CLI
+equivalent. Bind the current authoring state and event files to a new operation
+ID. Apply only after exact consent, and use the engine's returned state.
+Ordinary drafting, views, and a plain pause require no Save-Game call.
 
 ## Routing boundary
 

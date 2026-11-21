@@ -41,7 +41,7 @@ class DefectAuthorityTests(unittest.TestCase):
                 for path in self.repo.rglob("*") if path.is_file() and ".git" not in path.parts}
 
     def assert_receipt(self, receipt):
-        for key, value in _bindings(self.authority).items():
+        for key, value in (_bindings(self.authority) | {'approved_plan_digest': self.central_plan_digest}).items():
             if key != "template_digests":
                 self.assertEqual(receipt["bindings"][key], value)
         self.assertGreater(len(receipt["observed_input_digests"]), 5)
@@ -79,7 +79,8 @@ class DefectAuthorityTests(unittest.TestCase):
                                 binding_root=self.authority, operation_id=str(uuid.uuid4()))
         for name in ("policy_digest", "schema_digest", "trigger_catalog_digest",
                      "gsd_pin_digest", "approved_plan_digest"):
-            self.assertEqual(preview.transaction.bindings[name], _bindings(self.authority)[name])
+            expected = self.central_plan_digest if name == "approved_plan_digest" else _bindings(self.authority)[name]
+            self.assertEqual(preview.transaction.bindings[name], expected)
             self.assertNotEqual(preview.transaction.bindings[name], "sha256:" + "0" * 64)
         self.assertEqual(preview.transaction.bindings["template_digests"]["defect.md"],
                          digest_ref((self.authority / "_ops/doc-warden/v2/templates/defect.md").read_bytes()))
@@ -182,7 +183,7 @@ class DefectAuthorityTests(unittest.TestCase):
         paths = [self.profile, self.pin.resolve(), self.interface.resolve(),
                  self.authority / "_ops/doc-warden/POLICY.md",
                  self.authority / "_ops/doc-warden/triggers.v2.json",
-                 self.authority / "_ops/plans/doc-warden-execution-plan-v2.md",
+                 self.selector, self.central_plan, self.central_plan.with_suffix(".governance.json"),
                  self.authority / "_ops/doc-warden/v2/templates/defect.md",
                  next((self.authority / "_ops/doc-warden/schemas/v2").glob("*.schema.json"))]
         for path in paths:
@@ -233,7 +234,7 @@ class DefectAuthorityTests(unittest.TestCase):
                 with self.assertRaises(ValueError): self.create(op)
                 self.assertEqual(self.snapshot(), before)
             finally: path.write_bytes(original)
-        other = self.authority.with_name("identical-other-authority")
+        other = self.state / "identical-other-authority"
         shutil.copytree(self.authority, other)
         with self.assertRaises(ValueError):
             create_defect(self.inputs, repo=self.repo, operation_id=op, binding_root=other)

@@ -399,6 +399,16 @@ def parse_validated_artifact(path: Path, *, repo: Path | None = None) -> dict[st
     return parsed.metadata
 
 
+def record_approved_successor(
+    claims: dict[str, tuple[str, str, str]], metadata: dict[str, Any],
+) -> None:
+    predecessor = metadata["supersedes"]
+    if metadata["lifecycle"] == "approved" and predecessor is not None:
+        successor = (metadata["id"], metadata["type"], metadata["repository_key"])
+        if claims.setdefault(predecessor, successor) != successor:
+            raise ValueError("artifact_supersession_conflict")
+
+
 def active_approved_artifacts(
     repo: Path,
     artifact_type: str,
@@ -438,11 +448,9 @@ def active_approved_artifacts(
                 rows.append((path, parsed.metadata, parsed.body))
     except (CanonicalError, OSError, ValueError) as exc:
         raise ValueError("artifact_state_invalid") from exc
-    superseded = {
-        str(metadata["supersedes"])
-        for _path, metadata, _body in rows
-        if metadata["supersedes"] is not None
-    }
+    superseded: dict[str, tuple[str, str, str]] = {}
+    for _path, metadata, _body in rows:
+        record_approved_successor(superseded, metadata)
     return [row for row in rows if row[1]["id"] not in superseded]
 
 

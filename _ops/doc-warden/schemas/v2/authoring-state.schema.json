@@ -5,6 +5,8 @@
     "active_artifact_id": {"type": ["string", "null"]},
     "active_plan_id": {"type": ["string", "null"]},
     "blocker_ids": {"items": {"type": "string"}, "type": "array"},
+    "checkpoint_request_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "continuity_binding": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
     "lifecycle": {"enum": ["planned", "preflight", "running", "verifying", "uat", "release_ready", "complete", "paused", "waiting", "blocked"]},
     "next_action_code": {"enum": ["author", "review", "validate", "reconcile", "wait", "complete"]},
     "operation_id": {"pattern": "^[0-9a-f-]{36}$", "type": "string"},

@@ -143,6 +143,15 @@ service-account*.json
 !/_ops/doc-warden/state/v2/receipts/65b60162-0c78-4679-b089-e5fb24270569.json
 !/_ops/doc-warden/state/v2/events/241a7c5a-cc7d-52ee-af2f-9e6d3b63fb67.json
 !/_ops/doc-warden/state/v2/receipts/112fc3f0-3e7b-4a36-a402-36142acaa601.json
+# Portable acceptance evidence for the Doc-Warden v2 PRD, continuity ADR and plan.
+!/_ops/doc-warden/state/v2/receipts/9e8b3c58-6797-44c4-a561-a30aaf7eeda2.json
+!/_ops/doc-warden/state/v2/events/4d2bae6f-4e9c-536a-b8aa-f209b549385f.json
+!/_ops/doc-warden/state/v2/receipts/dfc7d07f-950f-4e43-be61-00ade3dd7d51.json
+!/_ops/doc-warden/state/v2/events/e07307b0-bc8e-5148-92c8-bafa69c8ea7b.json
+!/_ops/doc-warden/state/v2/receipts/91190a04-915f-4284-ac27-16489ba49cdd.json
+!/_ops/doc-warden/state/v2/events/557579fc-a62b-5e43-8bc0-2f1cf6a97296.json
+!/_ops/doc-warden/state/v2/receipts/1324a353-ffb0-4ed1-91bc-7c0837300873.json
+!/_ops/doc-warden/state/v2/events/122b55a8-cd89-5e72-89d9-7475397df478.json
 /_ops/baseline/state/
 /_ops/baseline/profiles/pr-automation/state/
 /_ops/interoperability/evidence/*

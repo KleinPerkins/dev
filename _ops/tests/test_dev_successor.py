@@ -109,11 +109,11 @@ class SuccessorTests(unittest.TestCase):
         with self.assertRaises(ValueError):apply_preview(draft,consent_for(draft.transaction))
     def test_predecessor_plan_is_never_current_approval(self):
         from doc_warden.artifacts import _bindings
-        from doc_warden.gsd_adapter import _central_authority_bindings
+        from doc_warden.gsd_adapter import _central_authority
         self.assertTrue((self.root/'_ops/plans/doc-warden-execution-plan-v2.md').is_file())
         self.assertEqual(_bindings(self.root)['approved_plan_digest'],'sha256:'+'0'*64)
         with self.assertRaisesRegex(ValueError,'authoring_authority_unavailable'):
-            _central_authority_bindings(self.root)
+            _central_authority(self.root)
 
     def test_portability_cannot_import_predecessor_history(self):
         manifest=json.loads((ROOT/'_ops/portability/manifest.json').read_bytes())

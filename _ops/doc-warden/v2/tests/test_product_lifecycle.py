@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import subprocess
@@ -21,6 +22,8 @@ from doc_warden.gsd_adapter import (
     project_current_view,
     requirements_current_view,
 )
+from doc_warden.operation_store import load_preview, store_preview
+from doc_warden.review_admission import _job_proves_delivery, _public_dev_git_tuple, _published_review, verify_dev_review
 from fixture_factory import FixtureFactory
 
 
@@ -119,7 +122,17 @@ class ProductLifecycleTests(unittest.TestCase):
             "approval": self.approval(),
         }
 
-    def persist_design(self, *, lifecycle="approved", version=1, supersedes=None):
+    def persist_visual_asset(self):
+        record = self.external_asset()
+        asset = draft_artifact("asset", {
+            "title": "Fixture visual", "lifecycle": "approved", "approval": self.approval(),
+            "external_asset": record,
+            "external_asset_observations": [self.external_asset_observation(record)],
+        }, repo=self.fixture.repo)
+        apply_preview(asset, consent_for(asset.transaction))
+        return asset.artifact_id
+
+    def persist_design(self, *, lifecycle="approved", version=1, supersedes=None, visual_asset=None):
         inputs = {
             "title": "Design",
             "lifecycle": lifecycle,
@@ -129,6 +142,8 @@ class ProductLifecycleTests(unittest.TestCase):
         if lifecycle == "approved":
             inputs["approval"] = self.approval()
             inputs["design"] = self.design_contract()
+            if visual_asset:
+                inputs["design"]["visual_assets"] = [visual_asset]
         preview = draft_artifact("design", inputs, repo=self.fixture.repo)
         apply_preview(preview, consent_for(preview.transaction))
         return preview
@@ -294,6 +309,7 @@ class ProductLifecycleTests(unittest.TestCase):
         )
 
     def test_spec_requires_every_prd_requirement_or_explicit_nonimplementation(self):
+        self.fixture.approve_prd("REQ-001", "REQ-002")
         with self.assertRaisesRegex(ValueError, "requirement_coverage_incomplete"):
             draft_artifact(
                 "spec",
@@ -441,6 +457,7 @@ class ProductLifecycleTests(unittest.TestCase):
                 )
 
     def test_nonimplemented_requirements_support_canonical_lists_and_reason_maps(self):
+        self.fixture.approve_prd("REQ-001", "REQ-002")
         for value in (
             ["REQ-002"],
             ["REQ-002", "REQ-002"],
@@ -463,6 +480,7 @@ class ProductLifecycleTests(unittest.TestCase):
                 self.assertTrue(preview.artifact_id.startswith("SPEC-"))
 
     def test_requirement_coverage_deduplicates_and_preserves_sorted_missing_order(self):
+        self.fixture.approve_prd("REQ-001", "REQ-002")
         self.assertEqual(
             _missing_requirement_coverage(
                 {
@@ -499,6 +517,8 @@ class ProductLifecycleTests(unittest.TestCase):
             ("prototype", "PROTO-"),
             ("sketch", "SKETCH-"),
             ("spike", "SPIKE-"),
+            ("verification", "VER-"),
+            ("uat", "UAT-"),
             ("release", "REL-"),
         ):
             inputs = {
@@ -514,6 +534,8 @@ class ProductLifecycleTests(unittest.TestCase):
                 ]
             if kind == "design":
                 inputs["design"] = self.design_contract()
+            if kind in {"verification", "uat", "release"}:
+                inputs["lifecycle"] = "draft"
             preview = draft_artifact(
                 kind,
                 inputs,
@@ -572,6 +594,8 @@ class ProductLifecycleTests(unittest.TestCase):
         )
 
     def test_design_version_semantic_equality_is_canonicalized(self):
+        self.fixture.approve_prd("REQ-001")
+        uxr_id = self.fixture.approve_uxr()
         design_id = f"DESIGN-{self.fixture.repository_key}-{self.fixture.id_for('design')}"
         self.assertEqual(
             validate_plan_design_bindings(
@@ -593,12 +617,13 @@ class ProductLifecycleTests(unittest.TestCase):
             ),
             [],
         )
-        persisted = self.persist_design(version=2)
+        persisted = self.persist_design(version=2, visual_asset=self.persist_visual_asset())
         preview = draft_artifact(
             "plan",
             {
                 "title": "Plan",
                 "approved_prd": True,
+                "uxr_id": uxr_id,
                 "design_ids": [persisted.artifact_id],
                 "design_versions": {persisted.artifact_id: "2"},
             },
@@ -611,6 +636,7 @@ class ProductLifecycleTests(unittest.TestCase):
         )
 
     def test_design_version_normalization_rejects_malformed_values(self):
+        self.fixture.approve_prd("REQ-001")
         design_id = f"DESIGN-{self.fixture.repository_key}-{self.fixture.id_for('design')}"
         malformed = (True, False, 2.0, "2.0", " 2", "02", 0, -1, None, [], {})
         for value in malformed:
@@ -661,6 +687,7 @@ class ProductLifecycleTests(unittest.TestCase):
         )
 
     def test_null_design_versions_are_empty_only_without_design_ids(self):
+        self.fixture.approve_prd("REQ-001")
         plan_id = f"PLAN-{self.fixture.repository_key}-{self.fixture.id_for('plan')}"
         design_id = f"DESIGN-{self.fixture.repository_key}-{self.fixture.id_for('design')}"
         with self.assertRaisesRegex(ValueError, "^plan_design_binding_incomplete$"):
@@ -713,6 +740,7 @@ class ProductLifecycleTests(unittest.TestCase):
         )
 
     def test_plan_draft_refuses_incomplete_or_malformed_design_bindings(self):
+        self.fixture.approve_prd("REQ-001")
         design_id = f"DESIGN-{self.fixture.repository_key}-{self.fixture.id_for('design')}"
         other_id = f"DESIGN-{self.fixture.repository_key}-{self.fixture.id_for('other-design')}"
         incomplete = (
@@ -763,6 +791,8 @@ class ProductLifecycleTests(unittest.TestCase):
                 )
 
     def test_plan_draft_requires_active_approved_on_disk_design(self):
+        self.fixture.approve_prd("REQ-001")
+        uxr_id = self.fixture.approve_uxr()
         missing_id = (
             f"DESIGN-{self.fixture.repository_key}-{self.fixture.id_for('missing-design')}"
         )
@@ -773,6 +803,7 @@ class ProductLifecycleTests(unittest.TestCase):
                     "plan",
                     {
                         "title": "Missing design",
+                        "uxr_id": uxr_id,
                         "approved_prd": True,
                         "design_ids": [missing_id],
                         "design_versions": {missing_id: 1},
@@ -786,6 +817,7 @@ class ProductLifecycleTests(unittest.TestCase):
                 "plan",
                 {
                     "title": "Unapproved design",
+                    "uxr_id": uxr_id,
                     "approved_prd": True,
                     "design_ids": [unapproved.artifact_id],
                     "design_versions": {unapproved.artifact_id: 1},
@@ -798,6 +830,7 @@ class ProductLifecycleTests(unittest.TestCase):
                 "plan",
                 {
                     "title": "Mismatched design version",
+                    "uxr_id": uxr_id,
                     "approved_prd": True,
                     "design_ids": [approved.artifact_id],
                     "design_versions": {approved.artifact_id: 2},
@@ -807,12 +840,14 @@ class ProductLifecycleTests(unittest.TestCase):
         successor = self.persist_design(
             version=2,
             supersedes=approved.artifact_id,
+            visual_asset=self.persist_visual_asset(),
         )
         with self.assertRaisesRegex(ValueError, "^plan_design_binding_stale$"):
             draft_artifact(
                 "plan",
                 {
                     "title": "Superseded design",
+                    "uxr_id": uxr_id,
                     "approved_prd": True,
                     "design_ids": [approved.artifact_id],
                     "design_versions": {approved.artifact_id: 1},
@@ -827,6 +862,7 @@ class ProductLifecycleTests(unittest.TestCase):
             "plan",
             {
                 "title": "Active design",
+                "uxr_id": uxr_id,
                 "approved_prd": True,
                 "design_ids": [successor.artifact_id, successor.artifact_id],
                 "design_versions": {successor.artifact_id: 2},
@@ -841,6 +877,8 @@ class ProductLifecycleTests(unittest.TestCase):
         )
 
     def test_plan_draft_refuses_malformed_design_artifact_state(self):
+        self.fixture.approve_prd("REQ-001")
+        uxr_id = self.fixture.approve_uxr()
         design_id = f"DESIGN-{self.fixture.repository_key}-{self.fixture.id_for('design')}"
         artifact_root = self.fixture.repo / ".planning/artifacts"
         artifact_root.mkdir(parents=True, exist_ok=True)
@@ -850,6 +888,7 @@ class ProductLifecycleTests(unittest.TestCase):
                 "plan",
                 {
                     "title": "Plan",
+                    "uxr_id": uxr_id,
                     "approved_prd": True,
                     "design_ids": [design_id],
                     "design_versions": {design_id: 1},
@@ -861,26 +900,263 @@ class ProductLifecycleTests(unittest.TestCase):
             [],
         )
 
+    def test_dev_review_reads_public_git_objects_before_using_them(self):
+        head, base = "a" * 40, "b" * 40
+        # Simulate a shallow fetch that cannot establish the merge base.
+        with patch("doc_warden.review_admission.subprocess.run") as git:
+            first_search = subprocess.CompletedProcess([], 1)
+            success = subprocess.CompletedProcess([], 0)
+
+            def write(command, *, stdout, **options):
+                previous = len(git.call_args_list)
+                expected = ("init", "fetch", "merge-base", "fetch", "merge-base", "diff")
+                self.assertIn(expected[previous - 1], command)
+                if "fetch" in command:
+                    self.assertEqual(command[-3:], ["https://github.com/KleinPerkins/dev.git", base, head])
+                elif "merge-base" in command:
+                    if previous == 3:
+                        return first_search
+                    stdout.write((base + "\n").encode("ascii"))
+                elif "diff" in command:
+                    stdout.write(b"exact fixture diff\n")
+                return success
+
+            git.side_effect = write
+            self.assertEqual(_public_dev_git_tuple(head, base),
+                             (base, digest_ref(b"exact fixture diff\n").removeprefix("sha256:")))
+            self.assertEqual(git.call_count, 6)
+
+    def test_dev_review_refuses_unqualified_protected_source_data(self):
+        head, base, commit = (letter * 40 for letter in "abc")
+        changed_source = base64.b64encode(b"raise AssertionError('provider code executed')\n").decode("ascii")
+        read = unittest.mock.Mock(side_effect=[
+            {"sha": commit, "parents": [{"sha": base}]}, {"encoding": "base64", "content": changed_source},
+        ])
+        with self.assertRaisesRegex(ValueError, "^release_delivery_review_unverified$"):
+            verify_dev_review(read, unittest.mock.Mock(), {}, {}, commit=commit, head=head, armed=False)
+        self.assertEqual(read.call_count, 2)
+
+    def test_dev_review_checks_squash_parent_before_reading_any_helper(self):
+        head, base, commit = "a" * 40, "b" * 40, "c" * 40
+        read = unittest.mock.Mock(return_value={"sha": commit, "parents": [{"sha": base}, {"sha": head}]})
+        read_log = unittest.mock.Mock()
+        with self.assertRaisesRegex(ValueError, "^release_delivery_review_unverified$"):
+            verify_dev_review(read, read_log, {}, {}, commit=commit, head=head, armed=False)
+        read.assert_called_once_with(f"/git/commits/{commit}")
+        read_log.assert_not_called()
+
+    def test_dev_review_reads_helper_at_immutable_parent_after_default_branch_advances(self):
+        head, original_base, commit, tip = (letter * 40 for letter in "abcd")
+        timestamp = "2026-11-21T12:00:00Z"
+        pull = {"base": {"sha": tip}, "merged_at": timestamp}
+        protected_source = base64.b64encode((ROOT / "scripts/reviewer_app.py").read_bytes()).decode("ascii")
+        read = unittest.mock.Mock(side_effect=[
+            {"sha": commit, "parents": [{"sha": original_base}]},
+            {"encoding": "base64", "content": protected_source}, ValueError("stop after source verification"),
+        ])
+        with self.assertRaisesRegex(ValueError, "^release_delivery_review_unverified$"):
+            verify_dev_review(read, unittest.mock.Mock(), pull, {"submitted_at": timestamp},
+                              commit=commit, head=head, armed=False)
+        self.assertEqual(read.call_args_list, [
+            unittest.mock.call(f"/git/commits/{commit}"),
+            unittest.mock.call(f"/contents/scripts/reviewer_app.py?ref={original_base}"),
+            unittest.mock.call(f"/contents/.github/review-enrollments.json?ref={original_base}"),
+        ])
+
+    def test_dev_review_requires_protected_witness_for_direct_squash_or_armed_delivery(self):
+        current = {"repository_id": 1459458379, "head_sha": "a" * 40, "base_sha": "b" * 40}
+        commit = "c" * 40
+        admission = {"status": "qualified-read-only", "tuple": current, "mutated": False}
+        direct = {"status": "merged", "merged": True, "head_sha": current["head_sha"],
+                  "base_sha": current["base_sha"], "merge_sha": commit}
+        requested = {"status": "armed", "merged": False, "head_sha": current["head_sha"]}
+
+        def witness(*records, second_target=10):
+            messages = ["TARGET_PR: 10", f"TARGET_PR: {second_target}", *(json.dumps(row) for row in records)]
+            return b"".join(f"2026-11-21T00:00:00.000Z {message}\n".encode() for message in messages)
+
+        self.assertTrue(_job_proves_delivery(witness(admission, direct), current, number=10, commit=commit, armed=False))
+        self.assertTrue(_job_proves_delivery(witness(admission, requested), current, number=10, commit=commit, armed=True))
+        for log, armed in (
+            (witness(direct), False),
+            (witness(admission, direct, second_target=11), False),
+            (witness(admission, direct | {"merge_sha": "d" * 40}), False),
+            (witness(admission, direct, direct), False),
+            (witness(admission, requested), False),
+        ):
+            with self.subTest(log=log, armed=armed):
+                self.assertFalse(_job_proves_delivery(log, current, number=10, commit=commit, armed=armed))
+
+    def test_dev_review_binds_unchanged_public_witnesses_to_the_admitted_origin(self):
+        from datetime import datetime
+
+        timestamp = "2026-11-21T10:30:00Z"
+        pull = {"number": 10, "node_id": "fixture-node"}
+        current = {"repository": "KleinPerkins/dev", "repository_id": 1459458379, "head_sha": "a" * 40}
+        origin = {"schema": "g1-pr-origin/v1", "repository": current["repository"], "repository_id": 1459458379,
+                  "pull_request": 10, "pull_request_node_id": pull["node_id"], "github_user_id": 49759187,
+                  "origin_account": "origin-fixture", "creator_enrollment_id": "enrollment-fixture"}
+        receipt = {"schema": "g1-local-review/v1", "tuple": current | {"origin_account": origin["origin_account"]},
+                   "reviewer_origin_account": origin["origin_account"], "reviewer_enrollment_id": "enrollment-fixture",
+                   "review": {"verdict": "pass", "coverage": "complete", "findings": [], "unresolved_findings": []}}
+
+        def comment(index, marker, row):
+            return {"id": index, "created_at": timestamp, "updated_at": timestamp,
+                    "user": {"id": 49759187, "type": "User"}, "body": f"<!-- {marker}:v1 -->\n" + json.dumps(row)}
+
+        origin_comment = comment(1, "g1-pr-origin", origin)
+        review_comment = comment(2, "g1-review-receipt", receipt)
+        approval = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        self.assertEqual(_published_review(lambda _: [origin_comment, review_comment], pull, current, approval),
+                         (origin, receipt))
+        for changed in (
+            review_comment | {"updated_at": "2026-11-21T10:30:01Z"},
+            review_comment | {"user": {"id": 998, "type": "User"}},
+            comment(2, "g1-review-receipt", receipt | {"reviewer_origin_account": "another-origin"}),
+            comment(2, "g1-review-receipt", receipt | {"tuple": receipt["tuple"] | {"head_sha": "b" * 40}}),
+        ):
+            with self.subTest(changed=changed), self.assertRaisesRegex(ValueError, "^release_delivery_review_unverified$"):
+                _published_review(lambda _: [origin_comment, changed], pull, current, approval)
+
     def test_release_artifact_binds_plan_verification_uat_commit_and_pr(self):
-        preview = draft_artifact(
-            "release",
-            {
-                "title": "Release",
-                "lifecycle": "approved",
-                "approval": self.approval(),
-                "release_evidence": {
-                    "plan": "PLAN-001",
-                    "verification": "VER-001",
-                    "uat": "UAT-001",
-                    "commit": "a" * 40,
-                    "pull_request": "https://github.com/KleinPerkins/dev/pull/1",
-                },
+        repo = self.fixture.repo
+        profile_path = repo / ".planning/doc-warden.json"
+        profile = json.loads(profile_path.read_bytes())
+        profile_path.write_bytes(canonical_json(profile | {"github_repository_id": 1459458379}))
+        subprocess.run(["git", "-C", str(repo), "remote", "add", "origin",
+                        "git@github.com:KleinPerkins/dev.git"], check=True)
+        self.fixture.approve_prd("REQ-001")
+        lifecycle = {"lifecycle": "approved", "approval": self.approval()}
+        plan = draft_artifact("plan", {"title": "Plan", **lifecycle}, repo=repo)
+        apply_preview(plan, consent_for(plan.transaction))
+        head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        proof = {"path": "README.md", "digest": digest_ref((repo / "README.md").read_bytes())}
+        outcomes = {}
+        for kind, result in (("verification", "passed"), ("uat", "accepted")):
+            record = draft_artifact(kind, {"title": kind, **lifecycle, "outcome_evidence": {
+                "plan": plan.artifact_id, "source_revision": head,
+                "requirements": {"REQ-001": proof | {"result": result}}, "visual_checks": {},
+            }}, repo=repo)
+            apply_preview(record, consent_for(record.transaction))
+            outcomes[kind] = record.artifact_id
+        evidence = {"plan": plan.artifact_id, "commit": head,
+                    "pull_request": "https://github.com/KleinPerkins/dev/pull/1", **outcomes}
+        reviewed_head, tip, admitted_base = "a" * 40, "b" * 40, "c" * 40
+        prefix = "repos/KleinPerkins/dev"
+        delivery_rows = {
+            prefix: {"id": 1459458379, "full_name": "KleinPerkins/dev", "default_branch": "main"},
+            prefix + "/pulls/1": {
+                "number": 1, "node_id": "fixture-pull-node", "auto_merge": None,
+                "base": {"ref": "main", "sha": admitted_base, "repo": {"id": 1459458379}},
+                "head": {"sha": reviewed_head}, "merge_commit_sha": head,
+                "merged": True, "state": "closed", "merged_at": "2026-08-30T00:00:00Z",
+                "merged_by": {"id": 299927791},
             },
-            repo=self.fixture.repo,
-        )
-        apply_preview(preview, consent_for(preview.transaction))
+            prefix + "/branches/main": {"commit": {"sha": tip}},
+            prefix + f"/compare/{head}...{tip}": {"status": "ahead", "merge_base_commit": {"sha": head}},
+            prefix + "/pulls/1/reviews?per_page=100": [
+                {"user": {"id": 299927791}, "commit_id": reviewed_head, "state": "APPROVED"},
+            ],
+            prefix + f"/commits/{reviewed_head}/check-runs?check_name=ci-required&filter=latest": {"check_runs": [
+                {"id": 123, "app": {"id": 15368}, "head_sha": reviewed_head, "name": "ci-required",
+                 "status": "completed", "conclusion": "success"},
+            ]},
+        }
+        app_actor = {"__typename": "Bot", "login": "chaos-scheduler-automerge", "databaseId": 299927791}
+        timeline = {"pageInfo": {"hasNextPage": False}, "nodes": [
+            {"__typename": "MergedEvent", "actor": app_actor, "commit": {"oid": head}},
+        ]}
+        delivery_rows["graphql"] = {"data": {"repository": {"databaseId": 1459458379, "pullRequest": {
+            "id": "fixture-pull-node", "merged": True, "mergeCommit": {"oid": head},
+            "autoMergeRequest": None, "timelineItems": timeline,
+        }}}}
+
+        def draft(**changes):
+            return draft_artifact("release", {"title": "Release", **lifecycle,
+                                  "release_evidence": evidence | changes}, repo=repo)
+
+        def github(endpoint, **options):
+            return delivery_rows[endpoint]
+
+        review_digest = digest_ref(b"fixture originating-account review evidence")
+        with patch("doc_warden.release_delivery.github_json", side_effect=github) as remote, patch(
+            "doc_warden.release_delivery.verify_dev_review", return_value=review_digest,
+        ) as originating_review:
+            with self.assertRaisesRegex(ValueError, "release_delivery_repository_mismatch"):
+                draft(pull_request="https://github.com/another/repo/pull/1")
+            remote.assert_not_called()
+            for endpoint, updates, code in (
+                ("/pulls/1", {"merged": False}, "release_delivery_merge_unverified"),
+                ("/pulls/1", {"merge_commit_sha": reviewed_head}, "release_delivery_merge_unverified"),
+                ("/pulls/1", {"merged_by": {"id": 1234}}, "release_delivery_app_unverified"),
+                (f"/compare/{head}...{tip}", {"status": "diverged"}, "release_delivery_merge_unverified"),
+                (f"/commits/{reviewed_head}/check-runs?check_name=ci-required&filter=latest",
+                 {"check_runs": []}, "release_delivery_ci_unverified"),
+            ):
+                with self.subTest(endpoint=endpoint, updates=updates), patch.dict(
+                    delivery_rows[prefix + endpoint], updates,
+                ), self.assertRaisesRegex(ValueError, code):
+                    draft()
+            for actor in (None, {"__typename": "User", "login": "another-actor"}):
+                armed = {"__typename": "AutoMergeEnabledEvent", "actor": actor}
+                with self.subTest(actor=actor), patch.dict(timeline, {"nodes": [armed, *timeline["nodes"]]}):
+                    with self.assertRaisesRegex(ValueError, "release_delivery_automation_unverified"):
+                        draft()
+            with patch("doc_warden.release_delivery.verify_dev_review",
+                       side_effect=ValueError("release_delivery_review_unverified")):
+                with self.assertRaisesRegex(ValueError, "release_delivery_review_unverified"):
+                    draft()
+
+            preview = draft()
+            consent = consent_for(preview.transaction)
+            with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {"XDG_STATE_HOME": state}):
+                store_preview(preview.transaction)
+                resumed = load_preview(preview.transaction.operation_id, preview.transaction.action_digest)
+                with patch.dict(delivery_rows[prefix + "/pulls/1"], {"merged": False}):
+                    with self.assertRaisesRegex(ValueError, "release_delivery_merge_unverified"):
+                        apply_preview(resumed, consent)
+                self.assertFalse((repo / preview.artifact_path).exists())
+                receipt = apply_preview(resumed, consent)
+                self.assertEqual(receipt["bindings"]["release_delivery"]["reviewed_commit"], reviewed_head)
+                self.assertEqual(receipt["bindings"]["release_delivery"]["review_receipt_digest"], review_digest)
+                originating_review.assert_called_with(
+                    unittest.mock.ANY, unittest.mock.ANY, delivery_rows[prefix + "/pulls/1"],
+                    delivery_rows[prefix + "/pulls/1/reviews?per_page=100"][0],
+                    commit=head, head=reviewed_head, armed=False,
+                )
+                remote.side_effect = ValueError("release_delivery_unavailable")
+                self.assertEqual(apply_preview(resumed, consent), receipt)
         metadata = parse_artifact(self.fixture.repo / preview.artifact_path).metadata
         self.assertEqual(metadata["type"], "release")
+        (repo / "README.md").write_text("Modified evidence.\n")
+        with self.assertRaisesRegex(ValueError, "outcome_evidence_changed"):
+            draft_artifact("release", {"title": "Stale proof", **lifecycle, "release_evidence": evidence}, repo=repo)
+
+    def test_visual_acceptance_requires_complete_scope_and_exact_design_revision(self):
+        repo = self.fixture.repo
+        self.fixture.approve_prd("REQ-001")
+        uxr = self.fixture.approve_uxr()
+        asset = self.persist_visual_asset()
+        design = self.persist_design(visual_asset=asset)
+        lifecycle = {"lifecycle": "approved", "approval": self.approval()}
+        plan = draft_artifact("plan", {"title": "Visual plan", **lifecycle, "uxr_id": uxr,
+                                       "design_ids": [design.artifact_id], "design_versions": {design.artifact_id: 1}},
+                              repo=repo)
+        apply_preview(plan, consent_for(plan.transaction))
+        head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        row = {"path": "README.md", "digest": digest_ref((repo / "README.md").read_bytes()), "result": "accepted"}
+        fields = {"plan": plan.artifact_id, "source_revision": head,
+                  "requirements": {"REQ-001": row}, "visual_checks": {}}
+        with self.assertRaisesRegex(ValueError, "outcome_coverage_incomplete"):
+            draft_artifact("uat", {"title": "Incomplete visual UAT", **lifecycle, "outcome_evidence": fields}, repo=repo)
+        fields["visual_checks"] = {item: row for item in (
+            "comparison", "states", "accessibility", "responsive", "copy", "recovery", "assets",
+        )}
+        approved = draft_artifact("uat", {"title": "Visual UAT", **lifecycle, "outcome_evidence": fields}, repo=repo)
+        apply_preview(approved, consent_for(approved.transaction))
+        self.persist_design(version=2, supersedes=design.artifact_id, visual_asset=asset)
+        with self.assertRaisesRegex(ValueError, "authority_artifact_required"):
+            draft_artifact("uat", {"title": "Stale visual UAT", **lifecycle, "outcome_evidence": fields}, repo=repo)
 
 
 if __name__ == "__main__":

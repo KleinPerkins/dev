@@ -483,6 +483,12 @@ def apply_transaction(
         )
         _cleanup_staged_duplicates(preview)
         return existing
+    delivery = preview.bindings.get("release_delivery")
+    if delivery is not None:
+        from .release_delivery import observe_merged_delivery
+
+        if observe_merged_delivery(preview.repo, delivery["canonical_url"], delivery["merge_commit"]) != delivery:
+            raise ValueError("release_delivery_changed")
     receipt = _receipt_for(preview, confirmation_digest)
     validate_egress("receipt", receipt)
     from .canonical import contained_path

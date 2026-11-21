@@ -74,6 +74,25 @@ class RigorDecision:
     defect_exempt: bool
 
 
+AUTHORING_SIGNALS = {
+    "repositories": int, "components": int, "sessions": int, "milestones": int,
+    "behavior_change": bool, "user_visible": bool, "contract_affecting": bool,
+    "new_user_value": bool, "foundational": bool, "migration": bool, "public_contract": bool,
+    "ui_visual": bool, "sensitive": bool,
+}
+
+
+def authoring_rigor_signals(value: object) -> dict[str, int | bool]:
+    """Validate recorded authoring facts without treating unknown as false."""
+    if not isinstance(value, dict) or set(value) - AUTHORING_SIGNALS.keys():
+        raise ValueError("rigor_signals_invalid")
+    for name, observed in value.items():
+        expected = AUTHORING_SIGNALS[name]
+        if type(observed) is not expected or (expected is int and observed < 1):
+            raise ValueError(f"rigor_signal_invalid:{name}")
+    return value
+
+
 def hotfix_exemption(signals: RigorSignals) -> bool:
     return all(
         (
