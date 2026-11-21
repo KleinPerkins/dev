@@ -395,6 +395,7 @@ def live_binding(repo: Path, authoring_state: dict[str, Any], event: CheckpointE
     _validate_references({"artifact_ids": (), "blocker_ids": authoring_state["blocker_ids"],
                           "authority_pointers": ()})
     root = repo.resolve(strict=True)
+    active_plan_id = authoring_state["active_plan_id"]
     config = read_repository_config(root)
     if (config is None or not config["enabled"] or config["repository_key"] != authoring_state["repository_key"]
             or Path(_git_read(root, "rev-parse", "--show-toplevel").decode().strip()).resolve() != root):
@@ -437,13 +438,14 @@ def live_binding(repo: Path, authoring_state: dict[str, Any], event: CheckpointE
         if metadata["lifecycle"] == "approved":
             authority = resolve_approved_artifact(root, metadata["type"], identifier)
             artifacts[identifier] = authority.digest
-        elif identifier == authoring_state["active_plan_id"] or relative in event.authority_pointers:
+        elif identifier == active_plan_id or relative in event.authority_pointers:
             raise ValueError("authoring_authority_unapproved")
         else:
             artifacts[identifier] = digest_ref(path.read_bytes())
     if identifiers - artifacts.keys() or authority_paths - policy_paths:
         raise ValueError("authoring_authority_missing")
-    assert_plan_assumptions_current(root, authoring_state["active_plan_id"])
+    if active_plan_id is not None:
+        assert_plan_assumptions_current(root, active_plan_id)
     return digest_ref(canonical_json({
         "head": head,
         "root": str(root),

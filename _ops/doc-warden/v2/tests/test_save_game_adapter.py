@@ -10,9 +10,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+from doc_warden.artifacts import apply_preview, consent_for, draft_artifact
 from doc_warden.canonical import canonical_json
 from doc_warden.cli import main
 from doc_warden.continuity import apply_continuity, preview_continuity
+from doc_warden.dependencies import PlanRefinementRequired
 from doc_warden.save_game_adapter import (
     CheckpointEvent,
     SaveGameAdapter,
@@ -104,6 +106,33 @@ class SaveGameAdapterTests(unittest.TestCase):
         self.assertEqual(first["state"]["save_game_pointer"], self.pointer(self.event))
         self.assertEqual(self.calls, ["checkpoint"])
         self.assertEqual(first["state"]["next_action_code"], "review")
+
+    def test_planless_continuity_ignores_other_approved_plans(self):
+        self.fixture.approve_prd("REQ-001")
+        for title in ("First unrelated plan", "Second unrelated plan"):
+            plan = draft_artifact("plan", {"title": title, "lifecycle": "approved",
+                                          "approval": {"actor": "fixture", "date": "2026-01-01"}}, repo=self.root)
+            apply_preview(plan, consent_for(plan.transaction))
+        self.assertIsNone(self.state["active_plan_id"])
+        paused = self.apply(self.preview("pause-with-continuity"))
+        resumed = self.apply(self.preview("resume-authoring", paused["state"]))
+        self.assertEqual(resumed["state"]["lifecycle"], "planned")
+        self.assertIsNone(resumed["state"]["active_plan_id"])
+        self.assertEqual(self.calls, ["checkpoint", "reconcile"])
+
+    def test_continuity_refuses_a_stale_explicit_plan_before_owner_call(self):
+        prd = self.fixture.approve_prd("REQ-001")
+        approval = {"lifecycle": "approved", "approval": {"actor": "fixture", "date": "2026-01-01"}}
+        plan = draft_artifact("plan", approval | {"title": "Bound plan"}, repo=self.root)
+        apply_preview(plan, consent_for(plan.transaction))
+        successor = draft_artifact("prd", approval | {
+            "title": "Current requirements", "version": 2, "supersedes": prd,
+            "requirements": [{"id": "REQ-001", "statement": "Changed behavior."}],
+        }, repo=self.root)
+        apply_preview(successor, consent_for(successor.transaction))
+        with self.assertRaises(PlanRefinementRequired):
+            self.preview(state=self.state | {"active_plan_id": plan.artifact_id})
+        self.assertEqual(self.calls, [])
 
     def test_completed_continuity_replay_survives_preview_and_consent_expiry(self):
         preview = self.preview("pause-with-continuity")
