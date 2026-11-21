@@ -8,7 +8,7 @@ import shutil
 import socket
 import subprocess
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .canonical import atomic_write, canonical_json, contained_path, digest_ref, parse_json_object
@@ -19,6 +19,7 @@ from .validators import read_repository_config
 
 
 QUALIFICATION = "doc-warden/gsd-host-qualification/v1"
+QUALIFICATION_MAX_AGE = timedelta(hours=24)
 RUNTIME = "_ops/doc-warden/runtime/gsd-core"
 VERIFIER = "tests/verify-binding.sh"
 TOOLCHAIN_NAMES = ("node", "npm", "python3", "bash")
@@ -143,7 +144,9 @@ def qualify_destination(repo: Path, *, home: Path, data_home: Path) -> dict:
             "qualification_digest": digest_ref(raw)}
 
 
-def read_destination_qualification(repo: Path, *, home: Path, data_home: Path) -> tuple[dict, str, dict, Path]:
+def read_destination_qualification(
+    repo: Path, *, home: Path, data_home: Path, require_fresh: bool = True,
+) -> tuple[dict, str, dict, Path, datetime]:
     context = installation_context(repo, home, data_home)
     path = _qualification_path(context)
     if not path.is_file() or path.stat().st_mode & 0o077:
@@ -158,4 +161,14 @@ def read_destination_qualification(repo: Path, *, home: Path, data_home: Path) -
             or value["runtime_digests"] != observed
             or value["verifier_digest"] != digest_ref(contained_path(repo, f"{RUNTIME}/{VERIFIER}").read_bytes())):
         raise ValueError("runtime_destination_qualification_changed")
-    return context, digest_ref(content), observed, path
+    try:
+        qualified_at = datetime.fromisoformat(value["qualified_at"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("runtime_destination_qualification_changed") from exc
+    now = datetime.now(timezone.utc)
+    if qualified_at.tzinfo is None or qualified_at > now:
+        raise ValueError("runtime_destination_qualification_changed")
+    valid_until = qualified_at + QUALIFICATION_MAX_AGE
+    if require_fresh and now >= valid_until:
+        raise ValueError("runtime_destination_qualification_expired")
+    return context, digest_ref(content), observed, path, valid_until

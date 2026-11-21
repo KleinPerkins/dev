@@ -36,7 +36,7 @@ from doc_warden.live_install import (
     validate_doctor_observation,
     validate_global_hooks,
 )
-from doc_warden.runtime_host import _toolchain, qualify_destination, run_runtime_script
+from doc_warden.runtime_host import _toolchain, qualify_destination, read_destination_qualification, run_runtime_script
 from doc_warden.scm import RepositoryIdentity
 from fixture_factory import ROOT
 
@@ -621,6 +621,29 @@ class LiveInstallTests(unittest.TestCase):
                 evidence = qualify_destination(repo, home=home, data_home=data)
                 self.assertEqual(evidence["status"], "qualified")
                 preview = prepare_install(repo, home=home, data_home=data)
+                _, _, _, _, valid_until = read_destination_qualification(repo, home=home, data_home=data)
+                with mock.patch("doc_warden.runtime_host.datetime", wraps=datetime) as host_clock, mock.patch(
+                    "doc_warden.live_install.datetime", wraps=datetime,
+                ) as operation_clock:
+                    near_expiry = valid_until - timedelta(minutes=1)
+                    host_clock.now.return_value = near_expiry
+                    operation_clock.now.return_value = near_expiry
+                    closing_preview = prepare_install(repo, home=home, data_home=data)
+                    self.assertEqual(closing_preview["expires_at"], valid_until.isoformat())
+                    closing_operation = load_install_operation(closing_preview["operation_id"],
+                                                               closing_preview["action_digest"])
+                    host_clock.now.return_value = valid_until
+                    for prepare in (prepare_install, prepare_uninstall):
+                        with self.assertRaisesRegex(ValueError, "^runtime_destination_qualification_expired$"):
+                            prepare(repo, home=home, data_home=data)
+                    with mock.patch("doc_warden.live_install.apply_install") as blocked_installer:
+                        with self.assertRaisesRegex(ValueError, "^runtime_destination_qualification_expired$"):
+                            apply_prepared_install(closing_operation, live_install_consent(closing_operation), real_home=home)
+                        blocked_installer.assert_not_called()
+                    read_destination_qualification(repo, home=home, data_home=data, require_fresh=False)
+                    host_clock.now.return_value = valid_until - timedelta(days=2)
+                    with self.assertRaisesRegex(ValueError, "^runtime_destination_qualification_changed$"):
+                        read_destination_qualification(repo, home=home, data_home=data, require_fresh=False)
                 self.assertEqual(preview["repository_key"], CURRENT_REPOSITORY_KEY)
                 self.assertEqual(preview["github_repository_id"], CENTRAL_REPOSITORY_ID)
                 with self.assertRaisesRegex(ValueError, "runtime_destination_qualification_required"):

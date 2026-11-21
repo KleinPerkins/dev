@@ -226,6 +226,9 @@ Then use `runtime install-gsd --preview`
 for those same destinations and apply the exact consent envelope. Apply verifies
 the resulting install and restores its preimage if verification fails. The
 historical runtime record remains available for isolated compatibility checks.
+Prepare and apply installation or removal within 24 hours of qualification.
+After that, qualify again and prepare a new preview. `doctor-gsd` can still
+inspect the verified installed runtime with its original qualification record.
 For later removal, use `runtime uninstall-gsd --preview` for the same
 destinations and apply its own exact consent envelope. A recorded removal can
 replay without invoking the uninstaller again. If completion cannot be verified,

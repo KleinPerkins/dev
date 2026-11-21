@@ -137,6 +137,7 @@ class RuntimeQualification:
     path: Path
     basis: str
     toolchain: dict | None = None
+    valid_until: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -432,7 +433,13 @@ def _prepare_runtime_change(
     source_revision = subprocess.check_output(
         ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
     ).strip()
-    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    now = datetime.now(timezone.utc)
+    deadline = now + timedelta(minutes=10)
+    if qualification.valid_until is not None:
+        deadline = min(deadline, qualification.valid_until)
+        if deadline <= now:
+            raise ValueError("runtime_destination_qualification_expired")
+    expires_at = deadline.isoformat()
     fields = {
         "schema": "doc-warden/live-install-action/v1",
         "operation_id": operation,
@@ -538,13 +545,16 @@ def load_install_operation(
     return operation
 
 
-def _destination_installation(repo: Path, home: Path, data_home: Path):
+def _destination_installation(repo: Path, home: Path, data_home: Path, *, require_fresh: bool = True):
     if read_repository_config(repo) is None:
         # Historical records support isolated compatibility checks only.
         return CENTRAL_REPOSITORY_KEY, None, _validate_runtime_qualification(repo)
-    context, digest, runtime_digests, path = read_destination_qualification(repo, home=home, data_home=data_home)
+    context, digest, runtime_digests, path, valid_until = read_destination_qualification(
+        repo, home=home, data_home=data_home, require_fresh=require_fresh,
+    )
     return (context["repository_key"], context["github_repository_id"],
-            RuntimeQualification(digest, runtime_digests, path, "host_destination_qualification", context["toolchain"]))
+            RuntimeQualification(digest, runtime_digests, path, "host_destination_qualification",
+                                 context["toolchain"], valid_until))
 
 
 def _validate_install_operation(operation: LiveInstallOperation, *, require_preimages: bool = True) -> RuntimeQualification:
@@ -576,6 +586,8 @@ def _validate_install_operation(operation: LiveInstallOperation, *, require_prei
         action_digest = digest_ref(canonical_json(fields))
         operation_id = str(uuid.UUID(operation.operation_id))
     except (AttributeError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        if isinstance(exc, ValueError) and exc.args == ("runtime_destination_qualification_expired",):
+            raise
         raise ValueError("operation_specification_mismatch") from exc
     if (
         operation_id != operation.operation_id
@@ -979,7 +991,7 @@ def _live_doctor_state(
     profile = read_repository_config(root)
     if profile is not None and (profile["repository_key"] == CURRENT_REPOSITORY_KEY
                                 or profile["github_repository_id"] == CENTRAL_REPOSITORY_ID):
-        _, _, qualification = _destination_installation(root, home, data_home)
+        _, _, qualification = _destination_installation(root, home, data_home, require_fresh=False)
     else:
         qualification = _validate_runtime_qualification(root)
     runtime = _runtime(root)
