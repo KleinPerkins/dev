@@ -210,8 +210,6 @@ def prepare_native_authoring(
         if skill == "gsd-new-project":
             if set(outputs) != set(model_paths):
                 raise ValueError("native_authoring_kickoff_incomplete")
-            if ".planning/config.json" in files:
-                raise ValueError("native_authoring_existing_kickoff_configuration")
             outputs[".planning/config.json"] = canonical_json({
                 "mode": "interactive",
                 "workflow": {"use_worktrees": False, "auto_advance": False, "cross_ai_execution": False},

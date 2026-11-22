@@ -16,6 +16,7 @@ from doc_warden.artifacts import apply_preview, consent_for, repository_profile
 from doc_warden.canonical import canonical_json, digest_ref, parse_json_object
 from doc_warden.codex_authoring import host_assets, host_projection, host_transaction, native_authoring_transport
 from doc_warden.codex_authoring.native_authoring_transport import NativeAuthoringChannel
+from doc_warden.codex_authoring.codex_authoring_scope import PROJECT_OUTPUTS, scope as codex_scope
 from doc_warden.codex_authoring.native_authoring_runner import RoleRequest, _role_dispatch
 from doc_warden.gsd_adapter import CENTRAL_REPOSITORY_ID, CENTRAL_REPOSITORY_KEY as CURRENT_REPOSITORY_KEY
 from doc_warden.live_install import (
@@ -1832,6 +1833,18 @@ class HostProjectionTest(unittest.TestCase):
         )
         self.assertEqual((release / nested).read_text(), "Fixture source")
         self.assertEqual(digest, host_assets._release_digest(release))
+
+    def test_kickoff_refuses_each_existing_planning_file(self):
+        self.assertEqual(codex_scope(self.project, "gsd-new-project", []).output_paths, PROJECT_OUTPUTS)
+        for relative in PROJECT_OUTPUTS:
+            with self.subTest(path=relative):
+                existing = self.project / relative
+                existing.parent.mkdir(parents=True, exist_ok=True)
+                existing.write_text("Operator-authored fixture")
+                with self.assertRaisesRegex(ValueError, "native_authoring_project_already_initialized"):
+                    codex_scope(self.project, "gsd-new-project", [])
+                self.assertEqual(existing.read_text(), "Operator-authored fixture")
+                existing.unlink()
 
     def test_install_readback_removal_and_expired_exact_replay(self):
         operation = self.preview(self.binding)

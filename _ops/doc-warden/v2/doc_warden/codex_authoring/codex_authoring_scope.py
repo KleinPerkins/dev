@@ -124,6 +124,8 @@ def scope(repo: Path, skill: str, arguments: list[str]) -> NativeAuthoringScope:
     if getattr(parsed, "auto", False):
         raise ValueError("native_authoring_auto_advance_refused")
     if skill == "gsd-new-project":
+        if any(contained_path(repo, path).exists() for path in PROJECT_OUTPUTS):
+            raise ValueError("native_authoring_project_already_initialized")
         return NativeAuthoringScope(skill, None, "guided", (), PROJECT_OUTPUTS, PROJECT_ROLES)
     phase, directory = _selected_phase(repo, parsed.phase)
     if skill == "gsd-discuss-phase":

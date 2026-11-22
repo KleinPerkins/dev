@@ -235,6 +235,7 @@ offers only the ordinary subagent contract refuses this operation.
 The generic apply route requires exact consent. Use the existing Doc-Warden
 authority operation to freeze an accepted plan.
 
+Guided kickoff requires an uninitialized set of GSD planning files.
 The authoring target covers guided kickoff, phase discussion, plan research and
 skipping research, bounded Markdown PRD and ingest sources, and validation of
 an existing phase plan. An attempted `--auto` chain is refused with
