@@ -53,14 +53,18 @@ d="$(cd "$(dirname "$0")/.." && pwd)"
 printf '%s\n' "$*" >> "$d/local-jobs.calls"
 case "$1" in
   view-jobs) cat "$d/jobs.json" 2>/dev/null || echo '{"instances": []}' ;;
-  delete-job)
+  delete-fetch-if-current)
     if [ -f "$d/local-jobs.fail" ]; then echo "simulated failure" >&2; exit 3; fi
-    id=""; while [ $# -gt 0 ]; do [ "$1" = "--id" ] && id="$2"; shift; done
-    python3 - "$d/jobs.json" "$id" <<'INNER'
+    [ "$#" = 6 ] && [ "$2" = "--id" ] && [ "$4" = "--if-revision" ] && [ "$6" = "--confirm" ] || exit 2
+    id="$3"; revision="$5"
+    python3 - "$d/jobs.json" "$id" "$revision" <<'INNER'
 import json, sys
-path, ident = sys.argv[1], sys.argv[2]
+path, ident, revision = sys.argv[1:]
 data = json.load(open(path))
-data["instances"] = [i for i in data["instances"] if str(i.get("id")) != ident]
+rows = [row for row in data["instances"] if row.get("id") == ident]
+if len(rows) != 1 or rows[0].get("removal_revision") != revision:
+    sys.exit("fetch record changed; nothing removed")
+data["instances"].remove(rows[0])
 json.dump(data, open(path, "w"))
 INNER
     ;;
@@ -334,6 +338,11 @@ class Fx(object):
         d = self.dev / "_ops" / "baseline" / "profiles" / "pr-automation" / "v3"
         d.mkdir(parents=True, exist_ok=True)
         (d / "fleet.json").write_text(json.dumps({"targets": [{"repo": s} for s in slugs], "excluded": []}))
+
+    def fetch_job(self, repo, ident="alpha-nightly"):
+        revision = hashlib.sha256((ident + str(repo)).encode()).hexdigest()
+        return {"id": ident, "type": "incremental-git-fetch", "role": "instance",
+                "path": str(repo), "schedule": "inherit", "removal_revision": revision}
 
     def jobs(self, instances):
         (self.tmp / "jobs.json").write_text(json.dumps({"instances": instances}))
@@ -1572,9 +1581,9 @@ class DevRemoveRepoTests(unittest.TestCase):
     def test_a_reported_success_that_did_not_happen_is_a_failure_not_a_completion(self):
         fx = self.fx
         repo = fx.repo("personal/alpha")
-        fx.jobs([{"id": "alpha-nightly", "role": "job", "command": "%s/run.sh" % repo}])
+        fx.jobs([fx.fetch_job(repo)])
         # an owning verb that claims success without doing anything
-        shim = LOCAL_JOBS_SHIM.replace('python3 - "$d/jobs.json" "$id" <<\'INNER\'', 'true <<\'INNER\'')
+        shim = LOCAL_JOBS_SHIM.replace('python3 - "$d/jobs.json" "$id" "$revision" <<\'INNER\'', 'true <<\'INNER\'')
         fx.adapter("local-jobs", shim)
         data, done = fx.run_all("personal/alpha")
         self.assertEqual(done.rc, 1, done.text)
@@ -1588,7 +1597,7 @@ class DevRemoveRepoTests(unittest.TestCase):
     def test_a_result_that_cannot_be_checked_right_now_is_not_called_a_missing_result(self):
         fx = self.fx
         repo = fx.repo("personal/alpha")
-        fx.jobs([{"id": "alpha-nightly", "role": "job", "command": "%s/run.sh" % repo}])
+        fx.jobs([fx.fetch_job(repo)])
         fx.adapter("local-jobs", LOCAL_JOBS_QUIET_SHIM)
         data, done = fx.run_all("personal/alpha")
         self.assertEqual(done.rc, 1, done.text)
@@ -1828,13 +1837,13 @@ class DevRemoveRepoTests(unittest.TestCase):
         fx = self.fx
         repo = fx.repo("personal/alpha")
         fx.jobs([
-            {"id": "alpha-nightly", "role": "job", "command": "%s/run.sh" % repo},
+            fx.fetch_job(repo),
             {"id": "unrelated", "role": "job", "command": "/usr/bin/true"},
         ])
         data, done = fx.run_all("personal/alpha")
         self.assertEqual(done.rc, 0, done.text)
         calls = (fx.tmp / "local-jobs.calls").read_text()
-        self.assertIn("delete-job --id alpha-nightly --confirm", calls)
+        self.assertIn("delete-fetch-if-current --id alpha-nightly --if-revision %s --confirm" % fx.fetch_job(repo)["removal_revision"], calls)
         self.assertNotIn("unrelated --confirm", calls)
         remaining = json.loads((fx.tmp / "jobs.json").read_text())["instances"]
         self.assertEqual([j["id"] for j in remaining], ["unrelated"])
@@ -1851,7 +1860,10 @@ class DevRemoveRepoTests(unittest.TestCase):
             {"id": "indirect", "role": "instance", "type": "incremental-git-fetch",
              "path": path + "/../other", "description": "Formerly personal/alpha"},
             {"id": "legacy-shell", "role": "job", "command": path + "/tool && echo more"},
-            {"id": "fetch-alpha", "role": "instance", "type": "incremental-git-fetch", "path": path},
+            {"id": "legacy-direct", "role": "job", "command": path + "/tool"},
+            {"id": "no-token", "role": "instance", "type": "incremental-git-fetch", "path": path, "schedule": "inherit"},
+            {**fx.fetch_job(repo, "custom"), "schedule": {"hour": 10, "minute": 30}},
+            fx.fetch_job(repo, "fetch-alpha"),
         ]
         fx.jobs(jobs)
         refused = fx.run("remove", "personal/alpha", "--json")
@@ -1860,11 +1872,28 @@ class DevRemoveRepoTests(unittest.TestCase):
         wiring = refused.data["targets"][0]["wiring"]
         self.assertEqual([j["id"] for j in wiring["jobs"]], ["fetch-alpha"])
         self.assertCountEqual([j["id"] for j in wiring["job_rows"]], [j["id"] for j in jobs[:-1]])
-        self.assertNotIn("delete-job", (fx.tmp / "local-jobs.calls").read_text())
+        self.assertNotIn("delete-fetch-if-current", (fx.tmp / "local-jobs.calls").read_text())
         fx.jobs(jobs[-1:])
         _, done = fx.run_all("personal/alpha")
         self.assertEqual(done.rc, 0, done.text)
-        self.assertIn("delete-job --id fetch-alpha --confirm", (fx.tmp / "local-jobs.calls").read_text())
+        self.assertIn("delete-fetch-if-current --id fetch-alpha --if-revision %s --confirm" % jobs[-1]["removal_revision"], (fx.tmp / "local-jobs.calls").read_text())
+
+    def test_same_id_reassigned_by_the_owner_immediately_before_delete_is_preserved(self):
+        fx = self.fx
+        repo = fx.repo("personal/alpha")
+        other = fx.repo("personal/beta")
+        fx.jobs([fx.fetch_job(repo)])
+        replacement = {"instances": [fx.fetch_job(other)]}
+        (fx.tmp / "reassigned.json").write_text(json.dumps(replacement))
+        shim = LOCAL_JOBS_SHIM.replace('    id="$3"', '    cp "$d/reassigned.json" "$d/jobs.json"\n    id="$3"')
+        fx.adapter("local-jobs", shim)
+        _, done = fx.run_all("personal/alpha")
+        self.assertEqual(done.rc, 1, done.text)
+        self.assertTrue(repo.exists() and other.exists())
+        self.assertEqual(json.loads((fx.tmp / "jobs.json").read_text()), replacement)
+        calls = (fx.tmp / "local-jobs.calls").read_text()
+        self.assertIn("delete-fetch-if-current", calls)
+        self.assertNotIn("delete-job", calls)
 
     def test_ambiguous_job_id_refuses_before_any_removal(self):
         fx = self.fx
@@ -1874,7 +1903,7 @@ class DevRemoveRepoTests(unittest.TestCase):
         result = fx.run("remove", "personal/alpha", "--json")
         self.assertEqual(result.rc, 1, result.text)
         self.assertIn("ambiguous instance id", result.data["refused"])
-        self.assertNotIn("delete-job", (fx.tmp / "local-jobs.calls").read_text())
+        self.assertNotIn("delete-fetch-if-current", (fx.tmp / "local-jobs.calls").read_text())
         self.assertTrue(repo.is_dir())
 
     def test_a_shared_scheduler_row_blocks_until_it_is_removed_by_its_own_verbs(self):
@@ -1889,7 +1918,7 @@ class DevRemoveRepoTests(unittest.TestCase):
     def test_a_failing_job_deletion_stops_safely_and_resumes_once_fixed(self):
         fx = self.fx
         repo = fx.repo("personal/alpha")
-        fx.jobs([{"id": "alpha-nightly", "role": "job", "command": "%s/run.sh" % repo}])
+        fx.jobs([fx.fetch_job(repo)])
         (fx.tmp / "local-jobs.fail").write_text("1")
         data, done = fx.run_all("personal/alpha")
         self.assertEqual(done.rc, 1, done.text)
@@ -1903,7 +1932,7 @@ class DevRemoveRepoTests(unittest.TestCase):
     def test_verify_says_so_when_a_completed_effect_cannot_be_re_checked(self):
         fx = self.fx
         repo = fx.repo("personal/alpha")
-        fx.jobs([{"id": "alpha-nightly", "role": "job", "command": "%s/run.sh" % repo}])
+        fx.jobs([fx.fetch_job(repo)])
         data, done = fx.run_all("personal/alpha")
         self.assertEqual(done.rc, 0, done.text)
         (fx.ad / "local-jobs").unlink()
@@ -2827,18 +2856,18 @@ class DevRemoveRepoTests(unittest.TestCase):
     def test_a_step_that_reported_failure_but_took_effect_is_reconciled_not_repeated(self):
         fx = self.fx
         repo = fx.repo("personal/alpha")
-        fx.jobs([{"id": "alpha-nightly", "role": "job", "command": "%s/run.sh" % repo}])
+        fx.jobs([fx.fetch_job(repo)])
         fx.adapter("local-jobs", LOCAL_JOBS_FLAKY_SHIM)
         (fx.tmp / "local-jobs.flaky").write_text("1")
         data, done = fx.run_all("personal/alpha")
         self.assertEqual(done.rc, 1, done.text)
         self.assertEqual(done.data["outcome"], "failed")
         self.assertTrue(repo.exists())
-        calls = (fx.tmp / "local-jobs.calls").read_text().count("delete-job")
+        calls = (fx.tmp / "local-jobs.calls").read_text().count("delete-fetch-if-current")
         (fx.tmp / "local-jobs.flaky").unlink()
         resumed = fx.run("resume", "--operation", data["operation"], "--json")
         self.assertEqual(resumed.rc, 0, resumed.text)
-        self.assertEqual((fx.tmp / "local-jobs.calls").read_text().count("delete-job"), calls, "the job that is already gone is not deleted again")
+        self.assertEqual((fx.tmp / "local-jobs.calls").read_text().count("delete-fetch-if-current"), calls, "the job that is already gone is not deleted again")
         completes = [e for e in fx.events(data["operation"]) if e["kind"] == "complete" and e.get("subsystem") == "local-job-delete"]
         self.assertTrue(completes and completes[-1].get("reconciled"))
         self.assertFalse(repo.exists())

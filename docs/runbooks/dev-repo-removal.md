@@ -126,7 +126,7 @@ All of this runs through the owner's own verb; none of it hand-edits private sta
 | Wiring | What the tool does | If the owner is unavailable |
 |---|---|---|
 | Client skill, rule and command links that resolve into the checkout | removes exactly those symlinks, one step each; a symbolic link anywhere else that points into the checkout is a blocker: at any depth in a retained repo or the umbrella's own folders (not in reference-only `affirm/vendor` clones or the dependency and cache folders), or as one of the home configuration surfaces of section 3 (a client config, shell startup file or launch agent) | refuses; links are never guessed |
-| Scheduled jobs that exist only for the checkout | deletes the job with the local-jobs delete verb and `--confirm`, then verifies it is gone; a shared job that merely lists the checkout (a fetch job covering several repos) is a blocker: update it with the local-jobs update verbs first | scans the job files and notes it; leftover registry mentions block |
+| Scheduled jobs that exist only for the checkout | asks Local Jobs to delete the previewed fetch revision, then verifies its absence; a shared job that merely lists the checkout (a fetch job covering several repos) is a blocker: update it with the local-jobs update verbs first | scans the job files and notes it; leftover registry mentions block |
 | Cursor project folders for the checkout | removes only the allow-listed cache folders (`agent-tools`, `assets`, `canvases`, `mcps`, `terminals`), one step per folder, reached from the home folder without following any link (a symlinked `.cursor`, `projects` or project folder is skipped); chat history (`agent-transcripts`) is always kept and unrecognised entries are left alone; Cursor spells paths into folder names by turning every run of other characters into one dash, so when a checkout that stays (`foo_bar`, or `personal-foo-bar` at the dev root) maps to the same project folder as the one being removed (`foo-bar`) no cache in it is touched, at preview or at the step itself | n/a (file operation) |
 | Linked worktrees | see section 6 | see section 6 |
 | Generated route index | runs the agent-route full rediscovery once, after the last cohort | reported; refresh it later |
@@ -134,9 +134,12 @@ All of this runs through the owner's own verb; none of it hand-edits private sta
 
 Local Jobs reports may mention a path in arguments, descriptions or shared scheduler
 metadata. Retirement holds those jobs for their owner to update. Automatic detachment
-requires a unique job ID and either a fetch instance targeting the exact checkout or
-the older single-executable record rooted inside it. The command checks the record
-again before asking Local Jobs to delete it.
+requires a unique fetch ID, the exact checkout path, an inherited schedule and
+the owner’s removal revision. Local Jobs compares that revision under its store
+lock during deletion. A reassigned ID, an older inventory without revisions or
+a dedicated launch agent requires owner reconciliation. For an older interrupted
+operation, resume can recognize an already-removed record. A remaining record
+without a bound revision needs a new preview.
 
 Shared stores (transcripts, shared caches, runtimes) are never deleted merely because
 they mention a name.

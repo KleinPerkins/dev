@@ -2002,15 +2002,10 @@ def local_jobs_instances(ctx):
 
 def job_is_dedicated_to(instance, checkout):
     """Only a single-checkout owner record can authorize a job deletion."""
-    if instance.get("role") == "instance" and instance.get("type") == "incremental-git-fetch":
-        return instance.get("path") == checkout
-    # Older inventories represented a dedicated command as one absolute executable.
-    # Rich command definitions can process several checkouts even when the program lives in one.
-    if instance.get("role") == "job" and set(instance) == {"id", "role", "command"}:
-        command = instance["command"]
-        return (isinstance(command, str) and re.fullmatch(r"[A-Za-z0-9_/.-]+", command) is not None
-                and os.path.normpath(command) == command and command.startswith(checkout + "/"))
-    return False
+    revision = instance.get("removal_revision")
+    return (instance.get("role") == "instance" and instance.get("type") == "incremental-git-fetch"
+            and instance.get("path") == checkout and instance.get("schedule") == "inherit"
+            and isinstance(revision, str) and re.fullmatch("[0-9a-f]{64}", revision) is not None)
 
 
 def job_aspect_digest(instance):
@@ -2878,6 +2873,7 @@ def attach_wiring(ctx, targets, engine="auto"):
                     if not isinstance(inst.get("id"), str) or not inst["id"] or not job_is_dedicated_to(inst, t["path"]):
                         t["wiring"]["job_rows"].append(row)
                     else:
+                        row["removal_revision"] = inst["removal_revision"]
                         t["wiring"]["jobs"].append(row)
         else:
             t["notes"].append("the local-jobs tool is unavailable, so scheduled jobs were checked only by file search")
@@ -2886,7 +2882,7 @@ def attach_wiring(ctx, targets, engine="auto"):
             t["blockers"].append(
                 blocker(
                     "local-jobs-row",
-                    "scheduler entry '%s' mentions this checkout without establishing exclusive ownership" % row["id"],
+                    "scheduler entry '%s' mentions this checkout without a revision for safe, exclusive removal" % row["id"],
                     "inspect the job with local-jobs and update or retire it through its owner first",
                 )
             )
@@ -3106,7 +3102,7 @@ def build_plan(ctx, targets, cohort_size, agent_route_available):
             for lk in t["wiring"]["links"]:
                 add("unlink-link", cid, t["rel"], {"link": lk["link"], "readlink": lk["readlink"]}, {"link:" + lk["link"]: t["aspects"]["link:" + lk["link"]]}, "symlink %s is gone" % lk["link"])
             for jb in t["wiring"]["jobs"]:
-                add("local-job-delete", cid, t["rel"], {"id": jb["id"]}, {"job:" + jb["id"]: jb["aspect"]}, "scheduled job %s is deleted" % jb["id"])
+                add("local-job-delete", cid, t["rel"], {"id": jb["id"], "removal_revision": jb["removal_revision"]}, {"job:" + jb["id"]: jb["aspect"]}, "scheduled job %s is deleted" % jb["id"])
             for pd in t["wiring"]["project_dirs"]:
                 for name in sorted(pd["caches"]):
                     key = "%s/%s" % (pd["encoded"], name)
@@ -3528,9 +3524,11 @@ class Runner(object):
             checkout = os.path.join(ctx.root, step["target"])
             expected = step["requires"]["aspects"].get("job:" + p["id"])
             if (len(matches) != 1 or not job_is_dedicated_to(matches[0], checkout)
+                    or matches[0]["removal_revision"] != p.get("removal_revision")
                     or job_aspect_digest(matches[0]) != expected):
                 raise Refusal("the previewed job is no longer uniquely bound to this checkout")
-            res = run([adapter, "delete-job", "--id", p["id"], "--confirm"], timeout=SUBPROCESS_TIMEOUT)
+            res = run([adapter, "delete-fetch-if-current", "--id", p["id"],
+                       "--if-revision", p["removal_revision"], "--confirm"], timeout=SUBPROCESS_TIMEOUT)
             if not res.ok:
                 raise Refusal("local-jobs could not delete job %s (%s)" % (p["id"], short_err(res.errtext or res.text) or res.error or "failed"))
             return {"deleted": 1}
