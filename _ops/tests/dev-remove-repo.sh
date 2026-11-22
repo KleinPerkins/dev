@@ -1544,6 +1544,31 @@ class DevRemoveRepoTests(unittest.TestCase):
         excused = fx.run("verify", "--operation", op, "--exception", "subsystem-stale:local-jobs:it was not installed when this started and is being repaired separately", "--json")
         self.assertEqual(excused.rc, 0, excused.text)
 
+    def test_incomplete_job_inventory_refuses_retirement_before_deletion(self):
+        fx = self.fx
+        repo = fx.repo("personal/alpha")
+        fx.jobs([])
+        report = fx.tmp / "jobs.json"
+        for raw in (
+            '{"instances": [], "overlay_errors": {"fixture": "duplicate type"}}',
+            '{"instances": [{"role": "error", "type": "fixture"}]}',
+            '{"instances": [{"id": "ok"}, null]}',
+            '{"instances": {}}',
+            'not JSON',
+        ):
+            with self.subTest(report=raw):
+                report.write_text(raw)
+                refused = fx.run("remove", "personal/alpha", "--json")
+                self.assertEqual(refused.rc, 1, refused.text)
+                self.assertIn("Local Jobs", refused.data["refused"])
+                self.assertNotIn("confirm_token", refused.data)
+                self.assertTrue(repo.is_dir())
+        # The legacy array and the current owner envelope both represent an empty inventory.
+        for raw in ("[]", '{"instances": [], "overlay_errors": {}}'):
+            report.write_text(raw)
+            viewed = fx.run("view", "personal/alpha", "--json")
+            self.assertEqual(viewed.rc, 0, viewed.text)
+
     def test_a_reported_success_that_did_not_happen_is_a_failure_not_a_completion(self):
         fx = self.fx
         repo = fx.repo("personal/alpha")
