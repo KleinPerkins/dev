@@ -135,12 +135,16 @@ class NativeAuthoringChannel:
                 raise ValueError("native_authoring_timeout")
             end = self.pending.find(b"\n")
             if end >= 0:
+                if end > MAX_LINE:
+                    raise ValueError("native_authoring_protocol_line_too_large")
                 raw = bytes(self.pending[:end])
                 del self.pending[:end + 1]
                 try:
                     return parse_json_object(raw)
                 except (UnicodeError, ValueError) as exc:
                     raise ValueError("native_authoring_protocol_invalid") from exc
+            if len(self.pending) > MAX_LINE:
+                raise ValueError("native_authoring_protocol_line_too_large")
             if not self.selector.select(remaining):
                 raise ValueError("native_authoring_timeout")
             block = os.read(self.process.stdout.fileno(), 64 * 1024)
@@ -150,8 +154,6 @@ class NativeAuthoringChannel:
             if self.received_bytes > MAX_STREAM_BYTES:
                 raise ValueError("native_authoring_stream_bound_exceeded")
             self.pending.extend(block)
-            if len(self.pending) > MAX_LINE:
-                raise ValueError("native_authoring_protocol_line_too_large")
 
     def _notification(self, frame: dict):
         method = frame.get("method")

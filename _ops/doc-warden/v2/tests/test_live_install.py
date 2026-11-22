@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+import time
 import subprocess
 import unittest
 import uuid
@@ -13,7 +14,7 @@ from unittest import mock
 import doc_warden.live_install as live_install_module
 from doc_warden.artifacts import apply_preview, consent_for, repository_profile
 from doc_warden.canonical import canonical_json, digest_ref, parse_json_object
-from doc_warden.codex_authoring import host_assets, host_projection, host_transaction
+from doc_warden.codex_authoring import host_assets, host_projection, host_transaction, native_authoring_transport
 from doc_warden.codex_authoring.native_authoring_transport import NativeAuthoringChannel
 from doc_warden.codex_authoring.native_authoring_runner import RoleRequest, _role_dispatch
 from doc_warden.gsd_adapter import CENTRAL_REPOSITORY_ID, CENTRAL_REPOSITORY_KEY as CURRENT_REPOSITORY_KEY
@@ -1732,6 +1733,23 @@ class NativeAuthoringEventTest(unittest.TestCase):
         del offer["parameters"]["properties"]["agent_type"]
         with self.assertRaisesRegex(ValueError, "selector_unavailable"):
             _role_dispatch(offer, request, owner)
+
+    def test_receive_limits_each_frame_and_accepts_multiple_frames_in_one_read(self):
+        channel = NativeAuthoringChannel.__new__(NativeAuthoringChannel)
+        channel.pending = bytearray()
+        channel.received_bytes = 0
+        channel.selector = mock.Mock()
+        channel.process = mock.Mock()
+        limit = time.monotonic() + 5
+        with mock.patch.object(native_authoring_transport, "MAX_LINE", 8):
+            with mock.patch.object(native_authoring_transport.os, "read", return_value=b'{"a":1}\n{"b":2}\n'):
+                self.assertEqual(channel._receive(limit), {"a": 1})
+                self.assertEqual(channel._receive(limit), {"b": 2})
+            for bad in (b'{"long":1}\n', b'{"long":1}'):
+                with self.subTest(bad=bad):
+                    channel.pending = bytearray(bad)
+                    with self.assertRaisesRegex(ValueError, "protocol_line_too_large"):
+                        channel._receive(limit)
 
     def test_repeated_deltas_retain_only_thread_identity(self):
         channel = NativeAuthoringChannel.__new__(NativeAuthoringChannel)
