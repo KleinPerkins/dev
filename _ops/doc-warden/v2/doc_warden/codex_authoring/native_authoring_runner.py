@@ -167,7 +167,8 @@ def run_role(
             item["agentThreadId"]
             for event in channel.observed if event.get("method") == "item/completed"
             for item in (event["params"].get("item", {}),)
-            if item.get("type") == "subAgentActivity" and isinstance(item.get("agentThreadId"), str)
+            if item.get("type") == "subAgentActivity" and item.get("kind") == "started"
+            and event["params"].get("threadId") == parent_id and isinstance(item.get("agentThreadId"), str)
         }
         if not child_threads:
             raise ValueError("native_authoring_child_not_observed")

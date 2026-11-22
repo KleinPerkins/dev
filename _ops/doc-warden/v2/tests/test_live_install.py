@@ -13,7 +13,7 @@ from unittest import mock
 import doc_warden.live_install as live_install_module
 from doc_warden.artifacts import apply_preview, consent_for, repository_profile
 from doc_warden.canonical import canonical_json, digest_ref, parse_json_object
-from doc_warden.codex_authoring import host_projection, host_transaction
+from doc_warden.codex_authoring import host_assets, host_projection, host_transaction
 from doc_warden.codex_authoring.native_authoring_transport import NativeAuthoringChannel
 from doc_warden.codex_authoring.native_authoring_runner import RoleRequest, _role_dispatch
 from doc_warden.gsd_adapter import CENTRAL_REPOSITORY_ID, CENTRAL_REPOSITORY_KEY as CURRENT_REPOSITORY_KEY
@@ -1791,6 +1791,29 @@ class HostProjectionTest(unittest.TestCase):
         return host_transaction.read_installed_projection(
             self.project, state_root=self.root / "state/doc-warden", home=self.home, data_home=self.data,
         )
+
+    def test_native_release_export_includes_recursive_source_modules(self):
+        nested = "_ops/doc-warden/v2/doc_warden/codex_authoring/example.py"
+        required = (host_assets.EMITTER, host_transaction.SOURCE_ENTRY, host_assets.OWNER_PIN_PATH, nested)
+        for relative in required:
+            path = self.project / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("Fixture source")
+        subprocess.run(["git", "-C", str(self.project), "add", "_ops"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.project), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+             "commit", "--quiet", "-m", "Fixture release"], check=True,
+        )
+        release = self.root / "release-export"
+        release.mkdir()
+        revision = subprocess.check_output(
+            ["git", "-C", str(self.project), "rev-parse", "HEAD"], text=True,
+        ).strip()
+        digest = host_assets._export_source(
+            {"canonical_root": str(self.project), "source_revision": revision}, release,
+        )
+        self.assertEqual((release / nested).read_text(), "Fixture source")
+        self.assertEqual(digest, host_assets._release_digest(release))
 
     def test_install_readback_removal_and_expired_exact_replay(self):
         operation = self.preview(self.binding)

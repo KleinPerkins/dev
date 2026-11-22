@@ -62,7 +62,7 @@ def _protected_source(root: Path, home: Path, data: Path) -> dict:
 def _export_source(context: dict, destination: Path) -> str:
     root, revision = context["canonical_root"], context["source_revision"]
     git = ["git", "--no-replace-objects", "-C", root]
-    output = subprocess.check_output(git + ["ls-tree", "-rz", revision, "--", *SOURCE_PATHS], timeout=15)
+    output = subprocess.check_output(git + ["ls-tree", "-r", "-z", revision, "--", *SOURCE_PATHS], timeout=15)
     images = {}
     for row in output.split(b"\0"):
         if not row:
