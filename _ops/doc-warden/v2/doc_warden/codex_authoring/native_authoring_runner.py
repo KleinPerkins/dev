@@ -56,6 +56,23 @@ def _spawn_offer(response: dict) -> dict:
     return matches[0]
 
 
+def _role_dispatch(offer: dict, request: RoleRequest, owner: ModuleType) -> dict[str, str]:
+    # This is the measured selector inside the owned Codex client. The
+    # ordinary repository-review worker ABI has no named-role selector.
+    owner.verify_spawn_offer(offer, request.role)
+    arguments = {
+        "agent_type": request.role,
+        "task_name": "doc_warden_authoring",
+        "fork_turns": "none",
+        "model": owner.MODEL,
+        "reasoning_effort": owner.EFFORT,
+        "message": request.task,
+    }
+    if arguments.keys() != offer["parameters"]["properties"].keys():
+        raise ValueError("native_authoring_selector_unavailable")
+    return arguments
+
+
 def run_role(
     request: RoleRequest,
     owner: ModuleType,
@@ -110,7 +127,7 @@ def run_role(
     if len(raw) > 2 * 1024 * 1024:
         raise ValueError("native_authoring_selector_response_too_large")
     spawn_offer = _spawn_offer(json.loads(raw))
-    owner.verify_spawn_offer(spawn_offer, name)
+    dispatch = _role_dispatch(spawn_offer, request, owner)
     channel = NativeAuthoringChannel(binary=binary, binary_digest=binary_digest, cwd=work,
                                      configuration=cfg, environment=environment)
     deadline = time.monotonic() + timeout
@@ -122,22 +139,25 @@ def run_role(
         channel.notify("initialized", deadline)
         parent = channel.request("thread/start", {
             "cwd": str(work), "ephemeral": True, "model": owner.MODEL,
-            "sandbox": "read-only", "approvalPolicy": "on-request",
+            "sandbox": "read-only", "approvalPolicy": "on-request", "approvalsReviewer": "user",
+            "developerInstructions": (
+                "Make one native collaboration.spawn_agent call for the explicitly requested role. "
+                "Wait only for that child. End the turn after its first terminal outcome. "
+                "Use no shell, other role, or reroute in this controller."
+            ),
         }, deadline)
         sandbox = parent.get("sandbox", {})
         if (sandbox.get("type") != "readOnly" or sandbox.get("networkAccess", False) is not False
+                or parent.get("approvalPolicy") != "on-request" or parent.get("approvalsReviewer") != "user"
                 or parent.get("model") != owner.MODEL
                 or parent.get("thread", {}).get("cwd") != str(work)):
             raise ValueError("native_authoring_parent_permissions_changed")
         parent_id = parent["thread"]["id"]
         text = (
-            f"Spawn exactly one named worker with {owner.TOOL}, agent_type {name}, fork_turns none, "
-            f"task_name doc_warden_authoring, model {owner.MODEL}, reasoning_effort {owner.EFFORT}. "
-            "Give the worker the task below with the instruction to work alone. Wait for that same worker "
-            "to finish. Do not perform the task yourself, spawn again, or resume or replace any worker. "
-            "Only the worker performs the task. If it fails, report unavailable and end this turn. "
-            "If it completes, end this turn with the single word Settled. Never echo its report.\n\n"
-            + request.task
+            f"Call the measured native function {owner.TOOL} exactly once with the following JSON arguments. "
+            "Wait for the same worker to finish, then end the turn. Do not perform its task yourself or repeat the call. "
+            "Report unavailable if the worker fails. Otherwise end with the single word Settled.\n"
+            + json.dumps(dispatch, ensure_ascii=True)
         )
         turn = channel.request("turn/start", {
             "threadId": parent_id, "effort": owner.EFFORT, "input": [{"type": "text", "text": text}],

@@ -1317,6 +1317,9 @@ def _run(argv: list[str] | None = None) -> int:
 
             result = run_codex_command(args)
             if args.runtime_verb == "author-codex":
+                if isinstance(result, dict):
+                    print(canonical_json(result).decode("utf-8"), end="")
+                    return 1
                 preview, expires_at, native = result
                 result = _transaction_json(preview) | {
                     "consent_required": True, "expires_at": expires_at, "native_authoring_evidence": native,

@@ -84,17 +84,28 @@ def _stage(work: Path, files: dict[str, bytes]) -> None:
         destination.write_bytes(raw)
 
 
-def _task(chosen, role, brief: str, file_names: list[str], prior: str, workflow: Path) -> str:
+def _task(chosen, role, brief: str, file_names: list[str], prior: str, runtime: Path) -> str:
     text = (
-        f"Perform the {role} duties for {chosen.skill}, mode {chosen.mode}, phase {chosen.phase or 'new project'}.\n"
-        f"Use the pinned workflow at {workflow}. This operation is authoring only. "
-        "Read only the staged materials and workflow. Work alone. Never spawn or delegate to another worker, "
-        "write files, run the plan, or chain a phase. "
-        "Ground all claims in the operator's directions and available evidence. "
-        "Mark missing implementation evidence as pending. "
+        f"Create authoring preview material as the {role} for {chosen.skill}, "
+        f"mode {chosen.mode}, phase {chosen.phase or 'new project'}.\n"
+        "The Doc-Warden controller handles staging, workflow order and approval. "
+        "Work alone. Read only the listed staged files or the pinned references named below. "
+        "Return your result as text. Never run a GSD workflow, dispatch another worker, "
+        "write files, run the plan, or invoke another skill. "
+        "Ground claims in the operator's directions and available evidence. Mark missing evidence as pending. "
         f"Staged inputs: {', '.join(file_names) or 'none'}.\n"
         f"Operator directions follow:\n{brief}\n"
     )
+    if role == "gsd-planner":
+        text += (
+            f"Use the plan structure in the first 125 lines of {runtime / 'templates/phase-prompt.md'}. "
+            "Return valid GSD PLANs beginning with YAML frontmatter. Include the exact applicable requirement IDs, "
+            "files_modified, dependency IDs and wave, autonomous and must_haves with truths, artifacts and key_links. "
+            "Use executable verification steps and complete tasks with name, files, action, verify and done. "
+            "Use repo-relative artifact paths and leave implementation and execution for a separate approval.\n"
+        )
+    elif role == "gsd-plan-checker":
+        text += f"Use the gates reference at {runtime / 'references/gates.md'} to review the exact staged draft.\n"
     if prior:
         text += f"\nPrior bounded authoring observations follow:\n{prior}\n"
     return text
@@ -148,7 +159,7 @@ def prepare_native_authoring(
         raise ValueError("native_authoring_input_changed")
     client = Path(binding["client"]["binary"])
     environment = client_environment(Path(binding["home"]))
-    environment["RUNTIME_DIR"] = str(runtime)
+    environment["RUNTIME_DIR"] = str(bundle)
     role_evidence = []
     checker = None
     with tempfile.TemporaryDirectory(prefix="doc-warden-codex-authoring-") as disposable:
@@ -178,7 +189,7 @@ def prepare_native_authoring(
         outputs = None
         model_paths = tuple(path for path in chosen.output_paths if path != ".planning/config.json")
         for position, role in enumerate(draft_roles):
-            task = _task(chosen, role, brief, sorted(files), prior, workflow)
+            task = _task(chosen, role, brief, sorted(files), prior, runtime)
             last = position == len(draft_roles) - 1
             if last:
                 task += (
@@ -212,12 +223,27 @@ def prepare_native_authoring(
         _native_output_paths(chosen.output_paths, outputs)
         if "gsd-plan-checker" in chosen.roles:
             _stage(work, outputs)
-            task = _task(chosen, "gsd-plan-checker", brief, sorted(set(files) | set(outputs)), "", workflow)
+            task = _task(chosen, "gsd-plan-checker", brief, sorted(set(files) | set(outputs)), "", runtime)
             task += (
-                "\nRead the exact proposed files in the current staged project. Check their claims, paths, tasks and "
+                "\nRead the exact proposed files in the current staged project. They are design-stage plans, "
+                "so check the requirement coverage, paths, tasks and "
                 "verification against the requirements. Start the report with ## VERIFICATION PASSED or ## ISSUES FOUND."
             )
             checked = observe("gsd-plan-checker", task)
+            if checked.evidence["verdict"] == "ISSUES FOUND":
+                report = atomic_write(
+                    private_state_root(), f"runtime/codex/observations/{prepared.operation_id}-checker.md",
+                    checked.report,
+                )
+                return {
+                    "schema": "doc-warden/codex-authoring-refusal/v1",
+                    "status": "blocked", "code": "authoring_checker_failed",
+                    "operation_id": prepared.operation_id,
+                    "checker_report_path": str(report),
+                    "report_digest": digest_ref(checked.report),
+                    "native_authoring_evidence": role_evidence, "repository_writes": [],
+                    "next_action": "review_checker_findings_and_prepare_new_draft",
+                }
             checker = VerifiedNativeCheck(
                 checked.run_id, checked.evidence, checked.report,
                 {name: digest_ref(content) for name, content in outputs.items()},

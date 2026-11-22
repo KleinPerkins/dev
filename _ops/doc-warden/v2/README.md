@@ -229,6 +229,9 @@ brief. The CLI scopes the phase, arguments, files and workers, and stages input
 outside the project. It returns a regular draft preview after validating the
 result. Planning also requires a real independent named checker against the
 exact staged PLAN bytes and machine validation by the pinned GSD utility.
+The adapter measures the role selector inside the pinned Codex app-server.
+That configured client advertises the named-role argument. A client that
+offers only the ordinary subagent contract refuses this operation.
 The generic apply route requires exact consent. Use the existing Doc-Warden
 authority operation to freeze an accepted plan.
 

@@ -15,6 +15,7 @@ from doc_warden.artifacts import apply_preview, consent_for, repository_profile
 from doc_warden.canonical import canonical_json, digest_ref, parse_json_object
 from doc_warden.codex_authoring import host_projection, host_transaction
 from doc_warden.codex_authoring.native_authoring_transport import NativeAuthoringChannel
+from doc_warden.codex_authoring.native_authoring_runner import RoleRequest, _role_dispatch
 from doc_warden.gsd_adapter import CENTRAL_REPOSITORY_ID, CENTRAL_REPOSITORY_KEY as CURRENT_REPOSITORY_KEY
 from doc_warden.live_install import (
     CENTRAL_REPOSITORY_KEY,
@@ -1719,6 +1720,19 @@ class LiveInstallTests(unittest.TestCase):
 
 
 class NativeAuthoringEventTest(unittest.TestCase):
+    def test_dispatch_uses_the_measured_named_selector_fields(self):
+        request = RoleRequest(Path("/fixture"), Path("/bundle"), Path("/client"), "gsd-planner", "Private brief")
+        owner = SimpleNamespace(MODEL="fixture-model", EFFORT="high", verify_spawn_offer=mock.Mock())
+        fields = ("agent_type", "task_name", "fork_turns", "model", "reasoning_effort", "message")
+        offer = {"parameters": {"properties": dict.fromkeys(fields)}}
+        launched = _role_dispatch(offer, request, owner)
+        owner.verify_spawn_offer.assert_called_once_with(offer, "gsd-planner")
+        self.assertEqual(launched["agent_type"], "gsd-planner")
+        self.assertEqual(launched["message"], "Private brief")
+        del offer["parameters"]["properties"]["agent_type"]
+        with self.assertRaisesRegex(ValueError, "selector_unavailable"):
+            _role_dispatch(offer, request, owner)
+
     def test_repeated_deltas_retain_only_thread_identity(self):
         channel = NativeAuthoringChannel.__new__(NativeAuthoringChannel)
         channel.observed = []
