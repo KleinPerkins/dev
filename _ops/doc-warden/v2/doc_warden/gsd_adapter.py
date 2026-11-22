@@ -543,7 +543,9 @@ def prepare_authoring_import(scope: AuthoringScope) -> AuthoringImportPreview:
 
 
 def validate_authoring_result(
-    preview: AuthoringImportPreview, result: AuthoringResult
+    preview: AuthoringImportPreview, result: AuthoringResult, *,
+    checker_package: Path | None = None, checker_node: Path | None = None,
+    adapter_inputs: tuple[ObservedInput, ...] = (),
 ) -> ImportPlan:
     if result.source_revision != preview.source_revision or _head(preview.repo) != preview.source_revision:
         raise ValueError("authoring_source_revision_changed")
@@ -578,7 +580,12 @@ def validate_authoring_result(
         if not result.checker_passed:
             raise ValueError("authoring_checker_failed")
         checker_digest = _native_plan_check_digest(preview, result)
-        checker_inputs = run_plan_structure_checks(plans)
+        if checker_package is None and checker_node is None:
+            checker_inputs = run_plan_structure_checks(plans)
+        elif checker_package is not None and checker_node is not None:
+            checker_inputs = run_plan_structure_checks(plans, package=checker_package, node_path=checker_node)
+        else:
+            raise ValueError("authoring_checker_binding_incomplete")
     elif result.native_plan_check is not None or result.native_report is not None:
         raise ValueError("authoring_native_plan_check_invalid")
     if not actions:
@@ -595,7 +602,7 @@ def validate_authoring_result(
     pin_path, interface_path = _runtime_paths(authority)
     observe(pin_path, preview.pin_digest)
     observe(interface_path, preview.interface_digest)
-    for item in checker_inputs:
+    for item in (*checker_inputs, *adapter_inputs):
         observe(Path(item.path), item.digest)
     for mapping in (preview.input_digests, preview.frozen_digests):
         for relative, expected in mapping.items():

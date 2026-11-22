@@ -26,16 +26,17 @@ from .transactions import (
 )
 
 
-def private_state_root() -> Path:
+def private_state_root(*, create: bool = True) -> Path:
     state = Path(
         os.environ.get(
             "XDG_STATE_HOME", str(Path.home() / ".local/state")
         )
     ).expanduser()
-    state.mkdir(mode=0o700, parents=True, exist_ok=True)
     root = state / "doc-warden"
-    root.mkdir(mode=0o700, exist_ok=True)
-    return root.resolve(strict=True)
+    if create:
+        state.mkdir(mode=0o700, parents=True, exist_ok=True)
+        root.mkdir(mode=0o700, exist_ok=True)
+    return root.resolve(strict=create)
 
 
 def _directory() -> Path:

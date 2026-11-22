@@ -1,17 +1,23 @@
 import json
 import os
 import tempfile
+import time
 import subprocess
 import unittest
 import uuid
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import doc_warden.live_install as live_install_module
 from doc_warden.artifacts import apply_preview, consent_for, repository_profile
 from doc_warden.canonical import canonical_json, digest_ref, parse_json_object
+from doc_warden.codex_authoring import host_assets, host_projection, host_transaction, native_authoring_transport
+from doc_warden.codex_authoring.native_authoring_transport import NativeAuthoringChannel
+from doc_warden.codex_authoring.codex_authoring_scope import PROJECT_OUTPUTS, scope as codex_scope
+from doc_warden.codex_authoring.native_authoring_runner import RoleRequest, _role_dispatch, _scoped_worker_permissions
 from doc_warden.gsd_adapter import CENTRAL_REPOSITORY_ID, CENTRAL_REPOSITORY_KEY as CURRENT_REPOSITORY_KEY
 from doc_warden.live_install import (
     CENTRAL_REPOSITORY_KEY,
@@ -35,6 +41,7 @@ from doc_warden.live_install import (
     uninstall,
     validate_doctor_observation,
     validate_global_hooks,
+    _runtime_writer,
 )
 from doc_warden.runtime_host import _toolchain, qualify_destination, read_destination_qualification, run_runtime_script
 from doc_warden.scm import RepositoryIdentity
@@ -1712,6 +1719,214 @@ class LiveInstallTests(unittest.TestCase):
                 }
             ]
         )
+
+
+class NativeAuthoringEventTest(unittest.TestCase):
+    def test_native_permission_profile_names_only_the_declared_read_paths(self):
+        with tempfile.TemporaryDirectory() as fixture:
+            root = Path(fixture).resolve()
+            paths = tuple(root / name for name in ("staged", "bundle", "client", "node"))
+            for path in paths:
+                path.touch()
+            arguments, profile_digest = _scoped_worker_permissions("fixture-profile", *paths)
+            self.assertIn('default_permissions="fixture-profile"', arguments)
+            values = arguments[3]
+            self.assertIn('":root"="deny"', values)
+            self.assertIn('":minimal"="read"', values)
+            self.assertIn("network={enabled=false}", values)
+            for path in paths:
+                self.assertIn(json.dumps(str(path)) + '="read"', values)
+            self.assertNotIn(json.dumps(str(root)) + '="read"', values)
+            self.assertTrue(profile_digest.startswith("sha256:"))
+
+    def test_dispatch_uses_the_measured_named_selector_fields(self):
+        request = RoleRequest(Path("/fixture"), Path("/bundle"), Path("/client"), "gsd-planner", "Private brief")
+        owner = SimpleNamespace(MODEL="fixture-model", EFFORT="high", verify_spawn_offer=mock.Mock())
+        fields = ("agent_type", "task_name", "fork_turns", "model", "reasoning_effort", "message")
+        offer = {"parameters": {"properties": dict.fromkeys(fields)}}
+        launched = _role_dispatch(offer, request, owner)
+        owner.verify_spawn_offer.assert_called_once_with(offer, "gsd-planner")
+        self.assertEqual(launched["agent_type"], "gsd-planner")
+        self.assertEqual(launched["message"], "Private brief")
+        del offer["parameters"]["properties"]["agent_type"]
+        with self.assertRaisesRegex(ValueError, "selector_unavailable"):
+            _role_dispatch(offer, request, owner)
+
+    def test_receive_limits_each_frame_and_accepts_multiple_frames_in_one_read(self):
+        channel = NativeAuthoringChannel.__new__(NativeAuthoringChannel)
+        channel.pending = bytearray()
+        channel.received_bytes = 0
+        channel.selector = mock.Mock()
+        channel.process = mock.Mock()
+        limit = time.monotonic() + 5
+        with mock.patch.object(native_authoring_transport, "MAX_LINE", 8):
+            with mock.patch.object(native_authoring_transport.os, "read", return_value=b'{"a":1}\n{"b":2}\n'):
+                self.assertEqual(channel._receive(limit), {"a": 1})
+                self.assertEqual(channel._receive(limit), {"b": 2})
+            for bad in (b'{"long":1}\n', b'{"long":1}'):
+                with self.subTest(bad=bad):
+                    channel.pending = bytearray(bad)
+                    with self.assertRaisesRegex(ValueError, "protocol_line_too_large"):
+                        channel._receive(limit)
+
+    def test_repeated_deltas_retain_only_thread_identity(self):
+        channel = NativeAuthoringChannel.__new__(NativeAuthoringChannel)
+        channel.observed = []
+        channel.thread_notifications = set()
+        channel.notification_count = 0
+        parent = str(uuid.uuid4())
+        delta = {"method": "item/agentMessage/delta", "params": {"threadId": parent, "delta": "private text"}}
+        for _ in range(5000):
+            channel._notification(delta)
+        self.assertEqual(channel.observed, [{"method": delta["method"], "params": {"threadId": parent}}])
+        foreign = str(uuid.uuid4())
+        channel._notification({"method": delta["method"], "params": {"threadId": foreign, "delta": "private text"}})
+        self.assertEqual(channel.observed[-1]["params"], {"threadId": foreign})
+
+
+class HostProjectionTest(unittest.TestCase):
+    def setUp(self):
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        self.root = Path(directory).resolve()
+        self.project = self.root / "project"
+        self.project.mkdir()
+        subprocess.run(["git", "init", "-q", str(self.project)], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.project), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+             "commit", "--quiet", "--allow-empty", "-m", "Fixture"],
+            check=True,
+        )
+        self.enterContext(mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(self.root / "state")}))
+        self.home, self.data = self.root / "home", self.root / "data"
+        self.authority = {
+            "repository_key": "47f7e608-ce5f-50ae-be86-10d7e95265f9",
+            "source_revision": "a" * 40,
+            "canonical_root": str(self.root / "authority"),
+        }
+        self.binding = {"source_root": str(self.root / "release")}
+        self.qualification_count = 0
+
+    def verify(self, binding):
+        self.assertEqual(binding, self.binding)
+        self.qualification_count += 1
+
+    def preview(self, binding):
+        return host_transaction.prepare_host_change(
+            self.project, home=self.home, data_home=self.data, authority=self.authority,
+            binding=binding, verify=self.verify,
+        )
+
+    def apply(self, operation, consent=None):
+        if consent is None:
+            consent = consent_for(SimpleNamespace(**operation), consequence_class="external")
+        return host_transaction.apply_host_change(
+            operation["operation_id"], operation["action_digest"], consent, verify=self.verify,
+        )
+
+    def installed(self):
+        return host_transaction.read_installed_projection(
+            self.project, state_root=self.root / "state/doc-warden", home=self.home, data_home=self.data,
+        )
+
+    def test_native_release_export_includes_recursive_source_modules(self):
+        nested = "_ops/doc-warden/v2/doc_warden/codex_authoring/example.py"
+        required = (host_assets.EMITTER, host_transaction.SOURCE_ENTRY, host_assets.OWNER_PIN_PATH, nested)
+        for relative in required:
+            path = self.project / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("Fixture source")
+        subprocess.run(["git", "-C", str(self.project), "add", "_ops"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.project), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+             "commit", "--quiet", "-m", "Fixture release"], check=True,
+        )
+        release = self.root / "release-export"
+        release.mkdir()
+        revision = subprocess.check_output(
+            ["git", "-C", str(self.project), "rev-parse", "HEAD"], text=True,
+        ).strip()
+        digest = host_assets._export_source(
+            {"canonical_root": str(self.project), "source_revision": revision}, release,
+        )
+        self.assertEqual((release / nested).read_text(), "Fixture source")
+        self.assertEqual(digest, host_assets._release_digest(release))
+
+    def test_kickoff_refuses_each_existing_planning_file(self):
+        self.assertEqual(codex_scope(self.project, "gsd-new-project", []).output_paths, PROJECT_OUTPUTS)
+        for relative in PROJECT_OUTPUTS:
+            with self.subTest(path=relative):
+                existing = self.project / relative
+                existing.parent.mkdir(parents=True, exist_ok=True)
+                existing.write_text("Operator-authored fixture")
+                with self.assertRaisesRegex(ValueError, "native_authoring_project_already_initialized"):
+                    codex_scope(self.project, "gsd-new-project", [])
+                self.assertEqual(existing.read_text(), "Operator-authored fixture")
+                existing.unlink()
+
+    def test_install_readback_removal_and_expired_exact_replay(self):
+        operation = self.preview(self.binding)
+        self.assertFalse((self.project / ".agents").exists())
+        with self.assertRaisesRegex(ValueError, "projection_not_installed"):
+            self.installed()
+        self.assertEqual(operation["global_hooks"], [])
+        installed = self.apply(operation)
+        self.assertEqual(installed["status"], "installed")
+        self.assertEqual(self.installed(), self.binding)
+        self.assertEqual(host_projection.observe_descriptors(self.project), installed["postimages"])
+        with mock.patch.object(host_transaction, "_is_expired", return_value=True):
+            self.assertEqual(self.apply(operation), installed)
+        self.assertEqual(self.qualification_count, 2)
+        removal = self.preview(None)
+        self.assertEqual(self.apply(removal)["status"], "removed")
+        self.assertFalse(any(host_projection.observe_descriptors(self.project).values()))
+        with self.assertRaisesRegex(ValueError, "projection_not_installed"):
+            self.installed()
+
+    def test_recover_after_a_descriptor_is_written_and_preserve_later_edits(self):
+        operation = self.preview(self.binding)
+        original = host_projection.atomic_write
+        written = []
+
+        def interrupted(root, path, data):
+            if written:
+                raise OSError("fixture interruption")
+            written.append(original(root, path, data))
+
+        with mock.patch.object(host_projection, "atomic_write", side_effect=interrupted):
+            with self.assertRaisesRegex(OSError, "fixture interruption"):
+                self.apply(operation)
+        with self.assertRaisesRegex(ValueError, "projection_recovery_required"):
+            self.installed()
+        exact = written[0].read_bytes()
+        written[0].write_bytes(b"Later edit")
+        with self.assertRaisesRegex(ValueError, "projection_foreign"):
+            self.apply(operation)
+        self.assertEqual(written[0].read_bytes(), b"Later edit")
+        written[0].write_bytes(exact)
+        self.assertEqual(self.apply(operation)["status"], "installed")
+
+    def test_first_use_and_competing_writer_refuse(self):
+        operation = self.preview(self.binding)
+        old = datetime.now(timezone.utc) - timedelta(minutes=12)
+        consent = consent_for(SimpleNamespace(**operation), consequence_class="external")
+        consent.update(issued_at=old.isoformat(), expires_at=(old + timedelta(minutes=10)).isoformat())
+        with self.assertRaisesRegex(ValueError, "operation_specification_expired"):
+            self.apply(operation, consent)
+        self.assertFalse(self.home.exists())
+        with _runtime_writer(self.root / "other-home", self.root / "other-data", project=self.project):
+            with self.assertRaisesRegex(ValueError, "live_install_operation_busy"):
+                self.apply(operation)
+        self.assertFalse((self.project / ".agents").exists())
+
+    def test_existing_descriptor_never_becomes_owned_by_byte_equality(self):
+        descriptor = self.project / host_projection.PROJECTION_PATHS[0]
+        descriptor.parent.mkdir(parents=True)
+        contents = host_projection.render_descriptors(Path(self.binding["source_root"]) / host_transaction.SOURCE_ENTRY)
+        descriptor.write_bytes(contents[host_projection.PROJECTION_PATHS[0]])
+        descriptor.chmod(host_projection.FILE_MODE)
+        with self.assertRaisesRegex(ValueError, "projection_foreign"):
+            self.preview(self.binding)
+        self.assertTrue(descriptor.is_file())
 
 
 if __name__ == "__main__":
