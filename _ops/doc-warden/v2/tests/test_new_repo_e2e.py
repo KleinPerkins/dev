@@ -1,3 +1,4 @@
+import fcntl
 import json
 import os
 import subprocess
@@ -216,6 +217,114 @@ class NewRepositoryEndToEndTests(unittest.TestCase):
                 ),
                 "",
             )
+
+    def test_personal_product_scaffold_resumes_the_exact_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            owner = root / "personal/src/KleinPerkins"
+            owner.mkdir(parents=True)
+            name = "sample.product"
+            initial = self.run_scaffold(root, name, "--personal-codex",
+                                        "--fixture-interrupt-after", "initial-committed", check=False)
+            self.assertEqual(initial.returncode, 75, initial.stderr)
+            checkout = owner / name
+            first = self.git(checkout, "rev-parse", "HEAD")
+            self.assertTrue((checkout / ".git/hooks/pre-commit").is_file())
+            self.assertTrue((checkout / ".planning/doc-warden.json").is_file())
+            self.assertTrue((checkout / ".github/test-sharding-required.json").is_file())
+            self.assertFalse((root / name).exists())
+            # A simultaneous retry by this same explicit writer cannot enter the operation.
+            fd = os.open(checkout, os.O_RDONLY)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                busy = self.run_scaffold(root, name, "--personal-codex", "--resume", check=False)
+                self.assertNotEqual(busy.returncode, 0)
+            finally:
+                os.close(fd)
+            out = self.result(self.run_scaffold(root, name, "--personal-codex", "--resume"))
+            self.assertTrue(out["resumed"])
+            self.assertIsNone(out["github_repository_id"])
+            self.assertEqual(first, self.git(checkout, "rev-parse", "HEAD"))
+            self.assertEqual(self.git(checkout, "status", "--porcelain"), "")
+            occupied = self.run_scaffold(root, name, "--personal-codex", check=False)
+            self.assertNotEqual(occupied.returncode, 0)
+            self.git(checkout, "remote", "set-url", "origin", "https://github.com/Other/sample.product")
+            foreign = self.run_scaffold(root, name, "--personal-codex", "--resume", check=False)
+            self.assertNotEqual(foreign.returncode, 0)
+            self.assertIn("origin or push URL changed", foreign.stderr)
+
+    def test_personal_create_requires_the_selected_parent_as_cwd(self):
+        helper = ROOT / "_ops/portability/personal_scaffold.py"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            owner = root / "personal/src/KleinPerkins"
+            owner.mkdir(parents=True)
+            args = ["python3", "-I", "-B", str(helper), "acquire", "sample", str(root), "0"]
+            refused = subprocess.run(args, cwd=root, capture_output=True, text=True)
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn("selected owner directory changed", refused.stderr)
+            self.assertEqual(list(owner.iterdir()), [])
+            for protected in ("chaos-scheduler", "CHAOS-SCHEDULER", "server-guard",
+                              "chaos-labs", "pr-automation-controller", "sterling.io"):
+                with self.subTest(protected=protected):
+                    denied = [*args[:5], protected, *args[6:]]
+                    result = subprocess.run(denied, cwd=owner, text=True, capture_output=True)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("Dev policy", result.stderr)
+                    self.assertEqual(list(owner.iterdir()), [])
+            selected = subprocess.check_output(args, cwd=owner, text=True).strip()
+            info = (owner / "sample").stat()
+            self.assertEqual(selected, f"{info.st_dev}:{info.st_ino}")
+
+            # The checkout-location guard checks the acquired inode and inherited checkout descriptor.
+            checkout = owner / "sample"
+            check = ["bash", "-c", 'exec 9<.; exec python3 -I -B "$1" check "$2" "$3" ""',
+                     "check", str(helper), str(checkout)]
+            subprocess.run([*check, selected], cwd=checkout, check=True)
+            mismatch = subprocess.run([*check, "wrong-inode"], cwd=checkout, capture_output=True, text=True)
+            self.assertNotEqual(mismatch.returncode, 0)
+            self.assertIn("selected checkout location changed", mismatch.stderr)
+            self.assertEqual(list(checkout.iterdir()), [])
+
+    def test_personal_remote_replay_preserves_unrelated_work(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            owner = root / "personal/src/KleinPerkins"
+            owner.mkdir(parents=True)
+            args = ("--personal-codex", "--fixture-repository-id", "81357", "--no-push")
+            name = "remote-replay"
+            initial = self.run_scaffold(root, name, *args, "--fixture-interrupt-after",
+                                        "remote-created", check=False)
+            self.assertEqual(initial.returncode, 75, initial.stderr)
+            target = owner / name
+            first = self.git(target, "rev-parse", "HEAD")
+            note = target / "local-notes.txt"
+            note.write_text("unrelated work")
+            attempt = self.run_scaffold(root, name, *args, "--resume", check=False)
+            self.assertNotEqual(attempt.returncode, 0)
+            self.assertIn("unrelated work", attempt.stderr)
+            self.assertEqual(note.read_text(), "unrelated work")
+            self.assertEqual(self.git(target, "rev-parse", "HEAD"), first)
+            note.rename(root / "saved-notes.txt")
+            replay = self.result(self.run_scaffold(root, name, *args, "--resume"))
+            self.assertEqual(replay["commit_count"], 2)
+            self.assertEqual(replay["github_repository_id"], 81357)
+            calls = (root / ".doc-warden-fixture-remotes/remote-replay.calls").read_text().splitlines()
+            self.assertEqual(sum(line.startswith("repo create ") for line in calls), 1)
+
+    def test_personal_product_refuses_excluded_names_and_linked_owners(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "personal/src").mkdir(parents=True)
+            other = root / "other"
+            other.mkdir()
+            (root / "personal/src/KleinPerkins").symlink_to(other, target_is_directory=True)
+            for name in ("chaos-scheduler", "server-guard", "chaos-labs",
+                         "pr-automation-controller", "..", "repo-platform", "sample.product"):
+                with self.subTest(name=name):
+                    result = self.run_scaffold(root, name, "--personal-codex", check=False)
+                    self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(list(other.iterdir()), [])
 
     def test_remote_observation_is_second_guarded_commit_and_resume_is_idempotent(self):
         with tempfile.TemporaryDirectory(prefix="doc-warden-m4-remote-") as directory:
