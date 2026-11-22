@@ -61,6 +61,10 @@ preview. Re-preview after unrelated directory changes. Interrupted apply and
 replay reconstruct only exact outputs of the same operation; foreign files,
 empty directories and changed output bytes are refused. Legacy prose and
 receipts are read without rewriting them.
+A receipt that carries approved bytes forward with an unchanged replacement
+still contributes its receipt and event to the observed inputs. Authority
+requires a unique freeze that introduced those bytes. An unchanged
+replacement alone cannot establish approval.
 
 Draft, update and successor previews accept `--parents-file` for an ADR that
 depends on existing approved artifacts. The JSON file contains `observed_at`
