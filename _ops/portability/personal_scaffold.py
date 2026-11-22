@@ -16,7 +16,7 @@ from personal_scope import absolute_directory, child_directory, operator_home
 LAYOUT = ("personal", "src", "KleinPerkins")
 
 
-def target(name, fixture, resume, *, acquire=False):
+def check_product_name(name):
     if (not re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}", name)
             or name.endswith(".") or name.lower().endswith(".git")
             or name.casefold() in {"repo-platform", "dev-main-sync"}):
@@ -29,6 +29,9 @@ def target(name, fixture, resume, *, acquire=False):
     ).strip()
     if disposition != "unenrolled":
         raise ValueError("Dev policy allows personal creation only for an unenrolled product")
+
+
+def owner_location(fixture):
     # Resolve only the system temp alias. Never follow a fixture child link.
     if fixture:
         bases = [Path("/tmp")]
@@ -51,6 +54,12 @@ def target(name, fixture, resume, *, acquire=False):
     else:
         root = operator_home()
         parts = ("dev", *LAYOUT)
+    return root, parts
+
+
+def target(name, fixture, resume, *, acquire=False):
+    check_product_name(name)
+    root, parts = owner_location(fixture)
     if any(key in os.environ for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
             "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
             "GIT_NAMESPACE", "GIT_QUARANTINE_PATH")):
@@ -120,9 +129,13 @@ def binding(checkout, fixture, repository_id):
             or git("rev-parse", "--path-format=absolute", "--git-path", "hooks") != str(gitdir / "hooks")
             or git("symbolic-ref", "--short", "HEAD") != "main"):
         raise ValueError("expected a primary main checkout with repository-local hooks")
+    return checkout_binding(checkout, fixture, repository_id, checkout.lstat(), gitdir.lstat())
+
+
+def checkout_binding(checkout, fixture, repository_id, checkout_info, git_info):
+    """Identity recorded when the personal scaffold first acquires the checkout."""
     identity = [str(checkout), "fixture" if fixture else "personal", repository_id]
-    for path in (checkout, gitdir):
-        info = path.lstat()
+    for info in (checkout_info, git_info):
         if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
             raise ValueError("expected an operator-owned checkout")
         identity.extend((info.st_dev, info.st_ino))

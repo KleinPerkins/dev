@@ -32,6 +32,28 @@ of the folder name (macOS volumes ignore both). Under `affirm/` it acts only whi
 narrow policy exception in `_ops/POLICY.md` (§7) is in force and it can prove that
 nothing is writing to the checkout; otherwise those targets stay operator gates.
 
+### Inspect a personal scaffold before retirement
+
+For a product created with `dev-new-repo.sh --personal-codex` whose name is
+still unenrolled in Dev policy, inspect one explicit checkout before planning recovery:
+
+```sh
+_ops/bin/dev-remove-repo.sh view --personal-codex personal/src/KleinPerkins/sample.product
+```
+
+The view compares the saved creation binding with the checkout path and the
+identities of both the checkout directory and its Git directory. It checks the
+origin stored in the local Git config and counts registration records in that
+Git directory. Registered destinations can be offline. The JSON field
+`recorded_repository_id` comes from the local creation record. A local-only
+scaffold can have an empty ID. Use the creator’s `--fixture-root` for a
+disposable exercise.
+
+Preserve the original directories if the creation operation must resume after
+recovery. A byte copy receives new directory identities. This inspection leaves
+the checkout and retirement journals untouched. Personal removal still requires
+separate evidence for unshared work, consumers, active writers and recovery.
+
 ## 1. Preflight: freeze the manifest
 
 1. Name the exact checkouts as canonical paths under `~/dev`. A bare repository name is

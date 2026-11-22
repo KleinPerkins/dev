@@ -441,6 +441,51 @@ class DevRemoveRepoTests(unittest.TestCase):
     def setUp(self):
         self.fx = Fx(self)
 
+    def test_personal_view_recognises_original_scaffold_after_restore(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            owner = root / "personal/src/KleinPerkins"
+            owner.mkdir(parents=True)
+            checkout = owner / "sample.product"
+            env = {**os.environ, "DEV_SESSION_ID": "retirement-fixture-" + root.name,
+                   "XDG_STATE_HOME": str(root / "state")}
+            created = subprocess.run([str(ROOT / "_ops/bin/dev-new-repo.sh"), "--personal-codex",
+                                      checkout.name, "--fixture-root", str(root)],
+                                     env=env, text=True, capture_output=True)
+            self.assertEqual(created.returncode, 0, created.stderr)
+            command = [str(SCRIPT), "view", "--personal-codex", "--fixture-root", str(root), "--json"]
+
+            def view(*paths):
+                result = subprocess.run([*command, *map(str, paths)], env=env, text=True, capture_output=True)
+                data = json.loads(result.stdout)
+                self.assertEqual(result.returncode, data["exit"])
+                return data
+
+            relative = checkout.relative_to(root)
+            observed = view(relative)
+            self.assertTrue(observed["ok"], observed)
+            self.assertTrue(observed["creation_binding_matches"])
+            self.assertEqual(observed["linked_registrations"], 0)
+            self.assertIsNone(observed["recorded_repository_id"])
+            self.assertFalse(observed["removal_ready"])
+            self.assertFalse(view(relative, "unselected")["ok"])
+            self.assertFalse(view(Path("personal") / checkout.name)["ok"])
+            registration = checkout / ".git/worktrees/disconnected"
+            registration.mkdir(parents=True)
+            (registration / "gitdir").write_text(str(root / "unavailable/.git") + "\n")
+            self.assertEqual(view(checkout)["linked_registrations"], 1)
+            (registration / "gitdir").unlink()
+            self.assertFalse(view(checkout)["ok"])
+            registration.rmdir()
+            original = root / "original"
+            checkout.rename(original)
+            shutil.copytree(original, checkout, symlinks=True)
+            self.assertIn("does not match", view(checkout)["refused"])
+            checkout.rename(root / "byte-copy")
+            original.rename(checkout)
+            self.assertEqual(view(checkout), observed)
+            self.assertFalse((root / "state/dev-repo-removal").exists())
+
     # ------------------------------------------------------------------ preview / confirm basics
     def test_clean_checkout_end_to_end(self):
         fx = self.fx
@@ -3267,6 +3312,7 @@ class DevRemoveRepoTests(unittest.TestCase):
 
 # The fast tier that verify-operating-model.sh runs (about a minute); `make dev-remove-repo-verify` runs everything.
 SMOKE = (
+    "test_personal_view_recognises_original_scaffold_after_restore",
     "test_skill_runbook_and_installer_are_wired",
     "test_the_installer_exposes_the_skill_idempotently_and_never_clobbers",
     "test_view_is_read_only_and_creates_no_state",
