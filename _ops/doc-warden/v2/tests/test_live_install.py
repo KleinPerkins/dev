@@ -606,7 +606,7 @@ class LiveInstallTests(unittest.TestCase):
 
     def test_current_owner_requires_qualification_for_this_exact_destination(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             repo, _ = live_install_repository(root)
             home, data = root / "qualified-home", root / "data"
             profile = repo / ".planning/doc-warden.json"

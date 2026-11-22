@@ -554,7 +554,7 @@ class PlanInvalidationTests(unittest.TestCase):
     def test_parent_guard_refuses_bytes_outside_the_receipted_digest(self):
         repo = self.fixture.repo
         continuation = self.persist_accepted_plan([])
-        body_path = repo / continuation.artifact_path
+        body_path = (repo / continuation.artifact_path).resolve(strict=True)
         sidecar_action = next(action for action in continuation.transaction.actions if action.path.endswith(".governance.json"))
         sidecar = json.loads(sidecar_action.content)
         original = body_path.read_bytes()
