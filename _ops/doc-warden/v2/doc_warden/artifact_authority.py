@@ -149,8 +149,9 @@ def resolve_approved_artifact(
     for path in artifact_paths(root):
         if not _in_authority_scope(path, owner, kind):
             continue
-        content_digest = digest_ref(path.read_bytes())
-        metadata = parse_validated_artifact(path, repo=root)
+        content = path.read_bytes()
+        content_digest = digest_ref(content)
+        metadata = parse_validated_artifact(path, repo=root, content=content)
         if metadata["type"] != kind:
             raise ValueError("authority_artifact_identity_mismatch")
         _artifact_identity(root, path, metadata, profile)

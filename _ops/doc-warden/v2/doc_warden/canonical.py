@@ -91,8 +91,11 @@ def digest_file_manifest(paths: list[Path]) -> str:
     return digest_ref(canonical_json(manifest))
 
 
-def parse_artifact(path: Path) -> ParsedArtifact:
-    raw = path.read_text(encoding="utf-8")
+def parse_artifact(path: Path, *, content: bytes | None = None) -> ParsedArtifact:
+    if content is None:
+        raw = path.read_text(encoding="utf-8")
+    else:
+        raw = content.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
     if not raw.startswith("---\n"):
         raise CanonicalError("artifact must begin with JSON front matter")
     end = raw.find("\n---\n", 4)

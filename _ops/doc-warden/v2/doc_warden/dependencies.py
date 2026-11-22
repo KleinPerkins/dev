@@ -1503,8 +1503,9 @@ def _validated_plan_sidecar(
         plan_path = contained_path(repo, plan_relative)
         if plan_path.is_symlink() or not plan_path.is_file():
             raise ValueError("plan_artifact_missing")
-        metadata = parse_validated_artifact(plan_path)
-        plan_digest = digest_ref(plan_path.read_bytes())
+        plan_bytes = plan_path.read_bytes()
+        metadata = parse_validated_artifact(plan_path, content=plan_bytes)
+        plan_digest = digest_ref(plan_bytes)
         if (
             metadata["id"] != artifact_id
             or metadata["type"] != "plan"
@@ -1918,11 +1919,10 @@ def _assert_plan_parent_authority(repo: Path, sidecar: dict[str, Any]) -> None:
     plan_id = sidecar["artifact_id"]
     version = sidecar["artifact_version"]
     plan = contained_path(repo, f".planning/artifacts/{plan_id}-v{version}.md")
-    if digest_ref(plan.read_bytes()) != sidecar["canonical_plan_digest"]:
+    plan_bytes = plan.read_bytes()
+    if digest_ref(plan_bytes) != sidecar["canonical_plan_digest"]:
         raise ValueError("plan_assumption_authority_invalid")
-    metadata = parse_validated_artifact(plan, repo=repo)
-    if digest_ref(plan.read_bytes()) != sidecar["canonical_plan_digest"]:
-        raise ValueError("plan_assumption_authority_invalid")
+    metadata = parse_validated_artifact(plan, repo=repo, content=plan_bytes)
     for relation in metadata.get("relations", []):
         target = relation["target"]
         if relation["relation"] != "derives_from" or target["kind"] != "plan":

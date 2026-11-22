@@ -5,6 +5,7 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 from doc_warden.artifacts import _bindings, apply_preview, consent_for, draft_artifact
 from doc_warden.canonical import canonical_json, digest_ref
@@ -14,6 +15,7 @@ from doc_warden.dependencies import (
     GraphNode,
     PlanAssumption,
     PlanRefinementRequired,
+    _assert_plan_parent_authority,
     assert_plan_assumptions_current,
     compare_plan_assumption,
     dependency_snapshot_bytes,
@@ -547,6 +549,21 @@ class PlanInvalidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "^plan_parent_authority_changed$"):
             assert_plan_assumptions_current(repo, continuation.artifact_id)
         self.assertEqual({path: (repo / path).read_bytes() for path in frozen}, frozen)
+
+        body_path = repo / continuation.artifact_path
+        sidecar = next(json.loads(content) for name, content in frozen.items() if name.endswith(".governance.json"))
+        header, metadata_json, body = body_path.read_text().split("\n", 2)
+        changed = json.loads(metadata_json)
+        changed["relations"] = []
+        alternate = header + "\n" + canonical_json(changed).decode() + body
+        read_text = Path.read_text
+
+        def alternate_text(path, *args, **kwargs):
+            return alternate if path == body_path else read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", alternate_text):
+            with self.assertRaisesRegex(ValueError, "^plan_parent_authority_changed$"):
+                _assert_plan_parent_authority(repo, sidecar)
 
     def test_receipted_legacy_sidecar_without_m2_fields_remains_valid(self):
         def remove_m2_fields(sidecar):
