@@ -486,6 +486,69 @@ class DevRemoveRepoTests(unittest.TestCase):
             self.assertEqual(view(checkout), observed)
             self.assertFalse((root / "state/dev-repo-removal").exists())
 
+    def test_personal_view_observes_selected_peers_and_configured_jobs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            owner = root / "personal/src/KleinPerkins"
+            owner.mkdir(parents=True)
+            target, peer = owner / "sample.source", owner / "sample.reader"
+            for checkout in (target, peer):
+                subprocess.run([str(ROOT / "_ops/bin/dev-new-repo.sh"), "--personal-codex",
+                                checkout.name, "--fixture-root", str(root)],
+                               check=True, capture_output=True)
+            slots = peer / ".agents/skills"
+            slots.mkdir(parents=True)
+            (slots / "whole").symlink_to(os.path.relpath(target / "catalog", slots))
+            local = slots / "local"
+            local.mkdir()
+            resource = local / "table"
+            resource.symlink_to(os.path.relpath(target / "data", local))
+            (slots / "elsewhere").symlink_to(str(target) + "-old/missing")
+            def fetch(name, path, declared_root=str(owner), source="global.dev_root"):
+                return dict(id=name, type="incremental-git-fetch", declared_path=path,
+                            declared_root=declared_root, declared_root_source=source)
+            jobs = dict(schema="local-jobs/configured-jobs/v1", scope="base-configured-instances", complete=True,
+                        instances=[fetch("target", target.name), fetch("peer", str(peer)),
+                                   fetch("ambiguous", target.name, ".", "working-directory"),
+                                   {"id": "other", "type": "custom-job"}])
+            cmd = [str(SCRIPT), "view", "--personal-codex", "--fixture-root", str(root), "--json", str(target)]
+            def view(*args, report=jobs):
+                result = subprocess.run([*cmd, *args], input=json.dumps(report), capture_output=True, text=True)
+                data = json.loads(result.stdout)
+                self.assertEqual(result.returncode, data["exit"])
+                return data
+            selected = ["--retained-scaffold", peer.name]
+            observed = view(*selected, "--jobs-stdin")
+            self.assertTrue(observed["ok"], observed)
+            self.assertFalse(observed["removal_ready"])
+            self.assertEqual([(row["id"], row["relation"]) for row in observed["configured_jobs"]["instances"]],
+                             [("target", "selected-path"), ("peer", "other-spelling"),
+                              ("ambiguous", "unresolved"), ("other", "unresolved")])
+            def links(data):
+                return {r["entry"]: r["relation"] for r in data["retained_scaffold_skills"][peer.name]["links"]}
+            self.assertEqual(links(observed), {".agents/skills/local/table": "selected-path",
+                                              ".agents/skills/whole": "selected-path",
+                                              ".agents/skills/elsewhere": "other-spelling"})
+            self.assertNotIn("configured_jobs", view(*selected))
+            self.assertNotIn("retained_scaffold_skills", view("--jobs-stdin"))
+            self.assertFalse(view("--jobs-stdin", report={**jobs, "complete": False})["ok"])
+            self.assertFalse(view("--jobs-stdin", report={**jobs, "instances": jobs["instances"] * 2})["ok"])
+            for name in (target.name.upper(), "chaos-scheduler", "../sample.reader"):
+                self.assertFalse(view("--retained-scaffold", name)["ok"])
+            self.assertFalse(view(*selected, *selected)["ok"])
+            saved = peer / ".agents/saved"
+            slots.rename(saved)
+            slots.symlink_to(target / "missing")
+            self.assertEqual(links(view(*selected)), {".agents/skills": "selected-path"})
+            slots.unlink()
+            saved.rename(slots)
+            (local / ".git").touch()
+            self.assertFalse(view(*selected)["ok"])
+            # A copied peer's recorded inode binding belongs to its original directory.
+            peer.rename(root / "original-reader")
+            shutil.copytree(root / "original-reader", peer, symlinks=True)
+            self.assertFalse(view(*selected)["ok"])
+
     def test_personal_view_before_the_fixture_provider_id_is_recorded(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
@@ -3340,6 +3403,7 @@ class DevRemoveRepoTests(unittest.TestCase):
 # The fast tier that verify-operating-model.sh runs (about a minute); `make dev-remove-repo-verify` runs everything.
 SMOKE = (
     "test_personal_view_recognises_original_scaffold_after_restore",
+    "test_personal_view_observes_selected_peers_and_configured_jobs",
     "test_skill_runbook_and_installer_are_wired",
     "test_the_installer_exposes_the_skill_idempotently_and_never_clobbers",
     "test_view_is_read_only_and_creates_no_state",

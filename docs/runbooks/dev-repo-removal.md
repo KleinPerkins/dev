@@ -50,6 +50,33 @@ scaffold can have an empty ID. For a disposable exercise, pass the same
 `--fixture-root` and, if selected at creation, the same `--fixture-repository-id`.
 This allows inspection even when the creator stopped before recording the provider ID.
 
+To check whether a retained scaffold uses files in the selected checkout,
+name the retained scaffold explicitly. The same command can compare the
+configuration reported by the installed Local Jobs engine.
+
+```sh
+"$HOME/.codex/skills/local-jobs/scripts/local-jobs.sh" view-jobs --config-only --json |
+  _ops/bin/dev-remove-repo.sh view --personal-codex --jobs-stdin \
+    --retained-scaffold sample.reader personal/src/KleinPerkins/sample.product
+```
+
+Both options are independent. Repeat `--retained-scaffold NAME` for up to eight
+distinct peers. Each peer must match its original creation record. The view reads
+symlink text at and beneath the peer's `.agents/skills`, including links to an
+individual skill's resources. An alias at `.agents` or `.agents/skills` is itself
+reported. The inspection leaves all link destinations unopened. A nested checkout,
+an unreadable directory or a scan limit stops the inspection. The job comparison
+uses declared fetch paths and the root reported by Local Jobs. The input digest
+identifies the specific report supplied, which can become stale.
+
+`selected-path` flags a spelling equal to or beneath the selected checkout after
+component normalization and case folding. Investigate it before retirement.
+`other-spelling` can still refer to the checkout through another alias.
+`unresolved` identifies declarations the view cannot place. The report covers
+only the named peers' skill links and the supplied base job configuration.
+It does not establish use by other clients, historical snapshots, active jobs or
+other repositories. The view always reports `removal_ready: false`.
+
 Preserve the original directories if the creation operation must resume after
 recovery. A byte copy receives new directory identities. This inspection leaves
 the checkout and retirement journals untouched. Personal removal still requires
