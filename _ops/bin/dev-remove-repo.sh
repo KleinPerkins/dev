@@ -1977,11 +1977,16 @@ def local_jobs_instances(ctx):
         if res.ok:
             try:
                 data = json.loads(res.text)
-                inst = data.get("instances") if isinstance(data, dict) else data
-                if isinstance(inst, list):
-                    result = (True, [i for i in inst if isinstance(i, dict)])
             except ValueError:
-                pass
+                raise Refusal("Local Jobs returned an unreadable inventory; repair discovery and retry.")
+            if isinstance(data, dict) and data.get("overlay_errors"):
+                raise Refusal("Local Jobs reported a registry overlay error; repair discovery and retry.")
+            instances = data.get("instances") if isinstance(data, dict) else data
+            if not isinstance(instances, list) or any(not isinstance(row, dict) for row in instances):
+                raise Refusal("Local Jobs returned an invalid instance inventory; repair discovery and retry.")
+            if any(row.get("role") == "error" for row in instances):
+                raise Refusal("Local Jobs could not inventory a quarantined job type; repair discovery and retry.")
+            result = (True, instances)
     ctx.cache["jobs"] = result
     return result
 
