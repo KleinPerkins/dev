@@ -610,7 +610,7 @@ def _validate_install_operation(operation: LiveInstallOperation, *, require_prei
 
 
 @contextmanager
-def _runtime_writer(home: Path, data_home: Path):
+def _runtime_writer(home: Path, data_home: Path, *, project: Path | None = None):
     home, data_home = home.resolve(), data_home.resolve()
     for root in {home, data_home}:
         root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -618,6 +618,11 @@ def _runtime_writer(home: Path, data_home: Path):
         contained_path(home, ".local/state/doc-warden/gsd-install.lock"),
         contained_path(data_home, ".doc-warden-gsd-install.lock"),
     }
+    if project is not None:
+        git_dir = Path(subprocess.check_output(
+            ["git", "-C", str(project), "rev-parse", "--absolute-git-dir"], text=True, timeout=10,
+        ).strip()).resolve(strict=True)
+        locks.add(contained_path(git_dir, "doc-warden-codex-runtime.lock"))
     handles = []
     flags = os.O_RDWR | os.O_CREAT | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:

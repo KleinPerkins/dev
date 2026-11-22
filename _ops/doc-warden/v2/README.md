@@ -191,9 +191,52 @@ the full `changed_file_digests` map, the role’s `descriptor_digest`, the clien
 Doc-Warden verifies the report bytes and exact bindings, then runs the installed
 GSD plan-structure utility on isolated copies of the draft PLAN files. Only the
 proof digest is bound to the transaction. Native authoring and review are
-operator-invoked. Doc-Warden validates the supplied role evidence without
-attesting the client account or launching its workflow. Drafts without native
+operator-invoked. The portable validation route checks the supplied role evidence.
+The Codex adapter below obtains its evidence from an owned native process. Drafts without native
 PLAN files use the ordinary import route.
+
+## Native Codex authoring
+
+The Codex host target projects four GSD 1.11.0 skills into an explicitly
+approved project. The pinned runtime, role configuration, Skills owner module
+and Doc-Warden release stay in Doc-Warden's private runtime state. The target
+adds zero global hooks. The earlier GSD runtime commands retain their recovery
+contract for existing installations.
+
+From the verified Dev release, qualify the explicit client and destination,
+then prepare the installation preview.
+
+~~~bash
+doc-warden.sh runtime qualify-codex --repo DEV --project PROJECT --client CODEX_BINARY
+doc-warden.sh runtime install-codex --repo DEV --project PROJECT --preview
+~~~
+
+The installation preview names the native client, release revision, destination,
+skill paths, preimages and operation digest. Apply the exact current preview
+with the ordinary `apply` command and its external consent envelope. Use
+`runtime doctor-codex --project PROJECT` for native discovery and package
+readback. `runtime uninstall-codex --repo DEV --project PROJECT --preview`
+prepares the corresponding removal. Removal preserves the verified private
+release cache for reproducibility and governs only the owned project paths.
+If a write is interrupted, exact retry verifies the pending record and the
+current descriptor images. A later edit leaves the pending evidence available
+for recovery.
+
+Start from the Codex project and select `$gsd-new-project`,
+`$gsd-discuss-phase`, `$gsd-plan-phase` or `$gsd-validate-phase`. The skill
+passes the operator's decisions to `runtime author-codex` as a bounded private
+brief. The CLI scopes the phase, arguments, files and workers, and stages input
+outside the project. It returns a regular draft preview after validating the
+result. Planning also requires a real independent named checker against the
+exact staged PLAN bytes and machine validation by the pinned GSD utility.
+The generic apply route requires exact consent. Use the existing Doc-Warden
+authority operation to freeze an accepted plan.
+
+The authoring target covers guided kickoff, phase discussion, plan research and
+skipping research, bounded Markdown PRD and ingest sources, and validation of
+an existing phase plan. An attempted `--auto` chain is refused with
+`native_authoring_auto_advance_refused`. Continuity uses the same Save-Game
+checkpoint and read-only resume operations below.
 
 ## Governed authoring continuity
 

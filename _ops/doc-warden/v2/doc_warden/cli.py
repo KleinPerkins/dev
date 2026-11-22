@@ -770,7 +770,10 @@ def build_parser() -> argparse.ArgumentParser:
     migrate.add_argument("--preview", action="store_true")
     runtime = sub.add_parser("runtime")
     runtime.add_argument(
-        "runtime_verb", choices=("qualify-gsd", "install-gsd", "uninstall-gsd", "doctor-gsd")
+        "runtime_verb", choices=(
+            "qualify-gsd", "install-gsd", "uninstall-gsd", "doctor-gsd",
+            "qualify-codex", "install-codex", "uninstall-codex", "doctor-codex", "author-codex",
+        )
     )
     runtime.add_argument("--repo", type=Path, default=Path.cwd())
     runtime.add_argument("--home", type=Path, default=Path(os.environ["HOME"]))
@@ -784,6 +787,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     runtime.add_argument("--preview", action="store_true")
+    runtime.add_argument("--project", type=Path)
+    runtime.add_argument("--client", type=Path)
+    runtime.add_argument("--skill")
+    runtime.add_argument("--argument", action="append", default=[])
+    runtime.add_argument("--operator-input", type=Path)
+    runtime.add_argument("--active-plan")
     runtime.add_argument(
         "--observation",
         type=Path,
@@ -1161,6 +1170,14 @@ def _run(argv: list[str] | None = None) -> int:
             value = apply_continuity(args.operation_id, args.action_digest, consent)
             print(canonical_json(value).decode("utf-8"), end="")
             return 0
+        from .codex_authoring.host_transaction import OPERATION_SCHEMA as CODEX_OPERATION_SCHEMA
+        if schema == CODEX_OPERATION_SCHEMA:
+            from .codex_authoring.commands import apply_codex_install
+
+            consent = parse_json_object(args.consent_envelope.read_bytes()) if args.consent_envelope else None
+            value = apply_codex_install(args.operation_id, args.action_digest, consent)
+            print(canonical_json(value).decode("utf-8"), end="")
+            return 0
         if schema == "doc-warden/live-install-operation/v1":
             if args.consent_envelope is None:
                 raise ValueError("fresh_exact_consent_required")
@@ -1295,6 +1312,19 @@ def _run(argv: list[str] | None = None) -> int:
         print(canonical_json(value).decode("utf-8"), end="")
         return 0
     if args.verb == "runtime":
+        if args.runtime_verb.endswith("-codex"):
+            from .codex_authoring.commands import run_codex_command
+
+            result = run_codex_command(args)
+            if args.runtime_verb == "author-codex":
+                preview, expires_at, native = result
+                result = _transaction_json(preview) | {
+                    "consent_required": True, "expires_at": expires_at, "native_authoring_evidence": native,
+                }
+            print(canonical_json(result).decode("utf-8"), end="")
+            return 0
+        if any((args.project, args.client, args.skill, args.argument, args.operator_input, args.active_plan)):
+            raise ValueError("native_authoring_options_require_codex_runtime")
         if (
             args.observation is not None
             and args.runtime_verb != "doctor-gsd"
@@ -1441,6 +1471,7 @@ def main(argv: list[str] | None = None) -> int:
     runtime_next_action = {
         "live_uninstall_recovery_required": "inspect_retained_runtime_recovery_evidence",
         "live_install_rollback_incomplete": "inspect_retained_runtime_recovery_evidence",
+        "native_authoring_projection_recovery_required": "retry_exact_codex_projection_operation",
     }
     next_action = CONTINUITY_NEXT_ACTION.get(code, runtime_next_action.get(code, "correct_input_and_retry"))
     print(

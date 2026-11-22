@@ -34,12 +34,17 @@ def _verified_package_files(package: Path) -> dict[str, str]:
     return files
 
 
-def run_plan_structure_checks(plans: dict[str, bytes]) -> tuple[ObservedInput, ...]:
-    data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
-    root = data_home.expanduser().resolve()
-    metadata = f"gsd-core/releases/{GSD_REVISION}/node_modules/@opengsd/gsd-core/package.json"
-    package = contained_path(root, metadata).parent
-    node = shutil.which("node")
+def run_plan_structure_checks(
+    plans: dict[str, bytes], *, package: Path | None = None, node_path: Path | None = None,
+) -> tuple[ObservedInput, ...]:
+    if package is None:
+        data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+        root = data_home.expanduser().resolve()
+        metadata = f"gsd-core/releases/{GSD_REVISION}/node_modules/@opengsd/gsd-core/package.json"
+        package = contained_path(root, metadata).parent
+    elif not package.is_absolute() or package.resolve(strict=True) != package:
+        raise ValueError("authoring_checker_pin_mismatch")
+    node = shutil.which("node") if node_path is None else node_path
     if node is None or not package.is_dir():
         raise ValueError("authoring_checker_unavailable")
     try:
