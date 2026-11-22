@@ -264,6 +264,14 @@ class NewRepositoryEndToEndTests(unittest.TestCase):
             self.assertNotEqual(refused.returncode, 0)
             self.assertIn("selected owner directory changed", refused.stderr)
             self.assertEqual(list(owner.iterdir()), [])
+            for protected in ("chaos-scheduler", "CHAOS-SCHEDULER", "server-guard",
+                              "chaos-labs", "pr-automation-controller", "sterling.io"):
+                with self.subTest(protected=protected):
+                    denied = [*args[:5], protected, *args[6:]]
+                    result = subprocess.run(denied, cwd=owner, text=True, capture_output=True)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("Dev policy", result.stderr)
+                    self.assertEqual(list(owner.iterdir()), [])
             selected = subprocess.check_output(args, cwd=owner, text=True).strip()
             info = (owner / "sample").stat()
             self.assertEqual(selected, f"{info.st_dev}:{info.st_ino}")

@@ -21,6 +21,14 @@ def target(name, fixture, resume, *, acquire=False):
             or name.endswith(".") or name.lower().endswith(".git")
             or name.casefold() in {"repo-platform", "dev-main-sync"}):
         raise ValueError("expected a new personal product name")
+    # Direct calls to the acquisition helper must honor Dev's excluded and enrolled names.
+    policy = Path(__file__).resolve().parents[1] / "baseline/delivery-policy.py"
+    disposition = subprocess.check_output(
+        [sys.executable, "-I", "-B", str(policy), "classify", f"KleinPerkins/{name}"],
+        text=True,
+    ).strip()
+    if disposition != "unenrolled":
+        raise ValueError("Dev policy allows personal creation only for an unenrolled product")
     # Resolve only the system temp alias. Never follow a fixture child link.
     if fixture:
         bases = [Path("/tmp")]
