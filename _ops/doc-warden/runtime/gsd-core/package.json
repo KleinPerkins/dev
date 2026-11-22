@@ -9,6 +9,6 @@
     "npm": ">=10.0.0"
   },
   "dependencies": {
-    "@opengsd/gsd-core": "1.11.0"
+    "@opengsd/gsd-core": "1.21.0"
   }
 }
