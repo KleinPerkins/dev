@@ -576,6 +576,21 @@ class DevRemoveRepoTests(unittest.TestCase):
                 self.assertEqual(result.returncode, code)
                 self.assertFalse(json.loads(result.stdout)["ok"])
 
+            target = owner / "local.only"
+            subprocess.run([str(ROOT / "_ops/bin/dev-new-repo.sh"), "--personal-codex", target.name,
+                            "--fixture-root", str(root)], env=env, check=True, capture_output=True)
+            retained = [str(SCRIPT), "view", "--personal-codex", "--json", str(target),
+                        "--fixture-root", str(root), "--retained-scaffold"]
+            match = json.loads(subprocess.check_output([*retained, checkout.name + "=081357"]))
+            self.assertIsNone(match["recorded_repository_id"])
+            self.assertEqual(match["retained_scaffold_skills"][checkout.name]["creation_record_sha256"],
+                             observed["creation_record_sha256"])
+            for selector, expected in [(checkout.name, 1), (checkout.name + "=81357", 1),
+                                       (checkout.name + "=0", 2), (checkout.name + "=", 2)]:
+                refused = subprocess.run([*retained, selector], capture_output=True)
+                self.assertEqual(refused.returncode, expected)
+                self.assertFalse(json.loads(refused.stdout)["ok"])
+
     # ------------------------------------------------------------------ preview / confirm basics
     def test_clean_checkout_end_to_end(self):
         fx = self.fx

@@ -61,7 +61,10 @@ configuration reported by the installed Local Jobs engine.
 ```
 
 Both options are independent. Repeat `--retained-scaffold NAME` for up to eight
-distinct peers. Each peer must match its original creation record. The view reads
+distinct peers. Each peer must match its original creation record. In a
+disposable fixture, `--retained-scaffold NAME=FIXTURE_ID` supplies that peer's
+original ID, including leading zeros, even after an interrupted creation.
+The target's `--fixture-repository-id` applies only to the target. The view reads
 symlink text at and beneath the peer's `.agents/skills`, including links to an
 individual skill's resources. An alias at `.agents` or `.agents/skills` is itself
 reported. The inspection leaves all link destinations unopened. A nested checkout,

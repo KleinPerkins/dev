@@ -1468,10 +1468,12 @@ def personal_scaffold_view(args):
             or os.environ.get("DEV_REMOVE_REPO_FIXTURE_ROOT")):
         raise Refusal("select one canonical product path and use --fixture-root for a personal scaffold fixture", EXIT_USAGE)
     fixture = args.fixture_root
-    supplied_id = args.fixture_repository_id
-    if supplied_id is not None and (not fixture or not re.fullmatch(r"[0-9]+", supplied_id)
-                                    or not supplied_id.strip("0")):
-        raise Refusal("--fixture-repository-id requires a positive ID and a personal --fixture-root", EXIT_USAGE)
+    def fixture_id(value):
+        if value is not None and (not fixture or not re.fullmatch(r"[0-9]+", value) or not value.strip("0")):
+            raise Refusal("an explicit fixture repository ID requires a positive ID and --fixture-root", EXIT_USAGE)
+        return value
+
+    supplied_id = fixture_id(args.fixture_repository_id)
     raw = args.paths[0]
     name = os.path.basename(raw)
     try:
@@ -1480,18 +1482,24 @@ def personal_scaffold_view(args):
         if raw not in (str(checkout), str(Path(*LAYOUT, name))):
             raise Refusal("expected a canonical personal product path")
         check_product_name(name)
-        peers = args.retained_scaffold
-        names = {fold_name(n) for n in [name, *peers]}
-        if len(peers) > 8 or len(names) != len(peers) + 1:
-            raise Refusal("select up to eight distinct retained scaffold names, separate from the target", EXIT_USAGE)
-        for peer in peers:
+        if len(args.retained_scaffold) > 8:
+            raise Refusal("select at most eight retained scaffolds", EXIT_USAGE)
+        peers = []
+        seen = {fold_name(name)}
+        for selector in args.retained_scaffold:
+            peer, separator, value = selector.partition("=")
+            peer_id = fixture_id(value if separator else None)
+            if fold_name(peer) in seen:
+                raise Refusal("select distinct retained scaffold names, separate from the target", EXIT_USAGE)
             check_product_name(peer)
+            seen.add(fold_name(peer))
+            peers.append((peer, peer_id))
         peer_skills = {}
         jobs = None
         with bound_scaffold(root, parts, name, fixture, supplied_id) as (_, saved, recorded_id, records):
-            for peer in peers:
+            for peer, peer_id in peers:
                 peer_path = checkout.with_name(peer)
-                with bound_scaffold(root, parts, peer, fixture) as (fd, peer_saved, _, _):
+                with bound_scaffold(root, parts, peer, fixture, peer_id) as (fd, peer_saved, _, _):
                     links = retained_skill_links(peer_path, fd, checkout)
                     peer_skills[peer] = {"creation_record_sha256": sha256_hex(peer_saved), "links": links}
             if args.jobs_stdin:
@@ -4788,7 +4796,7 @@ def build_parser():
     common(v, True)
     v.add_argument("--operation")
     v.add_argument("--personal-codex", action="store_true", help="inspect one canonical personal scaffold")
-    v.add_argument("--retained-scaffold", action="append", default=[], metavar="NAME",
+    v.add_argument("--retained-scaffold", action="append", default=[], metavar="NAME[=FIXTURE_ID]",
                    help="inspect .agents/skills links inside an explicitly retained personal scaffold")
     v.add_argument("--jobs-stdin", action="store_true", help="read a Local Jobs configuration-only JSON report on stdin")
     v.add_argument("--fixture-root", help="personal scaffold fixture under the system temporary directory")
