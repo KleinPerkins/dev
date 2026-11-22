@@ -11,7 +11,7 @@ from doc_warden.artifacts import (
 )
 from doc_warden.canonical import canonical_json, digest_ref, parse_artifact
 from doc_warden.dependencies import build_graph
-from doc_warden.transactions import MutationRequest, preview_transaction
+from doc_warden.transactions import MutationAction, MutationRequest, preview_transaction
 from doc_warden.validators import active_approved_artifacts, parse_validated_artifact
 from fixture_factory import FixtureFactory
 
@@ -79,6 +79,62 @@ class ArtifactTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "observed_input_drift"):
             apply_preview(plan, consent_for(plan.transaction))
         self.assertFalse((self.fixture.repo / plan.artifact_path).exists())
+
+    def test_unchanged_prd_in_later_freeze_is_evidence_without_displacing_its_authority(self):
+        repo = self.fixture.repo.resolve()
+        prd_id = self.fixture.approve_prd("REQ-001")
+        prd = resolve_approved_artifact(repo, "prd", prd_id)
+        relative = prd.path.relative_to(repo).as_posix()
+        uxr = draft_artifact("uxr", {
+            "title": "Companion requirements", "lifecycle": "approved",
+            "approval": {"actor": "fixture", "date": "2026-01-01"},
+            "requirements": [{"id": "REQ-UX-001", "statement": "Open the dashboard."}],
+        }, repo=repo)
+
+        def apply_freeze(action, *others):
+            transaction = preview_transaction(MutationRequest(
+                repo=repo, repository_key=self.fixture.repository_key, transition="accepted_freeze",
+                actions=(action, *others), bindings=uxr.transaction.bindings,
+            ))
+            return apply_preview(transaction, consent_for(transaction))
+
+        raw = prd.path.read_bytes()
+        batch = apply_freeze(MutationAction(relative, raw, "replace"), *uxr.transaction.actions)
+        state = repo / "_ops/doc-warden/state/v2"
+        original = state / "receipts" / f"{prd.operation_id}.json"
+        original_event = state / "events" / f"{json.loads(original.read_bytes())['event_id']}.json"
+        batch_receipt = state / "receipts" / f"{batch['operation_id']}.json"
+        batch_event = state / "events" / f"{batch['event_id']}.json"
+        preimages = {path: path.read_bytes() for path in (
+            prd.path, original, original_event, batch_receipt, batch_event,
+        )}
+
+        resolved = resolve_approved_artifact(repo, "prd", prd_id)
+        self.assertEqual((resolved.source_revision, resolved.operation_id), (prd.source_revision, prd.operation_id))
+        self.assertEqual(resolve_approved_artifact(repo, "uxr").operation_id, batch["operation_id"])
+        plan = draft_artifact("plan", {"title": "Governed plan", "prd_id": prd_id}, repo=repo)
+        inputs = {item.path: item.digest for item in plan.transaction.observed_inputs}
+        for path, preimage in preimages.items():
+            self.assertEqual(inputs[str(path)], digest_ref(preimage))
+            self.assertEqual(path.read_bytes(), preimage)
+
+        batch_event.write_bytes(preimages[batch_event] + b"\n")
+        with self.assertRaisesRegex(ValueError, "^observed_input_drift$"):
+            apply_preview(plan, consent_for(plan.transaction))
+        with self.assertRaisesRegex(ValueError, "^adr_freeze_receipt_invalid$"):
+            resolve_approved_artifact(repo, "prd", prd_id)
+        batch_event.write_bytes(preimages[batch_event])
+
+        original.unlink()
+        with self.assertRaisesRegex(ValueError, "^authority_freeze_required$"):
+            resolve_approved_artifact(repo, "prd", prd_id)
+        original.write_bytes(preimages[original])
+
+        # Two creation records for the same approved bytes remain ambiguous.
+        prd.path.unlink()
+        apply_freeze(MutationAction(relative, raw, "create"))
+        with self.assertRaisesRegex(ValueError, "^authority_freeze_ambiguous$"):
+            resolve_approved_artifact(repo, "prd", prd_id)
 
     def test_changed_or_deleted_frozen_prd_successor_cannot_restore_authority_to_its_predecessor(self):
         predecessor = self.fixture.approve_prd("REQ-001")

@@ -92,21 +92,30 @@ def _freeze_evidence(
         if receipt["github_repository_id"] != repository_id:
             raise ValueError("authority_freeze_mismatch")
         observed[str(event)] = ObservedInput(str(event), event_digest)
+        preimages = receipt["preimages"]
+        actions = {action["path"]: action["kind"] for action in receipt["actions"]}
         for relative, digest in matches:
             artifact = contained_path(repo, relative)
-            if artifact in accepted:
-                raise ValueError("authority_freeze_ambiguous")
-            if not artifact.is_file() or digest_ref(artifact.read_bytes()) != digest:
+            unchanged = preimages[relative] == digest
+            if (not artifact.is_file() or digest_ref(artifact.read_bytes()) != digest
+                    or (unchanged and actions[relative] != "replace")):
                 raise ValueError("authority_freeze_mismatch")
             if kind == "plan":
-                sidecar = artifact.with_suffix(".governance.json")
-                sidecar = contained_path(repo, sidecar.relative_to(repo).as_posix())
+                sidecar_relative = artifact.with_suffix(".governance.json").relative_to(repo).as_posix()
+                sidecar = contained_path(repo, sidecar_relative)
                 if not sidecar.is_file():
                     raise ValueError("authority_plan_sidecar_required")
                 pair_digest = digest_ref(sidecar.read_bytes())
-                if frozen.get(sidecar.relative_to(repo).as_posix()) != pair_digest:
+                if (frozen.get(sidecar_relative) != pair_digest
+                        or (unchanged and preimages[sidecar_relative] != pair_digest)):
                     raise ValueError("authority_freeze_mismatch")
                 observed[str(sidecar)] = ObservedInput(str(sidecar), pair_digest)
+            # A batch can carry forward bytes that an earlier receipt froze.
+            # Bind that evidence above so drift still invalidates the preview.
+            if unchanged:
+                continue
+            if artifact in accepted:
+                raise ValueError("authority_freeze_ambiguous")
             accepted[artifact] = (digest, receipt["source_revision"], receipt["operation_id"])
     return accepted, observed
 
