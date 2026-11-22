@@ -2395,34 +2395,110 @@ class DevRemoveRepoTests(unittest.TestCase):
         exec(compile(body, "dev-remove-repo.sh(engine)", "exec"), namespace)
         return namespace
 
-    def test_recorded_worktrees_resolve_absolute_and_relative_records_and_skip_links(self):
+    def test_worktree_registry_preserves_relative_and_absolute_records(self):
         ns = self.load_engine()
-        with tempfile.TemporaryDirectory(prefix="drr-wt-") as tmp:
-            checkout = Path(tmp) / "repo"
-            admin = checkout / ".git" / "worktrees"
-            (admin / "abs").mkdir(parents=True)
-            (admin / "abs" / "gitdir").write_text(str(Path(tmp) / "elsewhere" / "abs-wt" / ".git") + "\n")
-            (admin / "rel").mkdir()
-            (admin / "rel" / "gitdir").write_text("../../../../rel-wt/.git\n")
-            (admin / "empty").mkdir()
-            (admin / "empty" / "gitdir").write_text("")
-            (admin / "linked").mkdir()
-            outside = Path(tmp) / "outside.txt"
-            outside.write_text(str(Path(tmp) / "never-read" / ".git") + "\n")
-            os.symlink(str(outside), str(admin / "linked" / "gitdir"))
-            fd = os.open(str(checkout), os.O_RDONLY)
-            try:
-                found = ns["registered_worktrees"](fd, str(admin))
-                self.assertEqual(found, sorted([str(Path(tmp) / "elsewhere" / "abs-wt"), str(Path(tmp) / "rel-wt")]))
-            finally:
-                os.close(fd)
-            bare = Path(tmp) / "bare"
-            bare.mkdir()
-            fd = os.open(str(bare), os.O_RDONLY)
-            try:
-                self.assertEqual(ns["registered_worktrees"](fd, str(bare / ".git" / "worktrees")), [])
-            finally:
-                os.close(fd)
+        checkout = self.fx.repo("personal/alpha")
+        admin = checkout / ".git" / "worktrees"
+        for name, pointer in [("abs", str(self.fx.outside / "example" / ".git")), ("rel", "../../../../peer/.git")]:
+            (admin / name).mkdir(parents=True)
+            (admin / name / "gitdir").write_text(pointer + "\n")
+        fd = os.open(checkout, os.O_RDONLY)
+        try:
+            records = ns["registration_records"](fd)
+            paths = ns["registration_paths"](records, str(admin))
+            self.assertEqual(set(paths), {str(self.fx.outside / "example"), str(checkout.parent / "peer")})
+        finally:
+            os.close(fd)
+
+    def test_incomplete_registration_refuses_preview_and_preserves_checkouts(self):
+        fx = self.fx
+        repo = fx.repo("personal/alpha")
+        peer = fx.repo("personal/peer")
+        entry = repo / ".git" / "worktrees" / "unfinished"
+        entry.mkdir(parents=True)
+        record = entry / "gitdir"
+        for case in ("missing", "empty", "not-gitdir", "link"):
+            with self.subTest(case=case):
+                if case == "empty":
+                    record.write_bytes(b"")
+                elif case == "not-gitdir":
+                    record.write_text("unresolved\n")
+                elif case == "link":
+                    record.symlink_to(peer / "README.md")
+                result, preview = fx.preview("personal/alpha")
+                self.assertEqual(result.rc, 1, result.text)
+                self.assertNotIn("operation", preview)
+                self.assertTrue(repo.exists() and peer.exists())
+                if os.path.lexists(record):
+                    record.unlink()
+
+    def test_incomplete_registration_in_marker_refuses_then_resumes_after_repair(self):
+        fx = self.fx
+        repo, data, _sid, out = self.interrupted_run("after-rename")
+        self.assertEqual(out.rc, 75, out.text)
+        marker, = repo.parent.glob(".drr-*.removing")
+        missing = marker / ".git/worktrees/unfinished"
+        missing.mkdir(parents=True)
+        before = digest_tree(marker)
+        refused = fx.run("resume", "--operation", data["operation"], "--json")
+        self.assertEqual(refused.rc, 1, refused.text)
+        self.assertEqual(digest_tree(marker), before)
+        self.assertNotIn("purge-start", fx.kinds(data["operation"]))
+        missing.rmdir()
+        self.assertEqual(fx.run("resume", "--operation", data["operation"], "--json").rc, 0)
+        self.assertEqual(fx.run("verify", "--operation", data["operation"], "--json").rc, 0)
+
+    def test_moved_registered_worktree_requires_reconciliation_before_preview(self):
+        fx = self.fx
+        primary = fx.repo("personal/alpha")
+        alias = fx.linked_worktree(primary, fx.home / ".cursor/worktrees/alpha/example")
+        moved = fx.outside / "moved-example"
+        alias.rename(moved)
+        result, preview = fx.preview("personal/alpha")
+        self.assertEqual(result.rc, 1, result.text)
+        self.assertIn("worktree-unavailable", self.blockers(result))
+        self.assertNotIn("operation", preview)
+        self.assertTrue(moved.is_dir() and primary.is_dir())
+
+    def test_partial_purge_uses_only_its_recorded_internal_registration(self):
+        fx = self.fx
+        primary = fx.repo("personal/alpha")
+        fx.linked_worktree(primary, primary / "internal")
+        result, preview = fx.preview("personal/alpha")
+        self.assertEqual(result.rc, 0, result.text)
+        sid, = fx.step_ids(preview, "delete-checkout")
+        interrupted = fx.confirm(preview, interrupt="after-registration-check:" + sid)
+        self.assertEqual(interrupted.rc, 75, interrupted.text)
+        marker, = primary.parent.glob(".drr-*.removing")
+        table = marker / ".git/worktrees"
+        known, = table.iterdir()
+        (known / "gitdir").unlink()  # a directory left partway through authorized cleanup
+        unknown = table / "different"
+        unknown.mkdir()
+        before = digest_tree(marker)
+        refused = fx.run("resume", "--operation", preview["operation"], "--json")
+        self.assertEqual(refused.rc, 1, refused.text)
+        self.assertEqual(digest_tree(marker), before)
+        unknown.rmdir()
+        resumed = fx.run("resume", "--operation", preview["operation"], "--json")
+        self.assertEqual(resumed.rc, 0, resumed.text)
+        self.assertEqual(fx.kinds(preview["operation"]).count("purge-start"), 1)
+        self.assertEqual(fx.run("verify", "--operation", preview["operation"], "--json").rc, 0)
+
+    def test_incomplete_retained_repository_registration_keeps_verification_open(self):
+        fx = self.fx
+        fx.repo("personal/alpha")
+        peer = fx.repo("personal/peer")
+        data, result = fx.run_all("personal/alpha")
+        self.assertEqual(result.rc, 0, result.text)
+        missing = peer / ".git/worktrees/unfinished"
+        missing.mkdir(parents=True)
+        checked = fx.run("verify", "--operation", data["operation"], "--json")
+        self.assertEqual(checked.rc, 1, checked.text)
+        self.assertIn("worktrees-absent", [c["id"] for c in checked.data["checks"] if c["status"] == "fail"])
+        self.assertNotIn("close", fx.kinds(data["operation"]))
+        missing.rmdir()
+        self.assertEqual(fx.run("verify", "--operation", data["operation"], "--json").rc, 0)
 
     def test_the_search_size_limit_is_reported_and_skipped_files_are_counted_only_where_measured(self):
         fx = self.fx

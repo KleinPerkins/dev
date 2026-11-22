@@ -74,6 +74,7 @@ import sys
 import tempfile
 import time
 import unicodedata
+from contextlib import ExitStack
 from datetime import datetime, timezone
 
 TOOL = "dev-remove-repo"
@@ -1202,53 +1203,93 @@ def _rm_contents(dirfd, dev, counters, hook=None, depth=0):
             hook("entry", counters)
 
 
-def registered_worktrees(tfd, admin_path):
-    """Folders of the linked worktrees recorded in a checkout's own Git state, read through its open descriptor.
+def registration_id(name, identity):
+    return digest_of([sha256_hex(os.fsencode(name)), identity])
 
-    No link is followed. Each record is a plain file named `gitdir` holding the path of that worktree's .git file;
-    a relative record is resolved against `admin_path`, where the checkout's `.git/worktrees` is spelled in its
-    original place. Nothing is run and nothing is changed."""
-    folders = []
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+
+def registration_binding(name, row):
+    return digest_of([registration_id(name, row["identity"]), sha256_hex(os.fsencode(row["gitdir"]))])
+
+
+def registration_records(tfd, *, purging=(), allow_missing_git=False):
+    """Read the selected checkout's own registration table without visiting any worktree."""
+    records = {}
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
     try:
-        gfd = os.open(".git", O_DIR_NOFOLLOW, dir_fd=tfd)
-    except OSError:
-        return folders
-    try:
-        try:
-            wfd = os.open("worktrees", O_DIR_NOFOLLOW, dir_fd=gfd)
-        except OSError:
-            return folders
-        try:
-            for name in sorted(os.listdir(wfd)):
+        with ExitStack() as stack:
+            def directory(parent, name):
+                fd = os.open(name, O_DIR_NOFOLLOW, dir_fd=parent)
+                stack.callback(os.close, fd)
+                return fd
+
+            try:
+                git = directory(tfd, ".git")
+            except FileNotFoundError:
+                if allow_missing_git:
+                    return {}
+                raise
+            try:
+                table = directory(git, "worktrees")
+            except FileNotFoundError:
+                return {}
+            names = sorted(os.listdir(table))
+            for name in names:
+                entry = os.open(name, O_DIR_NOFOLLOW, dir_fd=table)
                 try:
-                    efd = os.open(name, O_DIR_NOFOLLOW, dir_fd=wfd)
-                except OSError:
-                    continue
-                try:
+                    identity = stat_identity(os.fstat(entry))
                     try:
-                        rfd = os.open("gitdir", flags, dir_fd=efd)
-                    except OSError:
+                        fd = os.open("gitdir", flags, dir_fd=entry)
+                    except FileNotFoundError:
+                        # A prior purge may have unlinked the pointer and stopped before rmdir.
+                        # The purge guard already checked this exact registration was inside the checkout.
+                        if registration_id(name, identity) not in purging:
+                            raise
+                        records[name] = {"identity": identity, "gitdir": None}
                         continue
                     try:
-                        raw = os.read(rfd, 4097)
+                        if not stat.S_ISREG(os.fstat(fd).st_mode):
+                            raise Refusal("a worktree registration has no regular gitdir record")
+                        raw = os.read(fd, 4097)
                     finally:
-                        os.close(rfd)
+                        os.close(fd)
+                    path = os.fsdecode(raw[:-1] if raw.endswith(b"\n") else raw)
+                    if len(raw) > 4096 or "\0" in path or os.path.basename(path) != ".git":
+                        raise Refusal("a worktree registration has an incomplete gitdir path")
+                    records[name] = {"identity": identity, "gitdir": path}
                 finally:
-                    os.close(efd)
-                if not raw or len(raw) > 4096 or b"\0" in raw:
-                    continue
-                record = os.fsdecode(raw).strip()
-                if not record:
-                    continue
-                if not os.path.isabs(record):
-                    record = os.path.normpath(os.path.join(admin_path, name, record))
-                folders.append(os.path.dirname(record))
-        finally:
-            os.close(wfd)
+                    os.close(entry)
+            if sorted(os.listdir(table)) != names:
+                raise Refusal("the worktree registration list changed during inspection")
+    except OSError as exc:
+        raise Refusal("a worktree registration could not be read (%s); inspect it before continuing" %
+                      errno.errorcode.get(exc.errno, "I/O error"))
+    return records
+
+
+def registration_paths(records, admin):
+    return [os.path.dirname(os.path.normpath(os.path.join(admin, name, row["gitdir"])))
+            for name, row in records.items()]
+
+
+def checked_worktree_list(ctx, path):
+    """Git can omit an incomplete registration from a successful porcelain listing."""
+    fd, parent = open_chain(ctx, os.path.relpath(path, ctx.root).split("/"))
+    try:
+        records = registration_records(fd)
+        result = _git(ctx, path, "worktree", "list", "--porcelain", "-z")
+        if not result.ok:
+            raise Refusal("Git could not list worktrees")
+        listing = parse_worktrees(result.out)
+        expected = registration_paths(records, os.path.join(path, ".git", "worktrees"))
+        if (not listing or listing[0].get("path") != path
+                or sorted(r.get("path", "") for r in listing[1:]) != sorted(expected)
+                or registration_records(fd) != records):
+            raise Refusal("Git's worktree listing does not match the registration table")
+        return listing, records
     finally:
-        os.close(gfd)
-    return sorted(set(folders))
+        os.close(fd)
+        if parent is not None:
+            os.close(parent)
 
 
 def tombstone_name(operation_id, step_id, rel):
@@ -1638,12 +1679,12 @@ def collect_git(ctx, path):
         out["error"] = "git could not list stashes"
         return out
     out["stashes"] = len([ln for ln in stash.text.splitlines() if ln.strip()])
-    wt = _git(ctx, path, "worktree", "list", "--porcelain", "-z")
-    if not wt.ok:
-        out["error"] = "git could not list worktrees"
+    try:
+        listing, out["registrations"] = checked_worktree_list(ctx, path)
+    except (Refusal, PathProblem) as exc:
+        out["error"] = exc.message
         return out
-    records = parse_worktrees(wt.out)
-    out["worktrees"] = records[1:] if records else []
+    out["worktrees"] = listing[1:]
     state = []
     for name in GIT_STATE_NAMES:
         if lexists_nofollow(os.path.join(gitdir, name)):
@@ -2690,6 +2731,8 @@ def collect_core(ctx, t, fleet, slug_index, op_rels):
         info = worktree_detail(ctx, record, path)
         wts.append(info)
         if not info["exists"]:
+            t["blockers"].append(blocker("worktree-unavailable", "a registered worktree is missing at %s" % info["path"],
+                                         "locate the worktree and reconcile its registration with its owner"))
             continue
         if info["symlink"]:
             t["blockers"].append(blocker("worktree-path-symlink", "linked worktree path %s is a symbolic link" % info["path"]))
@@ -3154,6 +3197,7 @@ def manifest_of(targets):
                 "root_class": t["root_class"],
                 "state": t["state"],
                 "identity": t.get("identity"),
+                "registrations": sorted(registration_binding(name, row) for name, row in g.get("registrations", {}).items()),
                 "slugs": g.get("slugs", []),
                 "names": [os.path.basename(t["rel"])],
             }
@@ -3360,18 +3404,14 @@ def plain_aspect(aspect_id):
 def unplanned_worktrees(op, t):
     """Linked worktrees outside the checkout that the approved plan does not cover (they appeared after the preview)."""
     planned = {s["params"]["path"] for s in op["steps"] if s["kind"] == "worktree-remove" and s["target"] == t["rel"]}
-    return sorted(w["path"] for w in t.get("worktrees", []) if w["exists"] and not w["inside_target"] and w["path"] not in planned)
-
-
-def stray_worktrees(ctx, tfd, rel, work_path):
-    """Linked worktrees that still exist outside a checkout that has been set aside for deletion.
-
-    The plan's own worktrees are removed before the checkout, so any recorded worktree that is still there
-    was added after the confirmation. Deleting the checkout's Git state would strand it. Read through the
-    open descriptor, so no link is followed and nothing runs."""
-    root = os.path.join(ctx.root, rel)
-    admin = os.path.join(work_path, ".git", "worktrees")  # the folder the descriptor reads, so relative records resolve from where it is now
-    return [f for f in registered_worktrees(tfd, admin) if lexists_nofollow(f) and not is_under(f, root) and not is_under(f, work_path)]
+    extra = {w["path"] for w in t.get("worktrees", []) if w["exists"] and not w["inside_target"] and w["path"] not in planned}
+    manifest = next(row for row in op["targets"] if row["rel"] == t["rel"])
+    approved = manifest.get("registrations")
+    if approved is not None:
+        current = (t.get("git") or {}).get("registrations", {})
+        changed = {name: row for name, row in current.items() if registration_binding(name, row) not in approved}
+        extra.update(registration_paths(changed, os.path.join(t["path"], ".git", "worktrees")))
+    return sorted(extra)
 
 
 def stray_worktree_message(strays):
@@ -3421,19 +3461,26 @@ class Runner(object):
                 collect_core(ctx, t, fleet_slugs(ctx), {}, {t["rel"]})
         return t
 
-    def set_aside_strays(self, rel, name):
-        """The stray-worktree check for a checkout that already sits under its removal marker."""
-        comps = tombstone_rel(rel, name).split("/")
-        try:
-            fd, parent = open_chain(self.ctx, comps)
-        except PathProblem:
-            return []
-        try:
-            return stray_worktrees(self.ctx, fd, rel, os.path.join(self.ctx.root, *comps))
-        finally:
-            os.close(fd)
-            if parent is not None:
-                os.close(parent)
+    def check_set_aside_registrations(self, step, path, fd, start_purge=False):
+        rel = step["target"]
+        approved = next(row for row in self.op["targets"] if row["rel"] == rel).get("registrations")
+        started = next((event for event in self.j.load().events if event.get("kind") == "purge-start"
+                        and event.get("step") == step["id"]), None)
+        records = registration_records(fd, purging=started["registrations"] if started else (),
+                                       allow_missing_git=bool(started) or approved is None)
+        admin = os.path.join(path, ".git", "worktrees")
+        original = os.path.join(self.ctx.root, rel)
+        for name, row in records.items():
+            if row["gitdir"] is None:
+                continue
+            folder, = registration_paths({name: row}, admin)
+            if ((approved is not None and registration_binding(name, row) not in approved)
+                    or (not is_under(folder, original) and not is_under(folder, path))):
+                raise Refusal(stray_worktree_message([folder]))
+        if start_purge and started is None:
+            self.j.append("purge-start", step=step["id"], subsystem="worktrees", target=rel,
+                          registrations=sorted(registration_id(name, row["identity"]) for name, row in records.items()))
+            self.ctx.interrupt("after-registration-check:" + step["id"])
 
     def revalidate(self, step, resumed):
         kind = step["kind"]
@@ -3453,9 +3500,16 @@ class Runner(object):
                 found, _risks = writer_blockers(self.ctx, rel, tomb, os.path.join(tomb, ".git"), affirm, (os.path.join(self.ctx.root, rel),))
                 if found:
                     return False, "; ".join(b["message"] for b in found[:3])
-                strays = self.set_aside_strays(rel, self.tombstone(step))
-                if strays:
-                    return False, stray_worktree_message(strays)
+                try:
+                    fd, parent = open_chain(self.ctx, tombstone_rel(rel, self.tombstone(step)).split("/"))
+                    try:
+                        self.check_set_aside_registrations(step, tomb, fd)
+                    finally:
+                        os.close(fd)
+                        if parent is not None:
+                            os.close(parent)
+                except (Refusal, PathProblem) as exc:
+                    return False, exc.message
                 # The approval covered the references that existed then. One that appears while the checkout sits under its marker means someone now wants the old path: the marker keeps the data, so stop before deleting it.
                 refs = live_reference_blockers(self.ctx, {"rel": rel, "path": os.path.join(self.ctx.root, rel)}, [os.path.join(self.ctx.root, x["rel"]) for x in self.op["targets"] if x["rel"]])
                 if refs:
@@ -3560,9 +3614,7 @@ class Runner(object):
                 found, _risks = writer_blockers(ctx, rel, work_path, os.path.join(work_path, ".git"), affirm, (os.path.join(ctx.root, rel),))
                 if found:
                     raise Refusal("something started using the checkout after it was set aside: " + "; ".join(b["message"] for b in found[:3]))
-                strays = stray_worktrees(ctx, tfd, rel, work_path)
-                if strays:
-                    raise Refusal(stray_worktree_message(strays))
+                self.check_set_aside_registrations(step, work_path, tfd, start_purge=True)
 
             res = delete_checkout(ctx, p["rel"], p["identity"], hook, self.tombstone(step), guard)
             return {"entries": res["entries"], "already_absent": res["absent"]}
@@ -4110,6 +4162,9 @@ def remove_confirm(ctx, args):
             extra_wt = unplanned_worktrees(op, t) if t["state"] == "present" else []
             if extra_wt:
                 raise Refusal("a linked worktree appeared after the preview (%s); nothing was done, run a new preview" % ", ".join(extra_wt[:2]))
+        for saved, current in zip(op["targets"], manifest_of(targets)):
+            if "registrations" in saved and saved["registrations"] != current["registrations"]:
+                raise Refusal("worktree registrations changed after the preview; start a new preview")
         extra = sorted({r["id"] for t in targets if t["state"] == "present" for r in t["risks"]} - set(waived))
         if extra:
             raise Refusal("a new risk appeared after the preview: %s; run a new preview" % ", ".join(extra))
@@ -4273,11 +4328,12 @@ def cmd_verify(ctx, args):
         wt_paths = [os.path.join(ctx.root, rel) for rel in removed] + [s["params"]["path"] for s in op["steps"] if s["kind"] == "worktree-remove"]
         bad, unreadable = [], []
         for repo in retained_git_repos(ctx):
-            res = run(git_argv(ctx, repo, "worktree", "list", "--porcelain", "-z"), env=git_env(), timeout=SUBPROCESS_TIMEOUT)
-            if not res.ok:
+            try:
+                listing, _registrations = checked_worktree_list(ctx, repo)
+            except (Refusal, PathProblem):
                 unreadable.append(os.path.relpath(repo, ctx.root))
                 continue
-            for rec in parse_worktrees(res.out):
+            for rec in listing:
                 if any(is_under(rec.get("path", ""), wp) for wp in wt_paths):
                     bad.append("%s lists %s" % (os.path.relpath(repo, ctx.root), rec.get("path")))
         add("worktrees-absent", not bad and not unreadable, "no repository still lists a removed worktree" if not (bad or unreadable) else "worktree listings are not clean", bad + ["could not read %s" % r for r in unreadable])
