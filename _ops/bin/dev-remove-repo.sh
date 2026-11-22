@@ -1868,10 +1868,15 @@ def fleet_slugs(ctx):
         data = json.loads(text)
     except ValueError:
         return {"available": False, "slugs": set()}
+    targets = data.get("targets") if isinstance(data, dict) else None
+    if not isinstance(targets, list):
+        return {"available": False, "slugs": set()}
     slugs = set()
-    for row in data.get("targets", []) if isinstance(data, dict) else []:
-        if isinstance(row, dict) and isinstance(row.get("repo"), str):
-            slugs.add(row["repo"].lower())
+    for row in targets:
+        name = row.get("repo") if isinstance(row, dict) else None
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", name):
+            return {"available": False, "slugs": set()}
+        slugs.add(name.lower())
     return {"available": True, "slugs": slugs}
 
 
@@ -2968,9 +2973,11 @@ def attach_wiring(ctx, targets, engine="auto"):
 
 def assess_targets(ctx, raws, engine="auto"):
     targets = resolve_targets(ctx, raws)
+    op_rels = {t["rel"] for t in targets if t["rel"]}
+    if not op_rels:
+        return targets, {"engine": "none", "note": ""}
     fleet = fleet_slugs(ctx)
     slugs = slug_index_for(ctx)
-    op_rels = {t["rel"] for t in targets if t["rel"]}
     for t in targets:
         if not t["rel"]:
             continue

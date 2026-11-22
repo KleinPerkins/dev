@@ -918,6 +918,23 @@ class DevRemoveRepoTests(unittest.TestCase):
         self.assertEqual(digest_tree(fx.dev), before)
         self.assertFalse(fx.state.exists())
 
+    def test_rejected_targets_do_not_start_repository_or_host_observation(self):
+        engine = self.load_engine()
+        class LexicalContext:
+            root = str(self.fx.dev)
+
+        def unexpected(*args, **kwargs):
+            self.fail("lexically rejected targets must stop before any observation")
+
+        for observer in ("fleet_slugs", "slug_index_for", "inspect_fs", "attach_wiring"):
+            engine[observer] = unexpected
+        targets, scan = engine["assess_targets"](LexicalContext(), [
+            "personal/chaos-scheduler", "capabilities/skills", "personal/../personal/alpha",
+        ])
+        self.assertEqual([t["blockers"][0]["id"] for t in targets],
+                         ["protected-target", "protected-target", "path-invalid"])
+        self.assertEqual(scan, {"engine": "none", "note": ""})
+
     def test_a_protected_checkout_is_protected_whatever_its_letter_case(self):
         fx = self.fx
         spellings = ("personal/Chaos-Scheduler", "capabilities/SKILLS", "capabilities/Mcp", "affirm/src/Card-Platform-Product")
@@ -1861,11 +1878,13 @@ class DevRemoveRepoTests(unittest.TestCase):
         other = fx.repo("personal/other", origin=False)
         fx.git(other, "remote", "add", "origin", "https://github.com/Affirm/other.git")
         fleet = fx.dev / "_ops" / "baseline" / "profiles" / "pr-automation" / "v3" / "fleet.json"
-        for breakage in ("missing", "malformed"):
-            if breakage == "missing":
+        for breakage in (None, "{not json", "{}", "[]", '{"targets":null}',
+                         '{"targets":"KleinPerkins/other"}', '{"targets":[{}]}',
+                         '{"targets":[{"repo":"KleinPerkins/other"},{"repo":"missing-owner"}]}'):
+            if breakage is None:
                 fleet.unlink()
             else:
-                fleet.write_text("{not json")
+                fleet.write_text(breakage)
             self.assertEqual(self.blockers(fx.run("view", "personal/alpha", "--json")), ["pac-fleet-unknown"], breakage)
             self.assertEqual(self.blockers(fx.run("view", "personal/offline", "--json")), [], "no remote, nothing to enrol")
             self.assertEqual(self.blockers(fx.run("view", "personal/other", "--json")), [], "not a fleet-eligible owner")
