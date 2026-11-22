@@ -132,6 +132,12 @@ All of this runs through the owner's own verb; none of it hand-edits private sta
 | Generated route index | runs the agent-route full rediscovery once, after the last cohort | reported; refresh it later |
 | Processes, shell shims, package installs, virtual environments, containers | detected and explained only when positively attributed to the checkout; removed through their own lifecycle by the operator | reported |
 
+Local Jobs reports may mention a path in arguments, descriptions or shared scheduler
+metadata. Retirement holds those jobs for their owner to update. Automatic detachment
+requires a unique job ID and either a fetch instance targeting the exact checkout or
+the older single-executable record rooted inside it. The command checks the record
+again before asking Local Jobs to delete it.
+
 Shared stores (transcripts, shared caches, runtimes) are never deleted merely because
 they mention a name.
 

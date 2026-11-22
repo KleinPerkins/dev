@@ -1839,6 +1839,44 @@ class DevRemoveRepoTests(unittest.TestCase):
         remaining = json.loads((fx.tmp / "jobs.json").read_text())["instances"]
         self.assertEqual([j["id"] for j in remaining], ["unrelated"])
 
+    def test_only_an_exclusive_owner_target_can_schedule_job_deletion(self):
+        fx = self.fx
+        repo = fx.repo("personal/alpha")
+        path = str(repo)
+        jobs = [
+            {"id": "descriptive", "role": "instance", "type": "command", "program": "/bin/echo",
+             "description": "Monitor personal/alpha in the team report."},
+            {"id": "several", "role": "instance", "type": "command", "program": path + "/report",
+             "args": [path, "personal/beta"]},
+            {"id": "indirect", "role": "instance", "type": "incremental-git-fetch",
+             "path": path + "/../other", "description": "Formerly personal/alpha"},
+            {"id": "legacy-shell", "role": "job", "command": path + "/tool && echo more"},
+            {"id": "fetch-alpha", "role": "instance", "type": "incremental-git-fetch", "path": path},
+        ]
+        fx.jobs(jobs)
+        refused = fx.run("remove", "personal/alpha", "--json")
+        self.assertEqual(refused.rc, 1, refused.text)
+        self.assertTrue(repo.is_dir())
+        wiring = refused.data["targets"][0]["wiring"]
+        self.assertEqual([j["id"] for j in wiring["jobs"]], ["fetch-alpha"])
+        self.assertCountEqual([j["id"] for j in wiring["job_rows"]], [j["id"] for j in jobs[:-1]])
+        self.assertNotIn("delete-job", (fx.tmp / "local-jobs.calls").read_text())
+        fx.jobs(jobs[-1:])
+        _, done = fx.run_all("personal/alpha")
+        self.assertEqual(done.rc, 0, done.text)
+        self.assertIn("delete-job --id fetch-alpha --confirm", (fx.tmp / "local-jobs.calls").read_text())
+
+    def test_ambiguous_job_id_refuses_before_any_removal(self):
+        fx = self.fx
+        repo = fx.repo("personal/alpha")
+        fx.jobs([{"role": "instance", "type": "incremental-git-fetch", "id": "nightly", "path": str(repo)},
+                 {"role": "instance", "type": "command", "id": "nightly", "program": "/bin/echo"}])
+        result = fx.run("remove", "personal/alpha", "--json")
+        self.assertEqual(result.rc, 1, result.text)
+        self.assertIn("ambiguous instance id", result.data["refused"])
+        self.assertNotIn("delete-job", (fx.tmp / "local-jobs.calls").read_text())
+        self.assertTrue(repo.is_dir())
+
     def test_a_shared_scheduler_row_blocks_until_it_is_removed_by_its_own_verbs(self):
         fx = self.fx
         repo = fx.repo("personal/alpha")
