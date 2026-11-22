@@ -3,6 +3,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 from doc_warden.artifacts import _bindings, apply_preview, consent_for, draft_artifact
@@ -85,6 +86,8 @@ class PlanInvalidationTests(unittest.TestCase):
         *,
         version=1,
         operation_label="accepted-plan-operation",
+        relations=(),
+        supersedes=None,
     ):
         requirement_ids = [
             assumption["target_id"]
@@ -108,6 +111,8 @@ class PlanInvalidationTests(unittest.TestCase):
                 **({"requirement_ids": requirement_ids} if requirement_ids else {}),
                 "task_ids": ["M2-T03"],
                 "assumptions": assumptions,
+                "relations": list(relations),
+                **({"supersedes": supersedes} if supersedes else {}),
             },
             repo=self.fixture.repo,
             operation_id=self.fixture.id_for(operation_label),
@@ -509,6 +514,39 @@ class PlanInvalidationTests(unittest.TestCase):
             {item["kind"] for item in sidecar["assumptions"]},
             {"requirement", "design", "adr", "dependency", "code", "schema"},
         )
+
+    def test_typed_predecessor_retirement_refuses_current_plan_use(self):
+        repo = self.fixture.repo
+        original = self.persist_accepted_plan([])
+        label = "continuation-of-accepted-plan"
+        operation_id = self.fixture.id_for(label)
+        plan_suffix = uuid.uuid5(uuid.UUID(operation_id), "plan")
+        continuation_id = f"PLAN-{self.fixture.repository_key}-{plan_suffix}"
+        plan_parent = {
+            "schema": "doc-warden/relation/v2",
+            "relation": "derives_from",
+            "source_id": continuation_id,
+            "source_kind": "plan",
+            "source_version": 1,
+            "target": {"kind": "plan", "id": original.artifact_id, "version": 1},
+            "authority": "planned",
+            "lifecycle": "active",
+            "observed_at": "2026-08-31T20:00:00Z",
+            "observed_revision": self.revision,
+            "provenance": [{"digest": digest_ref((repo / original.artifact_path).read_bytes())}],
+        }
+        continuation = self.accepted_plan_preview([], operation_label=label, relations=(plan_parent,))
+        apply_preview(continuation, consent_for(continuation.transaction))
+        assert_plan_assumptions_current(repo, continuation.artifact_id)
+        frozen = {action.path: (repo / action.path).read_bytes() for action in continuation.transaction.actions}
+
+        successor = self.accepted_plan_preview(
+            [], version=2, operation_label="parent-successor", supersedes=original.artifact_id,
+        )
+        apply_preview(successor, consent_for(successor.transaction))
+        with self.assertRaisesRegex(ValueError, "^plan_parent_authority_changed$"):
+            assert_plan_assumptions_current(repo, continuation.artifact_id)
+        self.assertEqual({path: (repo / path).read_bytes() for path in frozen}, frozen)
 
     def test_receipted_legacy_sidecar_without_m2_fields_remains_valid(self):
         def remove_m2_fields(sidecar):

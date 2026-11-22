@@ -1911,6 +1911,36 @@ def _observe_assumption(repo: Path, assumption: PlanAssumption) -> dict[str, Any
     return unresolved
 
 
+def _assert_plan_parent_authority(repo: Path, sidecar: dict[str, Any]) -> None:
+    """Enforce typed plan parent relations from the receipt-bound plan body."""
+    from .artifact_authority import resolve_approved_artifact
+
+    plan_id = sidecar["artifact_id"]
+    version = sidecar["artifact_version"]
+    plan = contained_path(repo, f".planning/artifacts/{plan_id}-v{version}.md")
+    if digest_ref(plan.read_bytes()) != sidecar["canonical_plan_digest"]:
+        raise ValueError("plan_assumption_authority_invalid")
+    metadata = parse_validated_artifact(plan, repo=repo)
+    if digest_ref(plan.read_bytes()) != sidecar["canonical_plan_digest"]:
+        raise ValueError("plan_assumption_authority_invalid")
+    for relation in metadata.get("relations", []):
+        target = relation["target"]
+        if relation["relation"] != "derives_from" or target["kind"] != "plan":
+            continue
+        provenance = relation["provenance"]
+        if (relation["source_id"] != plan_id or relation["source_version"] != version
+                or target["id"] == plan_id or type(target["version"]) is not int or len(provenance) != 1
+                or set(provenance[0]) != {"digest"}):
+            raise ValueError("plan_parent_binding_invalid")
+        try:
+            resolve_approved_artifact(
+                repo, "plan", target["id"], version=target["version"],
+                digest=provenance[0]["digest"],
+            )
+        except (OSError, ValueError) as exc:
+            raise ValueError("plan_parent_authority_changed") from exc
+
+
 def refinements_for_active_plan(
     repo: Path,
     plan_id: str | None,
@@ -1919,6 +1949,7 @@ def refinements_for_active_plan(
     sidecar = _plan_sidecar_for_assumption_validation(root, plan_id)
     if sidecar is None:
         return ()
+    _assert_plan_parent_authority(root, sidecar)
     findings = []
     for value in sidecar.get("assumptions", []):
         assumption = PlanAssumption.from_record(value)
