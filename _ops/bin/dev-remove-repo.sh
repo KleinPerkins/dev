@@ -1281,8 +1281,12 @@ def personal_scaffold_view(args):
 
     if (len(args.paths) != 1 or args.operation is not None or args.fixture_root == ""
             or os.environ.get("DEV_REMOVE_REPO_FIXTURE_ROOT")):
-        raise Refusal("select one canonical product path; use --fixture-root for a personal scaffold fixture", EXIT_USAGE)
+        raise Refusal("select one canonical product path and use --fixture-root for a personal scaffold fixture", EXIT_USAGE)
     fixture = args.fixture_root
+    supplied_id = args.fixture_repository_id
+    if supplied_id is not None and (not fixture or not re.fullmatch(r"[0-9]+", supplied_id)
+                                    or not supplied_id.strip("0")):
+        raise Refusal("--fixture-repository-id requires a positive ID and a personal --fixture-root", EXIT_USAGE)
     raw = args.paths[0]
     name = os.path.basename(raw)
     try:
@@ -1313,10 +1317,17 @@ def personal_scaffold_view(args):
             recorded_id = state.get("github_repository_id")
             if recorded_id is not None and (type(recorded_id) is not int or recorded_id <= 0):
                 raise Refusal("the creation record has an invalid repository ID")
-            # Live creation binds an empty fixture ID even after GitHub assigns a repository ID.
-            fixture_id = str(recorded_id) if fixture and recorded_id is not None else ""
+            # The creator binds the exact fixture argument before a provider ID is recorded.
+            # A live checkout always binds the empty fixture argument.
+            fixture_id = supplied_id or ""
+            if fixture and recorded_id is not None:
+                if supplied_id is not None and supplied_id.lstrip("0") != str(recorded_id):
+                    raise Refusal("the supplied fixture ID differs from the recorded repository ID")
+                fixture_id = supplied_id or str(recorded_id)
             expected = checkout_binding(checkout, fixture, fixture_id, os.fstat(selected), os.fstat(git))
             if state.get("personal_checkout") != expected:
+                if fixture and supplied_id is None:
+                    raise Refusal("creation binding does not match. Supply the original --fixture-repository-id if one was used")
                 raise Refusal("the creation record does not match this checkout and Git directory")
             config = read_regular(git, "config")
             origin = subprocess.run(
@@ -4614,6 +4625,7 @@ def build_parser():
     v.add_argument("--operation")
     v.add_argument("--personal-codex", action="store_true", help="inspect one canonical personal scaffold")
     v.add_argument("--fixture-root", help="personal scaffold fixture under the system temporary directory")
+    v.add_argument("--fixture-repository-id", help="exact fixture ID originally passed to the personal creator")
     r = sub.add_parser("remove", help="preview a removal (default) or confirm one")
     common(r, True)
     r.add_argument("--operation")
@@ -4652,8 +4664,9 @@ def main(argv):
     sys.setrecursionlimit(5000)
     try:
         personal = getattr(args, "personal_codex", False)
-        if not personal and getattr(args, "fixture_root", None) is not None:
-            raise Refusal("--fixture-root requires view --personal-codex", EXIT_USAGE)
+        if not personal and (getattr(args, "fixture_root", None) is not None
+                             or getattr(args, "fixture_repository_id", None) is not None):
+            raise Refusal("personal fixture options require view --personal-codex", EXIT_USAGE)
         ctx = None if personal else Ctx()
     except Refusal as exc:
         if getattr(args, "json", False):

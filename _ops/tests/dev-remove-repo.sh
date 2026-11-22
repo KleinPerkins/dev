@@ -486,6 +486,33 @@ class DevRemoveRepoTests(unittest.TestCase):
             self.assertEqual(view(checkout), observed)
             self.assertFalse((root / "state/dev-repo-removal").exists())
 
+    def test_personal_view_before_the_fixture_provider_id_is_recorded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            owner = root / "personal/src/KleinPerkins"
+            owner.mkdir(parents=True)
+            checkout = owner / "interrupted.sample"
+            fixture_cli = root / "unused-provider"
+            fixture_cli.write_text("#!/bin/sh\nexit 90\n")
+            fixture_cli.chmod(0o700)
+            env = {**os.environ, "DEV_SESSION_ID": "retirement-fixture-" + root.name,
+                   "DOC_WARDEN_FIXTURE_GH_SOURCE": str(fixture_cli)}
+            created = subprocess.run([str(ROOT / "_ops/bin/dev-new-repo.sh"), "--personal-codex",
+                                      checkout.name, "--fixture-root", str(root), "--fixture-repository-id",
+                                      "081357", "--fixture-interrupt-after", "initial-committed"],
+                                     env=env, text=True, capture_output=True)
+            self.assertEqual(created.returncode, 75, created.stderr)
+            view = [str(SCRIPT), "view", "--personal-codex", "--json", str(checkout)]
+            selected = [*view, "--fixture-root", str(root)]
+            observed = json.loads(subprocess.check_output([*selected, "--fixture-repository-id", "081357"]))
+            self.assertTrue(observed["creation_binding_matches"])
+            self.assertIsNone(observed["recorded_repository_id"])
+            for args, code in ((selected, 1), ([*selected, "--fixture-repository-id", "81357"], 1),
+                               ([*view, "--fixture-repository-id", "081357"], 2)):
+                result = subprocess.run(args, capture_output=True, text=True)
+                self.assertEqual(result.returncode, code)
+                self.assertFalse(json.loads(result.stdout)["ok"])
+
     # ------------------------------------------------------------------ preview / confirm basics
     def test_clean_checkout_end_to_end(self):
         fx = self.fx

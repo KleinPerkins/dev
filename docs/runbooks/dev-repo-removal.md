@@ -34,8 +34,8 @@ nothing is writing to the checkout; otherwise those targets stay operator gates.
 
 ### Inspect a personal scaffold before retirement
 
-For a product created with `dev-new-repo.sh --personal-codex` whose name is
-still unenrolled in Dev policy, inspect one explicit checkout before planning recovery:
+The personal view accepts the exact path of a product created with
+`dev-new-repo.sh --personal-codex` whose name is still unenrolled in Dev policy.
 
 ```sh
 _ops/bin/dev-remove-repo.sh view --personal-codex personal/src/KleinPerkins/sample.product
@@ -46,8 +46,9 @@ identities of both the checkout directory and its Git directory. It checks the
 origin stored in the local Git config and counts registration records in that
 Git directory. Registered destinations can be offline. The JSON field
 `recorded_repository_id` comes from the local creation record. A local-only
-scaffold can have an empty ID. Use the creator’s `--fixture-root` for a
-disposable exercise.
+scaffold can have an empty ID. For a disposable exercise, pass the same
+`--fixture-root` and, if selected at creation, the same `--fixture-repository-id`.
+This allows inspection even when the creator stopped before recording the provider ID.
 
 Preserve the original directories if the creation operation must resume after
 recovery. A byte copy receives new directory identities. This inspection leaves
