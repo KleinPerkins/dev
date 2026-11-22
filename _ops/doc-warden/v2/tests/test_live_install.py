@@ -17,7 +17,7 @@ from doc_warden.canonical import canonical_json, digest_ref, parse_json_object
 from doc_warden.codex_authoring import host_assets, host_projection, host_transaction, native_authoring_transport
 from doc_warden.codex_authoring.native_authoring_transport import NativeAuthoringChannel
 from doc_warden.codex_authoring.codex_authoring_scope import PROJECT_OUTPUTS, scope as codex_scope
-from doc_warden.codex_authoring.native_authoring_runner import RoleRequest, _role_dispatch
+from doc_warden.codex_authoring.native_authoring_runner import RoleRequest, _role_dispatch, _scoped_worker_permissions
 from doc_warden.gsd_adapter import CENTRAL_REPOSITORY_ID, CENTRAL_REPOSITORY_KEY as CURRENT_REPOSITORY_KEY
 from doc_warden.live_install import (
     CENTRAL_REPOSITORY_KEY,
@@ -1722,6 +1722,23 @@ class LiveInstallTests(unittest.TestCase):
 
 
 class NativeAuthoringEventTest(unittest.TestCase):
+    def test_native_permission_profile_names_only_the_declared_read_paths(self):
+        with tempfile.TemporaryDirectory() as fixture:
+            root = Path(fixture).resolve()
+            paths = tuple(root / name for name in ("staged", "bundle", "client", "node"))
+            for path in paths:
+                path.touch()
+            arguments, profile_digest = _scoped_worker_permissions("fixture-profile", *paths)
+            self.assertIn('default_permissions="fixture-profile"', arguments)
+            values = arguments[3]
+            self.assertIn('":root"="deny"', values)
+            self.assertIn('":minimal"="read"', values)
+            self.assertIn("network={enabled=false}", values)
+            for path in paths:
+                self.assertIn(json.dumps(str(path)) + '="read"', values)
+            self.assertNotIn(json.dumps(str(root)) + '="read"', values)
+            self.assertTrue(profile_digest.startswith("sha256:"))
+
     def test_dispatch_uses_the_measured_named_selector_fields(self):
         request = RoleRequest(Path("/fixture"), Path("/bundle"), Path("/client"), "gsd-planner", "Private brief")
         owner = SimpleNamespace(MODEL="fixture-model", EFFORT="high", verify_spawn_offer=mock.Mock())

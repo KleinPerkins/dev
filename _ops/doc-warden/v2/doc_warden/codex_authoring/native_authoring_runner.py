@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import time
 from types import ModuleType
+from uuid import uuid4
 
 from ..canonical import contained_path, digest_ref
 from .native_authoring_transport import NativeAuthoringChannel
@@ -27,6 +28,7 @@ class RoleRequest:
     binary: Path
     role: str
     task: str
+    node: Path | None = None
 
 
 def _spawn_offer(response: dict) -> dict:
@@ -73,6 +75,26 @@ def _role_dispatch(offer: dict, request: RoleRequest, owner: ModuleType) -> dict
     return arguments
 
 
+def _scoped_worker_permissions(
+    profile: str, staged: Path, bundle: Path, binary: Path, node: Path | None,
+) -> tuple[tuple[str, ...], str]:
+    # The pinned client applies custom filesystem profiles through Seatbelt
+    # on macOS. Use a fresh name so no lower config layer contributes paths.
+    paths = (staged, bundle, binary) if node is None else (staged, bundle, binary, node)
+    reads = {":root": "deny", ":minimal": "read"}
+    for path in paths:
+        if not path.is_absolute() or path.resolve(strict=True) != path:
+            raise ValueError("native_authoring_permission_path_changed")
+        reads[str(path)] = "read"
+    filesystem = ", ".join(json.dumps(path) + "=" + json.dumps(mode) for path, mode in reads.items())
+    return (
+        "-c", "default_permissions=" + json.dumps(profile),
+        "-c", "permissions." + profile + "={filesystem={" + filesystem + "},network={enabled=false}}",
+        "-c", "apps._default.enabled=false",
+        "-c", 'web_search="disabled"',
+    ), digest_ref(json.dumps({"filesystem": reads, "network": False}, sort_keys=True).encode())
+
+
 def run_role(
     request: RoleRequest,
     owner: ModuleType,
@@ -110,6 +132,8 @@ def run_role(
     }
     owner.verify_role_input(request.role, **source)
     name = request.role
+    profile = "doc-warden-authoring-" + uuid4().hex
+    permission_flags, permission_digest = _scoped_worker_permissions(profile, work, bundle, binary, request.node)
     cfg = (
         "-c", f"agents.{name}.config_file=" + json.dumps(role_path.as_posix()),
         "-c", f"agents.{name}.description=" + json.dumps(f"Doc-Warden authoring role {name}"),
@@ -117,6 +141,7 @@ def run_role(
         "-c", "features.plugins=false",
         "-c", "agents.max_depth=1",
         "-c", "agents.max_concurrent_threads_per_session=1",
+        *permission_flags,
     )
     raw = subprocess.check_output(
         [str(binary), *cfg, "debug", "prompt-input", "Synthetic native selector metadata check."],
@@ -139,7 +164,7 @@ def run_role(
         channel.notify("initialized", deadline)
         parent = channel.request("thread/start", {
             "cwd": str(work), "ephemeral": True, "model": owner.MODEL,
-            "sandbox": "read-only", "approvalPolicy": "on-request", "approvalsReviewer": "user",
+            "permissions": profile, "approvalPolicy": "on-request", "approvalsReviewer": "user",
             "developerInstructions": (
                 "Make one native collaboration.spawn_agent call for the explicitly requested role. "
                 "Wait only for that child. End the turn after its first terminal outcome. "
@@ -148,6 +173,7 @@ def run_role(
         }, deadline)
         sandbox = parent.get("sandbox", {})
         if (sandbox.get("type") != "readOnly" or sandbox.get("networkAccess", False) is not False
+                or parent.get("activePermissionProfile") != {"id": profile, "extends": None}
                 or parent.get("approvalPolicy") != "on-request" or parent.get("approvalsReviewer") != "user"
                 or parent.get("model") != owner.MODEL
                 or parent.get("thread", {}).get("cwd") != str(work)):
@@ -182,4 +208,5 @@ def run_role(
                                          spawn_offer=spawn_offer, parent_turn=turn, events=channel.observed, child_result=child)
     if not channel.reaped or role_path.read_bytes() != role_bytes:
         raise ValueError("native_authoring_run_identity_changed")
-    return PrivateRoleResult(observation.evidence, observation.report, run_id)
+    return PrivateRoleResult(observation.evidence | {"permission_profile_digest": permission_digest},
+                             observation.report, run_id)

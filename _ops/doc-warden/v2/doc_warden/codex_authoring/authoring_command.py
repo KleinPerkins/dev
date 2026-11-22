@@ -172,7 +172,7 @@ def prepare_native_authoring(
 
         def observe(role, task):
             result = run_role(
-                RoleRequest(work, bundle, client, role, task),
+                RoleRequest(work, bundle, client, role, task, node=_tool_path(binding, "node")),
                 owner, environment=environment,
                 package_digest=binding["bundle"]["package_sha256"], timeout=240,
             )
@@ -180,6 +180,7 @@ def prepare_native_authoring(
                 "role": role, "report_digest": digest_ref(result.report),
                 "selector_digest": "sha256:" + result.evidence["selector_sha256"],
                 "role_config_digest": "sha256:" + result.evidence["role_sha256"],
+                "permission_profile_digest": result.evidence["permission_profile_digest"],
                 "model": result.evidence["model"], "effort": result.evidence["effort"],
                 "verdict": result.evidence["verdict"],
             })

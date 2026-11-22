@@ -232,6 +232,11 @@ exact staged PLAN bytes and machine validation by the pinned GSD utility.
 The adapter measures the role selector inside the pinned Codex app-server.
 That configured client advertises the named-role argument. A client that
 offers only the ordinary subagent contract refuses this operation.
+The app-server worker uses a per-process permission profile with a default
+read denial, a minimal system allowance, and explicit read access to the
+staged project, pinned bundle, and qualified executables. The adapter checks
+the effective profile before a model turn. See the
+[Codex permission profiles](https://learn.chatgpt.com/docs/permissions).
 The generic apply route requires exact consent. Use the existing Doc-Warden
 authority operation to freeze an accepted plan.
 
