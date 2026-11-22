@@ -1914,7 +1914,7 @@ def _observe_assumption(repo: Path, assumption: PlanAssumption) -> dict[str, Any
 
 def _assert_plan_parent_authority(repo: Path, sidecar: dict[str, Any]) -> None:
     """Enforce typed plan parent relations from the receipt-bound plan body."""
-    from .artifact_authority import resolve_approved_artifact
+    from .artifact_authority import plan_parent_bindings, require_decision_plan_parents, resolve_approved_artifact
 
     plan_id = sidecar["artifact_id"]
     version = sidecar["artifact_version"]
@@ -1923,20 +1923,22 @@ def _assert_plan_parent_authority(repo: Path, sidecar: dict[str, Any]) -> None:
     if digest_ref(plan_bytes) != sidecar["canonical_plan_digest"]:
         raise ValueError("plan_assumption_authority_invalid")
     metadata = parse_validated_artifact(plan, repo=repo, content=plan_bytes)
-    for relation in metadata.get("relations", []):
-        target = relation["target"]
-        if relation["relation"] != "derives_from" or target["kind"] != "plan":
-            continue
-        provenance = relation["provenance"]
-        if (relation["source_id"] != plan_id or relation["source_version"] != version
-                or target["id"] == plan_id or type(target["version"]) is not int or len(provenance) != 1
-                or set(provenance[0]) != {"digest"}):
+    decisions = [item["sensitive_decision"] for item in metadata["provenance"] if "sensitive_decision" in item]
+    if len(decisions) > 1:
+        raise ValueError("plan_parent_binding_invalid")
+    for item in decisions:
+        if not isinstance(item, dict) or set(item) != {"artifact_id", "version", "content_digest"}:
             raise ValueError("plan_parent_binding_invalid")
         try:
-            resolve_approved_artifact(
-                repo, "plan", target["id"], version=target["version"],
-                digest=provenance[0]["digest"],
+            decision = resolve_approved_artifact(
+                repo, "adr", item["artifact_id"], version=item["version"], digest=item["content_digest"],
             )
+        except (OSError, ValueError) as exc:
+            raise ValueError("plan_parent_authority_changed") from exc
+        require_decision_plan_parents(metadata, decision.metadata)
+    for identifier, (parent_version, digest) in plan_parent_bindings(metadata).items():
+        try:
+            resolve_approved_artifact(repo, "plan", identifier, version=parent_version, digest=digest)
         except (OSError, ValueError) as exc:
             raise ValueError("plan_parent_authority_changed") from exc
 

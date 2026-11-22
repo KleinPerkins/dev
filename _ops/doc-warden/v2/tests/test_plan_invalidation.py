@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 from unittest.mock import patch
 
+from doc_warden.adrs import preview_adr_draft
 from doc_warden.artifacts import _bindings, apply_preview, consent_for, draft_artifact
 from doc_warden.canonical import canonical_json, digest_ref
 from doc_warden.dependencies import (
@@ -564,6 +565,41 @@ class PlanInvalidationTests(unittest.TestCase):
         with patch.object(Path, "read_text", alternate_text):
             with self.assertRaisesRegex(ValueError, "^plan_parent_authority_changed$"):
                 _assert_plan_parent_authority(repo, sidecar)
+
+    def test_governing_decision_requires_its_plan_parent_at_draft_and_live_use(self):
+        repo = self.fixture.repo
+        predecessor = self.persist_accepted_plan([])
+        digest = digest_ref((repo / predecessor.artifact_path).read_bytes())
+        decision_body = "# Continuation decision\n\nThe fixture continues an accepted plan.\n"
+        decision = preview_adr_draft({
+            "title": "Continuation decision", "body": decision_body,
+            "approval": {
+                "actor": "fixture", "date": "2026-08-31",
+                "review_sha256": digest_ref(decision_body.encode())[7:],
+            },
+            "parents": {
+                "observed_at": "2026-08-31T20:00:00Z",
+                "parents": [{"kind": "plan", "id": predecessor.artifact_id, "version": 1, "digest": digest}],
+            },
+        }, repo=repo)
+        apply_preview(decision, consent_for(decision.transaction))
+        options = {
+            "title": "Continuation lacking a required predecessor",
+            "body": "# Governed continuation\n",
+            "lifecycle": "approved",
+            "approval": {"approved_by": "operator", "approved_at": "2026-08-31T20:00:00Z"},
+            "approved_prd": True,
+            "rigor_signals": {"sensitive": True},
+            "sensitive_adr_id": decision.artifact_id,
+        }
+        with self.assertRaisesRegex(ValueError, "^plan_parent_binding_missing$"):
+            draft_artifact("plan", options, repo=repo)
+        # Reproduce legacy receipt-backed input admitted before the draft check existed.
+        with patch("doc_warden.artifacts.require_decision_plan_parents"):
+            legacy = draft_artifact("plan", options, repo=repo)
+        apply_preview(legacy, consent_for(legacy.transaction))
+        with self.assertRaisesRegex(ValueError, "^plan_parent_binding_missing$"):
+            assert_plan_assumptions_current(repo, legacy.artifact_id)
 
     def test_receipted_legacy_sidecar_without_m2_fields_remains_valid(self):
         def remove_m2_fields(sidecar):

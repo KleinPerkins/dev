@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from .artifact_authority import ApprovedArtifact, resolve_approved_artifact
+from .artifact_authority import ApprovedArtifact, require_decision_plan_parents, resolve_approved_artifact
 from .canonical import canonical_json, digest_file_manifest, digest_ref, parse_artifact
 from .rigor import RigorSignals, authoring_rigor_signals, compute_rigor
 from .outcomes import outcome_binding
@@ -785,6 +785,8 @@ def draft_artifact(
         validate_relation_record(relation)
         if relation["source_id"] != artifact_id:
             raise ValueError("artifact_relation_source_mismatch")
+    if kind == "plan" and sensitive_authority is not None:
+        require_decision_plan_parents(metadata, sensitive_authority.metadata)
     filename = f"{artifact_id}-v{version}.md"
     artifact_path = f".planning/artifacts/{filename}"
     artifact_content = _artifact_bytes(

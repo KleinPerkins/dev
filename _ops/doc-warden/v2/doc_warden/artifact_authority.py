@@ -192,6 +192,35 @@ def resolve_approved_artifact(
                             (*observed, *freeze_inputs.values()))
 
 
+def plan_parent_bindings(metadata: dict[str, Any]) -> dict[str, tuple[int, str]]:
+    """Read the approved plan-parent witnesses from typed artifact relations."""
+    parents = {}
+    for relation in metadata["relations"]:
+        target = relation["target"]
+        if relation["relation"] != "derives_from" or target["kind"] != "plan":
+            continue
+        provenance = relation["provenance"]
+        if (relation["source_id"] != metadata["id"] or relation["source_version"] != metadata["version"]
+                or target["id"] == metadata["id"] or target["id"] in parents
+                or type(target["version"]) is not int or len(provenance) != 1
+                or set(provenance[0]) != {"digest"}):
+            raise ValueError("plan_parent_binding_invalid")
+        parents[target["id"]] = (target["version"], provenance[0]["digest"])
+    return parents
+
+
+def require_decision_plan_parents(
+    metadata: dict[str, Any], decision: dict[str, Any],
+) -> None:
+    """The governing ADR independently declares any inherited plan parents."""
+    required = plan_parent_bindings(decision)
+    if not required:
+        return
+    actual = plan_parent_bindings(metadata)
+    if any(actual.get(identifier) != binding for identifier, binding in required.items()):
+        raise ValueError("plan_parent_binding_missing")
+
+
 def approved_parent_relations(repo: Path, source: dict[str, Any], requested: object):
     """Derive typed relations and observed inputs from closed parent selectors."""
     if (not isinstance(requested, dict) or set(requested) != {"parents", "observed_at"}
