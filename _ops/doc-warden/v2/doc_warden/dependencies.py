@@ -1503,8 +1503,9 @@ def _validated_plan_sidecar(
         plan_path = contained_path(repo, plan_relative)
         if plan_path.is_symlink() or not plan_path.is_file():
             raise ValueError("plan_artifact_missing")
-        metadata = parse_validated_artifact(plan_path)
-        plan_digest = digest_ref(plan_path.read_bytes())
+        plan_bytes = plan_path.read_bytes()
+        metadata = parse_validated_artifact(plan_path, content=plan_bytes)
+        plan_digest = digest_ref(plan_bytes)
         if (
             metadata["id"] != artifact_id
             or metadata["type"] != "plan"
@@ -1911,6 +1912,37 @@ def _observe_assumption(repo: Path, assumption: PlanAssumption) -> dict[str, Any
     return unresolved
 
 
+def _assert_plan_parent_authority(repo: Path, sidecar: dict[str, Any]) -> None:
+    """Enforce typed plan parent relations from the receipt-bound plan body."""
+    from .artifact_authority import plan_parent_bindings, require_decision_plan_parents, resolve_approved_artifact
+
+    plan_id = sidecar["artifact_id"]
+    version = sidecar["artifact_version"]
+    plan = contained_path(repo, f".planning/artifacts/{plan_id}-v{version}.md")
+    plan_bytes = plan.read_bytes()
+    if digest_ref(plan_bytes) != sidecar["canonical_plan_digest"]:
+        raise ValueError("plan_assumption_authority_invalid")
+    metadata = parse_validated_artifact(plan, repo=repo, content=plan_bytes)
+    decisions = [item["sensitive_decision"] for item in metadata["provenance"] if "sensitive_decision" in item]
+    if len(decisions) > 1:
+        raise ValueError("plan_parent_binding_invalid")
+    for item in decisions:
+        if not isinstance(item, dict) or set(item) != {"artifact_id", "version", "content_digest"}:
+            raise ValueError("plan_parent_binding_invalid")
+        try:
+            decision = resolve_approved_artifact(
+                repo, "adr", item["artifact_id"], version=item["version"], digest=item["content_digest"],
+            )
+        except (OSError, ValueError) as exc:
+            raise ValueError("plan_parent_authority_changed") from exc
+        require_decision_plan_parents(metadata, decision.metadata)
+    for identifier, (parent_version, digest) in plan_parent_bindings(metadata).items():
+        try:
+            resolve_approved_artifact(repo, "plan", identifier, version=parent_version, digest=digest)
+        except (OSError, ValueError) as exc:
+            raise ValueError("plan_parent_authority_changed") from exc
+
+
 def refinements_for_active_plan(
     repo: Path,
     plan_id: str | None,
@@ -1919,6 +1951,7 @@ def refinements_for_active_plan(
     sidecar = _plan_sidecar_for_assumption_validation(root, plan_id)
     if sidecar is None:
         return ()
+    _assert_plan_parent_authority(root, sidecar)
     findings = []
     for value in sidecar.get("assumptions", []):
         assumption = PlanAssumption.from_record(value)

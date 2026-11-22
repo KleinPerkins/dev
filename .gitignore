@@ -152,6 +152,11 @@ service-account*.json
 !/_ops/doc-warden/state/v2/events/557579fc-a62b-5e43-8bc0-2f1cf6a97296.json
 !/_ops/doc-warden/state/v2/receipts/1324a353-ffb0-4ed1-91bc-7c0837300873.json
 !/_ops/doc-warden/state/v2/events/122b55a8-cd89-5e72-89d9-7475397df478.json
+# Portable acceptance evidence for native Codex GSD authoring.
+!/_ops/doc-warden/state/v2/receipts/aa62595b-2804-4330-9ce5-6c0529dd9a2a.json
+!/_ops/doc-warden/state/v2/events/2c8ed40e-da22-52d3-a48c-b5bdc252e95d.json
+!/_ops/doc-warden/state/v2/receipts/c686243c-1a9e-4dda-af91-08c11c5043aa.json
+!/_ops/doc-warden/state/v2/events/2005b2fc-9e72-55d3-b6b7-731a4d3bbf3e.json
 /_ops/baseline/state/
 /_ops/baseline/profiles/pr-automation/state/
 /_ops/interoperability/evidence/*

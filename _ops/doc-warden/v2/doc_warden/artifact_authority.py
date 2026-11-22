@@ -149,8 +149,9 @@ def resolve_approved_artifact(
     for path in artifact_paths(root):
         if not _in_authority_scope(path, owner, kind):
             continue
-        content_digest = digest_ref(path.read_bytes())
-        metadata = parse_validated_artifact(path, repo=root)
+        content = path.read_bytes()
+        content_digest = digest_ref(content)
+        metadata = parse_validated_artifact(path, repo=root, content=content)
         if metadata["type"] != kind:
             raise ValueError("authority_artifact_identity_mismatch")
         _artifact_identity(root, path, metadata, profile)
@@ -189,6 +190,35 @@ def resolve_approved_artifact(
     _, source_revision, operation_id = frozen[path]
     return ApprovedArtifact(path, metadata, content_digest, source_revision, operation_id,
                             (*observed, *freeze_inputs.values()))
+
+
+def plan_parent_bindings(metadata: dict[str, Any]) -> dict[str, tuple[int, str]]:
+    """Read the approved plan-parent witnesses from typed artifact relations."""
+    parents = {}
+    for relation in metadata["relations"]:
+        target = relation["target"]
+        if relation["relation"] != "derives_from" or target["kind"] != "plan":
+            continue
+        provenance = relation["provenance"]
+        if (relation["source_id"] != metadata["id"] or relation["source_version"] != metadata["version"]
+                or target["id"] == metadata["id"] or target["id"] in parents
+                or type(target["version"]) is not int or len(provenance) != 1
+                or set(provenance[0]) != {"digest"}):
+            raise ValueError("plan_parent_binding_invalid")
+        parents[target["id"]] = (target["version"], provenance[0]["digest"])
+    return parents
+
+
+def require_decision_plan_parents(
+    metadata: dict[str, Any], decision: dict[str, Any],
+) -> None:
+    """The governing ADR independently declares any inherited plan parents."""
+    required = plan_parent_bindings(decision)
+    if not required:
+        return
+    actual = plan_parent_bindings(metadata)
+    if any(actual.get(identifier) != binding for identifier, binding in required.items()):
+        raise ValueError("plan_parent_binding_missing")
 
 
 def approved_parent_relations(repo: Path, source: dict[str, Any], requested: object):

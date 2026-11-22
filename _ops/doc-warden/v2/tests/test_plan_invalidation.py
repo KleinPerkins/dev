@@ -3,8 +3,11 @@ import os
 import subprocess
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
+from unittest.mock import patch
 
+from doc_warden.adrs import preview_adr_draft
 from doc_warden.artifacts import _bindings, apply_preview, consent_for, draft_artifact
 from doc_warden.canonical import canonical_json, digest_ref
 from doc_warden.dependencies import (
@@ -13,6 +16,7 @@ from doc_warden.dependencies import (
     GraphNode,
     PlanAssumption,
     PlanRefinementRequired,
+    _assert_plan_parent_authority,
     assert_plan_assumptions_current,
     compare_plan_assumption,
     dependency_snapshot_bytes,
@@ -85,6 +89,8 @@ class PlanInvalidationTests(unittest.TestCase):
         *,
         version=1,
         operation_label="accepted-plan-operation",
+        relations=(),
+        supersedes=None,
     ):
         requirement_ids = [
             assumption["target_id"]
@@ -108,6 +114,8 @@ class PlanInvalidationTests(unittest.TestCase):
                 **({"requirement_ids": requirement_ids} if requirement_ids else {}),
                 "task_ids": ["M2-T03"],
                 "assumptions": assumptions,
+                "relations": list(relations),
+                **({"supersedes": supersedes} if supersedes else {}),
             },
             repo=self.fixture.repo,
             operation_id=self.fixture.id_for(operation_label),
@@ -509,6 +517,100 @@ class PlanInvalidationTests(unittest.TestCase):
             {item["kind"] for item in sidecar["assumptions"]},
             {"requirement", "design", "adr", "dependency", "code", "schema"},
         )
+
+    def test_typed_predecessor_retirement_refuses_current_plan_use(self):
+        repo = self.fixture.repo
+        original = self.persist_accepted_plan([])
+        label = "continuation-of-accepted-plan"
+        operation_id = self.fixture.id_for(label)
+        plan_suffix = uuid.uuid5(uuid.UUID(operation_id), "plan")
+        continuation_id = f"PLAN-{self.fixture.repository_key}-{plan_suffix}"
+        plan_parent = {
+            "schema": "doc-warden/relation/v2",
+            "relation": "derives_from",
+            "source_id": continuation_id,
+            "source_kind": "plan",
+            "source_version": 1,
+            "target": {"kind": "plan", "id": original.artifact_id, "version": 1},
+            "authority": "planned",
+            "lifecycle": "active",
+            "observed_at": "2026-08-31T20:00:00Z",
+            "observed_revision": self.revision,
+            "provenance": [{"digest": digest_ref((repo / original.artifact_path).read_bytes())}],
+        }
+        continuation = self.accepted_plan_preview([], operation_label=label, relations=(plan_parent,))
+        apply_preview(continuation, consent_for(continuation.transaction))
+        assert_plan_assumptions_current(repo, continuation.artifact_id)
+        frozen = {action.path: (repo / action.path).read_bytes() for action in continuation.transaction.actions}
+
+        successor = self.accepted_plan_preview(
+            [], version=2, operation_label="parent-successor", supersedes=original.artifact_id,
+        )
+        apply_preview(successor, consent_for(successor.transaction))
+        with self.assertRaisesRegex(ValueError, "^plan_parent_authority_changed$"):
+            assert_plan_assumptions_current(repo, continuation.artifact_id)
+        self.assertEqual({path: (repo / path).read_bytes() for path in frozen}, frozen)
+
+    def test_parent_guard_refuses_bytes_outside_the_receipted_digest(self):
+        repo = self.fixture.repo
+        continuation = self.persist_accepted_plan([])
+        body_path = repo / continuation.artifact_path
+        sidecar_action = next(action for action in continuation.transaction.actions if action.path.endswith(".governance.json"))
+        sidecar = json.loads(sidecar_action.content)
+        original = body_path.read_bytes()
+        alternate = original + b"\nTransient content."
+        # A current parentless plan passes. A read that returns different bytes
+        # fails exact binding even though the alternate artifact still parses.
+        _assert_plan_parent_authority(repo, sidecar)
+        read_bytes = Path.read_bytes
+        reads = []
+
+        def transient_read(path):
+            if path == body_path:
+                reads.append(path)
+                return alternate
+            return read_bytes(path)
+
+        with patch.object(Path, "read_bytes", transient_read):
+            with self.assertRaisesRegex(ValueError, "^plan_assumption_authority_invalid$"):
+                _assert_plan_parent_authority(repo, sidecar)
+        self.assertEqual(reads, [body_path])
+        self.assertEqual(body_path.read_bytes(), original)
+
+    def test_governing_decision_requires_its_plan_parent_at_draft_and_live_use(self):
+        repo = self.fixture.repo
+        predecessor = self.persist_accepted_plan([])
+        digest = digest_ref((repo / predecessor.artifact_path).read_bytes())
+        decision_body = "# Continuation decision\n\nThe fixture continues an accepted plan.\n"
+        decision = preview_adr_draft({
+            "title": "Continuation decision", "body": decision_body,
+            "approval": {
+                "actor": "fixture", "date": "2026-08-31",
+                "review_sha256": digest_ref(decision_body.encode())[7:],
+            },
+            "parents": {
+                "observed_at": "2026-08-31T20:00:00Z",
+                "parents": [{"kind": "plan", "id": predecessor.artifact_id, "version": 1, "digest": digest}],
+            },
+        }, repo=repo)
+        apply_preview(decision, consent_for(decision.transaction))
+        options = {
+            "title": "Continuation lacking a required predecessor",
+            "body": "# Governed continuation\n",
+            "lifecycle": "approved",
+            "approval": {"approved_by": "operator", "approved_at": "2026-08-31T20:00:00Z"},
+            "approved_prd": True,
+            "rigor_signals": {"sensitive": True},
+            "sensitive_adr_id": decision.artifact_id,
+        }
+        with self.assertRaisesRegex(ValueError, "^plan_parent_binding_missing$"):
+            draft_artifact("plan", options, repo=repo)
+        # Reproduce legacy receipt-backed input admitted before the draft check existed.
+        with patch("doc_warden.artifacts.require_decision_plan_parents"):
+            legacy = draft_artifact("plan", options, repo=repo)
+        apply_preview(legacy, consent_for(legacy.transaction))
+        with self.assertRaisesRegex(ValueError, "^plan_parent_binding_missing$"):
+            assert_plan_assumptions_current(repo, legacy.artifact_id)
 
     def test_receipted_legacy_sidecar_without_m2_fields_remains_valid(self):
         def remove_m2_fields(sidecar):

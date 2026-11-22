@@ -365,8 +365,10 @@ def read_repository_config(repo: Path) -> dict[str, Any] | None:
     return value
 
 
-def parse_validated_artifact(path: Path, *, repo: Path | None = None) -> dict[str, Any]:
-    parsed = parse_artifact(path)
+def parse_validated_artifact(
+    path: Path, *, repo: Path | None = None, content: bytes | None = None,
+) -> dict[str, Any]:
+    parsed = parse_artifact(path, content=content)
     require_valid("artifact", parsed.metadata)
     for relation in parsed.metadata["relations"]:
         validate_relation_record(relation)
