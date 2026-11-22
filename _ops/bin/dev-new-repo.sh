@@ -10,6 +10,7 @@
 #
 # Usage:
 #   _ops/bin/dev-new-repo.sh <name> [--public|--private] [--desc "text"] [--resume] [--dry-run]
+#   _ops/bin/dev-new-repo.sh --personal-codex <name> [--dry-run | --resume] [--public|--private]
 #   _ops/bin/dev-new-repo.sh --capability <name> [--kind skill|rule|sub-agent|tool] [--shape snapshot|release-descriptor|descriptor-only] --dry-run
 #
 # Safe by design: --dry-run prints the exact plan and changes nothing. A real run refuses an
@@ -27,9 +28,10 @@ REPO_BASELINE="$SCRIPT_DIR/repo-baseline.sh"
 TEST_SHARDING="$SCRIPT_DIR/test-sharding.py"
 TEST_SHARDING_REQUIRED=1
 
-NAME=""; VIS="private"; VIS_EXPLICIT=0; PUSH=1; DRYRUN=0; DESC=""; DESC_EXPLICIT=0; CAPABILITY=0; KIND="skill"; SHAPE="descriptor-only"; FIXTURE_ROOT=""; FIXTURE_REPOSITORY_ID=""; FIXTURE_INTERRUPT_AFTER=""; RESUME=0; LEGACY_V1=0
+NAME=""; VIS="private"; VIS_EXPLICIT=0; PUSH=1; DRYRUN=0; DESC=""; DESC_EXPLICIT=0; CAPABILITY=0; KIND="skill"; SHAPE="descriptor-only"; FIXTURE_ROOT=""; FIXTURE_REPOSITORY_ID=""; FIXTURE_INTERRUPT_AFTER=""; RESUME=0; LEGACY_V1=0; PERSONAL_CODEX=0; PERSONAL_BINDING=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --personal-codex) PERSONAL_CODEX=1 ;;
     --capability) CAPABILITY=1 ;;
     --kind)    shift; KIND="${1:-}" ;;
     --shape)   shift; SHAPE="${1:-}" ;;
@@ -62,7 +64,8 @@ while [ $# -gt 0 ]; do
     --desc)    shift; DESC="${1:-}"; DESC_EXPLICIT=1 ;;
     -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
     -*) printf 'dev-new-repo: unknown flag: %s\n' "$1" >&2; exit 2 ;;
-    *)  NAME="$1" ;;
+    *)  [ -z "$NAME" ] || { printf 'dev-new-repo: expected one repository name\n' >&2; exit 2; }
+        NAME="$1" ;;
   esac
   shift
 done
@@ -74,7 +77,7 @@ esac
 
 case "$KIND" in skill|rule|sub-agent|tool) : ;; *) printf 'dev-new-repo: invalid capability kind %q\n' "$KIND" >&2; exit 2 ;; esac
 case "$SHAPE" in snapshot|release-descriptor|descriptor-only) : ;; *) printf 'dev-new-repo: invalid tool shape %q\n' "$SHAPE" >&2; exit 2 ;; esac
-if [ -n "$FIXTURE_ROOT" ]; then
+if [ -n "$FIXTURE_ROOT" ] && [ "$PERSONAL_CODEX" -eq 0 ]; then
   case "$FIXTURE_ROOT" in
     /*) : ;;
     *) printf 'dev-new-repo: --fixture-root requires an absolute path\n' >&2; exit 2 ;;
@@ -131,7 +134,15 @@ fi
 
 
 
-if [ "$CAPABILITY" -eq 1 ]; then
+if [ "$PERSONAL_CODEX" -eq 1 ]; then
+  [ "$CAPABILITY" -eq 0 ] && [ "$LEGACY_V1" -eq 0 ] && [ "$DELIVERY_CLASS" = unenrolled ] ||
+    { printf 'dev-new-repo: personal creation requires a new product name and born-v2 scaffold\n' >&2; exit 2; }
+  [ "${GH_HOST:-github.com}" = github.com ] && [ -z "${DOC_WARDEN_FIXTURE_PUSH_REMOTE:-}" ] ||
+    { printf 'dev-new-repo: personal creation requires the canonical GitHub destination\n' >&2; exit 2; }
+  export GH_HOST=github.com
+  PERSONAL_TARGET="$SCRIPT_DIR/../portability/personal_scaffold.py"
+  TARGET="$(python3 -I -B "$PERSONAL_TARGET" target "$NAME" "$FIXTURE_ROOT" "$RESUME")"
+elif [ "$CAPABILITY" -eq 1 ]; then
   TARGET="$DEV_ROOT/capabilities/$NAME"
 elif [ -n "$FIXTURE_ROOT" ]; then
   TARGET="$FIXTURE_ROOT/$NAME"
@@ -166,7 +177,7 @@ state_file_for_target() {
 create_operation_state() {
   local state_file="$1" repository_key="$2" greenfield_id="$3" remote_id="$4"
   python3 - "$state_file" "$OM_GH_USER/$NAME" "$repository_key" "$greenfield_id" \
-    "$remote_id" "$NAME" "$VIS" "$DESC" "$SSH_URL" "$INITIAL_COMMIT_MESSAGE" <<'PY'
+    "$remote_id" "$NAME" "$VIS" "$DESC" "$SSH_URL" "$INITIAL_COMMIT_MESSAGE" "$PERSONAL_BINDING" <<'PY'
 import json
 import os
 import sys
@@ -192,6 +203,8 @@ payload = {
         "initial_commit_message": sys.argv[10],
     },
 }
+if sys.argv[11]:
+    payload["personal_checkout"] = sys.argv[11]
 path.parent.mkdir(parents=True, exist_ok=True)
 temporary = path.with_name(f".{path.name}.tmp")
 temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -222,7 +235,7 @@ PY
 
 read_operation_state() {
   local state_file="$1" field="$2"
-  python3 - "$state_file" "$field" <<'PY'
+  python3 - "$state_file" "$field" "$PERSONAL_BINDING" <<'PY'
 import json
 import re
 import sys
@@ -243,6 +256,10 @@ required = {
     "github_repository_id",
     "replay_intent",
 }
+if sys.argv[3]:
+    required.update({"personal_checkout", "test_sharding_required"})
+if payload.get("personal_checkout", "") != sys.argv[3]:
+    raise SystemExit("dev-new-repo: operation belongs to a different checkout or scaffold profile")
 phases = {
     "initialized",
     "baseline-ready",
@@ -614,6 +631,30 @@ print(
 PY
 }
 
+bind_personal_checkout() {
+  # Both the session-lock and simultaneous retries with the same writer ID matter.
+  # The shell owns fd 9 for this invocation. The OS releases it on process exit.
+  exec 9<"$TARGET"
+  PERSONAL_BINDING="$(python3 -I -B "$PERSONAL_TARGET" binding "$TARGET" "$FIXTURE_ROOT" "$FIXTURE_REPOSITORY_ID")"
+}
+
+stage_scaffold() {
+  if [ "$PERSONAL_CODEX" -eq 1 ]; then
+    python3 -I -B "$PERSONAL_TARGET" stage "$TARGET" "$1" "$2"
+  else
+    git -C "$TARGET" add .
+  fi
+}
+
+acquire_personal_writer() {
+  local observation
+  observation="$(cd "$TARGET" && bash "$DEV_ROOT/_ops/hooks/session-lock" acquire)" || return 1
+  case "$observation" in
+    "session-lock: acquired/refreshed for env:$DEV_SESSION_ID.") return 0 ;;
+    *) printf 'dev-new-repo: unable to verify the personal checkout writer\n' >&2; return 1 ;;
+  esac
+}
+
 run_born_v2() {
   local resumed=0 state_file phase delivery_json doctor_json baseline_output
   local GITHUB_CLI=gh REMOTE_MARKER=""
@@ -687,11 +728,18 @@ EOF
     return
   fi
 
+  if [ "$PERSONAL_CODEX" -eq 1 ] && [ -z "${DEV_SESSION_ID:-}" ]; then
+    printf 'dev-new-repo: set DEV_SESSION_ID to the current writer before creation or resume\n' >&2
+    return 2
+  fi
   if [ -e "$TARGET" ]; then
     [ "$RESUME" -eq 1 ] ||
       { printf 'dev-new-repo: target exists (refusing): %s\n' "$TARGET" >&2; return 1; }
     git -C "$TARGET" rev-parse --git-dir >/dev/null 2>&1 ||
       { printf 'dev-new-repo: resume target is not a git repository\n' >&2; return 1; }
+    if [ "$PERSONAL_CODEX" -eq 1 ]; then
+      bind_personal_checkout
+    fi
     state_file="$(state_file_for_target)"
     [ -f "$state_file" ] ||
       { printf 'dev-new-repo: no resumable born-v2 operation state\n' >&2; return 1; }
@@ -705,7 +753,7 @@ EOF
     if [ "$(read_operation_state "$state_file" test_sharding_required)" != True ]; then
       TEST_SHARDING_REQUIRED=0
     fi
-    if [ "$DELIVERY_CLASS" = native-github ]; then
+    if [ "$DELIVERY_CLASS" = native-github ] || [ "$PERSONAL_CODEX" -eq 1 ]; then
       local stored_origin fetch_origin push_origin
       stored_origin="$(read_operation_state "$state_file" intent.origin)"
       fetch_origin="$(git -C "$TARGET" remote get-url --all origin)"
@@ -729,12 +777,20 @@ EOF
       return 1
     fi
 
+    if [ "$PERSONAL_CODEX" -eq 1 ]; then acquire_personal_writer; fi
     resumed=1
   else
     [ "$RESUME" -eq 0 ] ||
       { printf 'dev-new-repo: persisted_replay_intent_mismatch: target/name %s\n' "$TARGET" >&2; return 1; }
-    mkdir -p "$TARGET"
-    git -C "$TARGET" init -b main >/dev/null
+    if [ "$PERSONAL_CODEX" -eq 1 ]; then
+      mkdir -m 700 -- "$TARGET"
+      git -C "$TARGET" init --template= -b main >/dev/null
+      bind_personal_checkout
+    else
+      mkdir -p "$TARGET"
+      git -C "$TARGET" init -b main >/dev/null
+    fi
+    if [ "$PERSONAL_CODEX" -eq 1 ]; then acquire_personal_writer; fi
     git -C "$TARGET" config --local user.name "$OM_GH_USER"
     git -C "$TARGET" config --local user.email "$OM_NOREPLY"
     git -C "$TARGET" remote add origin "$SSH_URL"
@@ -820,7 +876,7 @@ EOF
         printf 'dev-new-repo: interrupted after verified scaffold transaction; exact --resume replay is available and no remote was created\n' >&2
         return 75
       fi
-      git -C "$TARGET" add .
+      stage_scaffold "$GREENFIELD_OPERATION_ID" initial
       git -C "$TARGET" commit -m "$INITIAL_COMMIT_MESSAGE" >/dev/null
       if [ "$FIXTURE_INTERRUPT_AFTER" = "initial-commit-landed" ]; then
         printf 'dev-new-repo: interrupted after the initial commit landed; --resume will verify it before advancing operation state\n' >&2
@@ -846,6 +902,10 @@ EOF
     return
   fi
 
+  if [ "$PERSONAL_CODEX" -eq 1 ] && [ -z "$FIXTURE_ROOT" ]; then
+    [ "$(gh api --hostname github.com user --jq .login)" = "$OM_GH_USER" ] ||
+      { printf 'dev-new-repo: personal GitHub account unavailable; local operation retained\n' >&2; return 75; }
+  fi
   if [ "$phase" = "initial-committed" ] ||
     [ "$phase" = "remote-create-attempted" ] ||
     [ "$phase" = "remote-created-marked" ]; then
@@ -968,6 +1028,9 @@ EOF
       )"
       update_operation_state "$state_file" remote-created "$GITHUB_REPOSITORY_ID"
     fi
+    if [ "$PERSONAL_CODEX" -eq 1 ]; then
+      validate_remote_creation_metadata "$(github_repository_metadata)" "" "$GITHUB_REPOSITORY_ID" >/dev/null
+    fi
     exact_remote_observation_apply
 
     delivery_json="$(delivery_preview)"
@@ -977,7 +1040,7 @@ EOF
       --authority-root "$DEV_ROOT" \
       --repository-key "$REPOSITORY_KEY" \
       --repository-id "$GITHUB_REPOSITORY_ID" >/dev/null
-    git -C "$TARGET" add .
+    stage_scaffold "$REMOTE_OPERATION_ID" remote
     if ! git -C "$TARGET" diff --cached --quiet; then
       git -C "$TARGET" commit -m "chore: observe GitHub repository identity" >/dev/null
     fi
@@ -993,10 +1056,13 @@ EOF
     if [ -n "${FIXTURE_ROOT:-}" ] && [ -n "${DOC_WARDEN_FIXTURE_PUSH_REMOTE:-}" ]; then
       git -C "$TARGET" remote set-url origin "${DOC_WARDEN_FIXTURE_PUSH_REMOTE}"
     fi
-    if [ "$DELIVERY_CLASS" = native-github ]; then
+    if [ "$DELIVERY_CLASS" = native-github ] || [ "$PERSONAL_CODEX" -eq 1 ]; then
       [ "$(git -C "$TARGET" remote get-url --all origin)" = "$SSH_URL" ] &&
         [ "$(git -C "$TARGET" remote get-url --push --all origin)" = "$SSH_URL" ] ||
         { printf 'dev-new-repo: native push destination changed; refusing publication\n' >&2; return 1; }
+    fi
+    if [ "$PERSONAL_CODEX" -eq 1 ]; then
+      validate_remote_creation_metadata "$(github_repository_metadata)" "" "$GITHUB_REPOSITORY_ID" >/dev/null
     fi
     # Idempotent push: skip when origin/main already matches HEAD so --resume does not
     # re-push after interruption left phase at second-committed.
