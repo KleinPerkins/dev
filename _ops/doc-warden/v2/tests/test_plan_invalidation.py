@@ -551,20 +551,31 @@ class PlanInvalidationTests(unittest.TestCase):
             assert_plan_assumptions_current(repo, continuation.artifact_id)
         self.assertEqual({path: (repo / path).read_bytes() for path in frozen}, frozen)
 
+    def test_parent_guard_refuses_bytes_outside_the_receipted_digest(self):
+        repo = self.fixture.repo
+        continuation = self.persist_accepted_plan([])
         body_path = repo / continuation.artifact_path
-        sidecar = next(json.loads(content) for name, content in frozen.items() if name.endswith(".governance.json"))
-        header, metadata_json, body = body_path.read_text().split("\n", 2)
-        changed = json.loads(metadata_json)
-        changed["relations"] = []
-        alternate = header + "\n" + canonical_json(changed).decode() + body
-        read_text = Path.read_text
+        sidecar_action = next(action for action in continuation.transaction.actions if action.path.endswith(".governance.json"))
+        sidecar = json.loads(sidecar_action.content)
+        original = body_path.read_bytes()
+        alternate = original + b"\nTransient content."
+        # A current parentless plan passes. A read that returns different bytes
+        # fails exact binding even though the alternate artifact still parses.
+        _assert_plan_parent_authority(repo, sidecar)
+        read_bytes = Path.read_bytes
+        reads = []
 
-        def alternate_text(path, *args, **kwargs):
-            return alternate if path == body_path else read_text(path, *args, **kwargs)
+        def transient_read(path):
+            if path == body_path:
+                reads.append(path)
+                return alternate
+            return read_bytes(path)
 
-        with patch.object(Path, "read_text", alternate_text):
-            with self.assertRaisesRegex(ValueError, "^plan_parent_authority_changed$"):
+        with patch.object(Path, "read_bytes", transient_read):
+            with self.assertRaisesRegex(ValueError, "^plan_assumption_authority_invalid$"):
                 _assert_plan_parent_authority(repo, sidecar)
+        self.assertEqual(reads, [body_path])
+        self.assertEqual(body_path.read_bytes(), original)
 
     def test_governing_decision_requires_its_plan_parent_at_draft_and_live_use(self):
         repo = self.fixture.repo
