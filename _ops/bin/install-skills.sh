@@ -6,11 +6,21 @@
 # idempotent, NON-CLOBBERING symlink into each tool's skills dir. Nothing here is tracked; the
 # symlinks live under ~/.cursor /.claude /.codex, like the agent-rule symlink.
 #
-# Usage:  _ops/bin/install-skills.sh [--only doc-warden]   (or: make install-skills)
+# Usage:  _ops/bin/install-skills.sh [--only doc-warden | --personal-codex dev-doctor]   (or: make install-skills)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"   # _ops/bin
 SKILLS_DIR="$(cd "$SCRIPT_DIR/../skills" && pwd)"               # _ops/skills
+
+# A personal Codex caller uses the scoped doctor and preserves existing client slots.
+if [ "${1:-}" = "--personal-codex" ]; then
+  if [ "$#" -ne 2 ] || [ "$2" != "dev-doctor" ]; then
+    printf 'usage: install-skills.sh --personal-codex dev-doctor\n' >&2
+    exit 2
+  fi
+  python3 -I -B "$SCRIPT_DIR/link-personal-codex-skill.py" "$SKILLS_DIR/personal/$2" "${CODEX_HOME:-$HOME/.codex}/skills/$2"
+  exit 0
+fi
 
 # Which /dev-* skills go to which tools. Cursor is the complete hub; the action skills are
 # useful in all three tools an agent might land in.
@@ -20,7 +30,7 @@ CLAUDE_SKILLS=(dev-doctor dev-new-repo dev-remove-repo doc-warden)
 CODEX_SKILLS=(dev-doctor dev-new-repo dev-remove-repo doc-warden)
 if [ "$#" -ne 0 ]; then
   if [ "$#" -ne 2 ] || [ "$1" != "--only" ] || [ "$2" != "doc-warden" ]; then
-    printf 'usage: install-skills.sh [--only doc-warden]\n' >&2
+    printf 'usage: install-skills.sh [--only doc-warden | --personal-codex dev-doctor]\n' >&2
     exit 2
   fi
   DEV_SKILLS=(doc-warden)

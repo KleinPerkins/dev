@@ -367,11 +367,20 @@ def summary(result):
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation',choices=['inspect']);parser.add_argument('--repository',action='append')
+    parser.add_argument('operation', choices=['inspect', 'inspect-codex'])
+    parser.add_argument('--repository', action='append')
     parser.add_argument('--input-stdin',action='store_true');parser.add_argument('--remote',action='store_true')
     parser.add_argument('--quiet',action='store_true')
     args=parser.parse_args(argv)
     try:
+        if args.operation == 'inspect-codex':
+            # The historical cohort includes retired, work-only and held repositories.
+            # Select explicitly before opening any repository or reading connector input.
+            if not args.repository:
+                raise g.Refusal('doctor-explicit-personal-selection-required')
+            if any(repo in {'KleinPerkins/sterling', 'KleinPerkins/server-guard',
+                            'KleinPerkins/pr-automation-controller'} for repo in args.repository):
+                raise g.Refusal('doctor-personal-selection-excluded')
         selected=s.selected_ids(args.repository);authority=p.Authority();doc_authority=doc.Authority();value=None
         if args.input_stdin:
             raw=sys.stdin.buffer.read(MAX_INPUT+1)
