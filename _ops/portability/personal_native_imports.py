@@ -27,6 +27,17 @@ OFFERS = {
     "exec_command": "e383074c19e29a092b2f6aa501902524916871ba14e4075791e7e043838a9de2",
     "write_stdin": "9479728f956ddacfa4ffad348fb7dde43ea8ba7f612e8f3bc5faea21d4b2d298",
 }
+# The shell tool declaration changed in build 29803. Keep each host bound to its own offers.
+HOST_29803 = {
+    "build": "29803", "system": "Darwin", "machine": "arm64",
+    "app_info_sha256": "8c6ca4191902a2c22f7bf4c114c0ba4bb18e49b0f02776c1edc5137a99568831",
+    "cli_sha256": "3b6d00deea5fabc50ad34be1872b8e4ead1638d23c68fabb7837edc07f0cf1e0",
+}
+OFFERS_29803 = {
+    **OFFERS,
+    "exec_command": "e000f1e2e40a3431b97f76c2548cea7332e20d308a68cf168b4812cb1ebaf7f8",
+}
+
 ZERO_EFFECTS = {"model_workers", "new_threads", "global_config_writes", "global_links",
                 "goal_mutations", "installed_services", "Affirm_connections",
                 "protected_component_access", "recovered_archive_execution"}
@@ -62,8 +73,10 @@ def assess(observation: dict) -> dict:
     canonical(observation)
     try:
         need(set(observation) == {"schema", "host", "identity", "offers", "catalog", "binding", "goal", "shell", "safety"}, "closed_observation_required")
-        need(observation["schema"] == SCHEMA and observation["host"] == HOST, "host_or_schema_changed")
-        need(observation["offers"] == OFFERS, "native_offer_changed")
+        host = observation["host"]
+        need(observation["schema"] == SCHEMA and host in (HOST, HOST_29803), "host_or_schema_changed")
+        expected_offers = OFFERS if host == HOST else OFFERS_29803
+        need(observation["offers"] == expected_offers, "native_offer_changed")
         identity = observation["identity"]
         need(set(identity) == {"expected_personal_email", "observed_email", "account_type", "workspace_name"}, "closed_identity_required")
         email = identity["expected_personal_email"]
@@ -76,7 +89,7 @@ def assess(observation: dict) -> dict:
         methods = [r["method"] for r in catalog["requests"]]
         need(methods == ["initialize", "initialized", "account/read", "skills/list", "plugin/installed"], "catalog_request_outside_route")
         need(catalog["requests"][2]["params"] == {"refreshToken": False}, "refresh_refused")
-        need(catalog["host_build"] == HOST["build"] and catalog["cli_sha256"] == HOST["cli_sha256"], "catalog_host_changed")
+        need(catalog["host_build"] == host["build"] and catalog["cli_sha256"] == host["cli_sha256"], "catalog_host_changed")
         binding = observation["binding"]
         need(set(binding) == {"thread_id", "objective_sha256", "fixture_sha256", "workspace"}, "closed_binding_required")
         need(isinstance(binding["thread_id"], str) and 0 < len(binding["thread_id"]) <= 128, "thread_binding_required")
@@ -100,7 +113,7 @@ def assess(observation: dict) -> dict:
         need(set(shell) == {"files", "nonzero", "interactive_start", "interactive_finish", "cancel_start", "cancel_finish"}, "closed_shell_trace_required")
         need(shell["files"]["exit_code"] == 0, "shell_file_check_failed")
         files = json.loads(shell["files"]["output"])
-        need(files["cwd_matches"] is True and files["child_scoped_env_matches"] is True and files["native_system"] == HOST["system"] and files["native_architecture"] == HOST["machine"], "shell_destination_changed")
+        need(files["cwd_matches"] is True and files["child_scoped_env_matches"] is True and files["native_system"] == host["system"] and files["native_architecture"] == host["machine"], "shell_destination_changed")
         need(files["preserved_input_sha256"] == INPUT_SHA and files["preserved_input_mode"] == 0o600 and integer(files["preserved_input_inode"]) and files["preserved_input_inode"] > 0, "shell_input_not_preserved")
         need(shell["nonzero"]["exit_code"] == 17 and all(s in shell["nonzero"]["output"] for s in ("synthetic-stdout-before-error", "synthetic-stderr-before-error")), "shell_nonzero_not_observed")
         for prefix, marker, code in (("interactive", "READY-FOR-SYNTHETIC-INPUT", 0), ("cancel", "READY-FOR-SCOPED-CANCEL", 130)):
@@ -123,7 +136,7 @@ def assess(observation: dict) -> dict:
     return {"schema": "personal-portability/native-import-assessment/v1",
             "eligible_for_bounded_destination_record": ["imported/goal", "imported/shell"],
             "provider_owner": "OpenAI", "source_route": "fresh-account native host distribution",
-            "host_build": HOST["build"], "observation_sha256": hashlib.sha256(canonical(observation)).hexdigest(),
+            "host_build": host["build"], "observation_sha256": hashlib.sha256(canonical(observation)).hexdigest(),
             "legacy_implementation_or_UI_parity_proven": False, "source_acceptance_supplied_by_data": False,
             "installation_or_lifecycle_authority": False, "formal_migration_complete": False}
 

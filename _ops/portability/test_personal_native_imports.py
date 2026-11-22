@@ -66,6 +66,22 @@ class NativeImportContract(unittest.TestCase):
         self.assertFalse(result["formal_migration_complete"])
         self.assertEqual(value, before)
 
+    def test_second_build_requires_its_observed_shell_contract(self):
+        value = observation()
+        value["host"] = observer.HOST_29803.copy()
+        value["offers"] = observer.OFFERS_29803.copy()
+        value["catalog"].update(host_build=value["host"]["build"], cli_sha256=value["host"]["cli_sha256"])
+        self.assertEqual(observer.assess(value)["host_build"], "29803")
+
+        for host, offers, reason in (
+            (observer.HOST_29803, observer.OFFERS, "native_offer_changed"),
+            (observer.HOST, observer.OFFERS_29803, "native_offer_changed"),
+            ({**observer.HOST_29803, "cli_sha256": "0" * 64}, observer.OFFERS_29803, "host_or_schema_changed"),
+        ):
+            with self.subTest(reason=reason, build=host["build"]):
+                with self.assertRaisesRegex(observer.ObservationError, reason):
+                    observer.assess({**value, "host": host, "offers": offers})
+
     def test_unknown_fields_cannot_supply_approval(self): self.reject(lambda v:v.update(approved=True))
     def test_different_build(self): self.reject(lambda v:v["host"].update(build="other"))
     def test_different_binary(self): self.reject(lambda v:v["host"].update(cli_sha256="0"*64))
