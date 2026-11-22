@@ -94,14 +94,15 @@ def node_id(info):
     return f"{info.st_dev}:{info.st_ino}"
 
 
-def lock_checkout(path, expected):
+def check_checkout(path, expected, *, lock=False):
     selected = absolute_directory(path)
     try:
         info = os.fstat(selected)
         if (node_id(info) != expected or not os.path.samestat(info, os.fstat(9))
                 or not os.path.samestat(info, os.stat("."))):
-            raise ValueError("selected checkout changed before entry")
-        fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            raise ValueError("selected checkout location changed")
+        if lock:
+            fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
     finally:
         os.close(selected)
 
@@ -160,8 +161,8 @@ if __name__ == "__main__":
     try:
         if action in {"target", "acquire"}:
             print(target(name, fixture, option == "1", acquire=action == "acquire"))
-        elif action == "lock":
-            lock_checkout(Path(name), fixture)
+        elif action in {"check", "lock"}:
+            check_checkout(Path(name), fixture, lock=action == "lock")
         elif action == "binding":
             print(binding(Path(name), fixture, option))
         elif action == "stage":

@@ -276,6 +276,16 @@ class NewRepositoryEndToEndTests(unittest.TestCase):
             info = (owner / "sample").stat()
             self.assertEqual(selected, f"{info.st_dev}:{info.st_ino}")
 
+            # The checkout-location guard checks the acquired inode and inherited checkout descriptor.
+            checkout = owner / "sample"
+            check = ["bash", "-c", 'exec 9<.; exec python3 -I -B "$1" check "$2" "$3" ""',
+                     "check", str(helper), str(checkout)]
+            subprocess.run([*check, selected], cwd=checkout, check=True)
+            mismatch = subprocess.run([*check, "wrong-inode"], cwd=checkout, capture_output=True, text=True)
+            self.assertNotEqual(mismatch.returncode, 0)
+            self.assertIn("selected checkout location changed", mismatch.stderr)
+            self.assertEqual(list(checkout.iterdir()), [])
+
     def test_personal_remote_replay_preserves_unrelated_work(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()

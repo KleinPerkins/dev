@@ -637,21 +637,20 @@ PY
 }
 
 enter_personal_checkout() {
-  local selected
   PERSONAL_PATH="$TARGET"
   cd -P -- "${PERSONAL_PATH%/*}"
-  selected="$(python3 -I -B "$PERSONAL_TARGET" acquire "$NAME" "$FIXTURE_ROOT" "$RESUME")"
+  PERSONAL_NODE="$(python3 -I -B "$PERSONAL_TARGET" acquire "$NAME" "$FIXTURE_ROOT" "$RESUME")"
   cd -P -- "./$NAME"
   exec 9<.
-  python3 -I -B "$PERSONAL_TARGET" lock "$PERSONAL_PATH" "$selected" ""
+  python3 -I -B "$PERSONAL_TARGET" lock "$PERSONAL_PATH" "$PERSONAL_NODE" ""
   # Relative Git, journal and file operations now address the pinned cwd.
   TARGET=.
 }
 
 check_checkout_location() {
-  if [ "$PERSONAL_CODEX" -eq 0 ] || [ . -ef "$PERSONAL_PATH" ]; then return 0; fi
-  printf 'dev-new-repo: selected personal checkout moved during scaffold\n' >&2
-  return 1
+  if [ "$PERSONAL_CODEX" -eq 1 ]; then
+    python3 -I -B "$PERSONAL_TARGET" check "$PERSONAL_PATH" "$PERSONAL_NODE" ""
+  fi
 }
 
 stage_scaffold() {
@@ -750,7 +749,11 @@ EOF
   fi
   if [ "$PERSONAL_CODEX" -eq 1 ]; then
     enter_personal_checkout
-    if [ "$RESUME" -eq 0 ]; then git init --template= -b main >/dev/null; fi
+    if [ "$RESUME" -eq 0 ]; then
+      # Initialize from the pinned working directory after rechecking the canonical name.
+      check_checkout_location
+      git init --template= -b main >/dev/null
+    fi
     check_checkout_location
     PERSONAL_BINDING="$(python3 -I -B "$PERSONAL_TARGET" binding "$PERSONAL_PATH" "$FIXTURE_ROOT" "$FIXTURE_REPOSITORY_ID")"
   fi
