@@ -4,6 +4,9 @@ import copy
 import io
 import json
 import os
+import subprocess
+import tempfile
+import os
 from pathlib import Path
 import sys
 import unittest
@@ -333,6 +336,52 @@ class FinalFencesAndCLI(unittest.TestCase):
             git('switch','--detach');git('config','user.email','synthetic-wrong@example.invalid');out=io.StringIO()
             with redirect_stdout(out),patch.object(m.g,'GitTool',return_value=tool):self.assertEqual(m.main(['inspect','--repository',REPO]),1)
             self.assertEqual(json.loads(out.getvalue())['verdict'],'VIOLATION')
+
+
+class PersonalCodexDoctorTests(unittest.TestCase):
+    def test_link_is_repeatable_and_preserves_occupied_slots(self):
+        ops = Path(__file__).resolve().parents[1]
+        source = ops / 'skills/personal/dev-doctor'
+        helper = ops / 'bin/link-personal-codex-skill.py'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            slot = root / 'skills/dev-doctor'
+            command = [sys.executable, '-I', '-B', str(helper), str(source), str(slot)]
+            subprocess.run(command, capture_output=True, check=True)
+            self.assertEqual(os.readlink(slot), str(source))
+            inode = slot.lstat().st_ino
+            subprocess.run(command, capture_output=True, check=True)
+            self.assertEqual(slot.lstat().st_ino, inode)
+            slot.rename(root / 'saved-link')
+            slot.symlink_to(root / 'foreign')
+            self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+            self.assertEqual(os.readlink(slot), str(root / 'foreign'))
+            slot.unlink()
+            slot.mkdir()
+            self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+            self.assertTrue(slot.is_dir())
+
+    def test_refuses_unselected_held_retired_or_outside_ids_before_opening(self):
+        selections = [
+            [], ['KleinPerkins/server-guard'], ['KleinPerkins/pr-automation-controller'],
+            ['KleinPerkins/sterling'], ['KleinPerkins/chaos-labs'], ['KleinPerkins/cpp'],
+            [REPO, 'KleinPerkins/server-guard'],
+        ]
+        for repositories in selections:
+            with self.subTest(repositories=repositories), redirect_stdout(io.StringIO()), \
+                    patch.object(m.p, 'Authority', side_effect=AssertionError('owner state opened')):
+                args = ['inspect-codex']
+                for repository in repositories:
+                    args.extend(['--repository', repository])
+                self.assertEqual(m.main(args), 2)
+
+    def test_known_identity_violation_uses_the_existing_owner_diagnosis(self):
+        with fixture() as (root, scope, tool, git):
+            git('config', 'user.email', 'synthetic-wrong@example.invalid')
+            output = io.StringIO()
+            with redirect_stdout(output), patch.object(m.g, 'GitTool', return_value=tool):
+                self.assertEqual(m.main(['inspect-codex', '--repository', REPO, '--quiet']), 1)
+            self.assertEqual(json.loads(output.getvalue())['verdict'], 'VIOLATION')
 
 
 if __name__=='__main__':unittest.main()
