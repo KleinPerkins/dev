@@ -492,10 +492,13 @@ class DevRemoveRepoTests(unittest.TestCase):
             owner = root / "personal/src/KleinPerkins"
             owner.mkdir(parents=True)
             target, peer = owner / "sample.source", owner / "sample.reader"
+            env = {**os.environ, "DEV_SESSION_ID": "retirement-fixture-" + root.name,
+                   "XDG_STATE_HOME": str(root / "state")}
             for checkout in (target, peer):
-                subprocess.run([str(ROOT / "_ops/bin/dev-new-repo.sh"), "--personal-codex",
+                created = subprocess.run([str(ROOT / "_ops/bin/dev-new-repo.sh"), "--personal-codex",
                                 checkout.name, "--fixture-root", str(root)],
-                               check=True, capture_output=True)
+                               env=env, text=True, capture_output=True)
+                self.assertEqual(created.returncode, 0, created.stderr)
             slots = peer / ".agents/skills"
             slots.mkdir(parents=True)
             (slots / "whole").symlink_to(os.path.relpath(target / "catalog", slots))
@@ -513,7 +516,7 @@ class DevRemoveRepoTests(unittest.TestCase):
                                    {"id": "other", "type": "custom-job"}])
             cmd = [str(SCRIPT), "view", "--personal-codex", "--fixture-root", str(root), "--json", str(target)]
             def view(*args, report=jobs):
-                result = subprocess.run([*cmd, *args], input=json.dumps(report), capture_output=True, text=True)
+                result = subprocess.run([*cmd, *args], input=json.dumps(report), env=env, capture_output=True, text=True)
                 data = json.loads(result.stdout)
                 self.assertEqual(result.returncode, data["exit"])
                 return data
