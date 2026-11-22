@@ -2,7 +2,7 @@
 
 The transfer manifest permits a qualified canonical source or a fresh-account
 host distribution for its installed non-work imports. The selected alternative
-for `imported/goal` and `imported/shell` on personal Codex build 23880 is OpenAI's
+for `imported/goal` and `imported/shell` on the two measured personal Codex builds is OpenAI's
 current native host distribution. This is an explicit owner adoption of the
 contracts below, not an inference from matching names. It does not assert the
 behavior or UI parity of an unknown legacy implementation. Other imported
@@ -46,7 +46,7 @@ selected or overridden by this workflow.
    checkouts and all unrelated source. Source acceptance selects this bounded
    fresh-account alternative; it does not install or activate anything.
 2. Verify the accepted observer and fixture bytes into a separate private export.
-   Verify build 23880, app/CLI hashes and all five actual native tool declarations.
+   Verify the selected build, its app and CLI hashes, and all five actual native tool declarations.
    A changed/absent offer, provider or host requires requalification, not a silent
    substitute. No extra roots, chats, model workers or shared capability links.
 3. Establish the expected personal ChatGPT account through a bounded native
@@ -98,6 +98,16 @@ passed under the necessary execution permission, with no requested token refresh
 All 18 pending preimages, original pins/indexes/protected records and retained
 capabilities still matched afterward. The private observation is bound by SHA-256
 `1898beb97989c2965829ac58890cc3132cce7ae29aa7271c31b4a2a795295440`.
+
+The second measured host uses desktop build 29803 and a revised native shell tool
+declaration. Its four shell cases exercised file preservation, exit 17, PTY
+input and SIGINT. The latter two sessions ended at exit 0 and 130. Two reads
+of the operator-requested migration goal preserved its identity and budget.
+The read-only app-server catalog used the enrolled personal account and one
+disposable workspace. Each host requires its own exact app, CLI and offered
+tool bindings. On either host, a different declared shell contract requires
+new qualification. Use the accepted observer against fresh private evidence
+before recording either alternative at the destination.
 
 Run the offline contract/refusal suite on both qualified Python versions:
 
