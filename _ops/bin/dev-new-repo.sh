@@ -153,6 +153,7 @@ SSH_URL="git@github.com:$OM_GH_USER/$NAME.git"
 INITIAL_COMMIT_MESSAGE="init: scaffold $OM_GH_USER/$NAME (born v2)"
 
 run_doc_warden_v2() {
+  check_checkout_location || return 1
   env PATH="$PATH" bash "$DEV_ROOT/_ops/bin/doc-warden.sh" v2-preview "$@"
 }
 
@@ -166,6 +167,10 @@ new_id() {
 }
 
 state_file_for_target() {
+  if [ "$PERSONAL_CODEX" -eq 1 ]; then
+    printf '%s\n' './.git/doc-warden-new-repo.json'
+    return
+  fi
   local git_path
   git_path="$(git -C "$TARGET" rev-parse --git-path doc-warden-new-repo.json)"
   case "$git_path" in
@@ -631,11 +636,22 @@ print(
 PY
 }
 
-bind_personal_checkout() {
-  # Both the session-lock and simultaneous retries with the same writer ID matter.
-  # The shell owns fd 9 for this invocation. The OS releases it on process exit.
-  exec 9<"$TARGET"
-  PERSONAL_BINDING="$(python3 -I -B "$PERSONAL_TARGET" binding "$TARGET" "$FIXTURE_ROOT" "$FIXTURE_REPOSITORY_ID")"
+enter_personal_checkout() {
+  local selected
+  PERSONAL_PATH="$TARGET"
+  cd -P -- "${PERSONAL_PATH%/*}"
+  selected="$(python3 -I -B "$PERSONAL_TARGET" acquire "$NAME" "$FIXTURE_ROOT" "$RESUME")"
+  cd -P -- "./$NAME"
+  exec 9<.
+  python3 -I -B "$PERSONAL_TARGET" lock "$PERSONAL_PATH" "$selected" ""
+  # Relative Git, journal and file operations now address the pinned cwd.
+  TARGET=.
+}
+
+check_checkout_location() {
+  if [ "$PERSONAL_CODEX" -eq 0 ] || [ . -ef "$PERSONAL_PATH" ]; then return 0; fi
+  printf 'dev-new-repo: selected personal checkout moved during scaffold\n' >&2
+  return 1
 }
 
 stage_scaffold() {
@@ -732,14 +748,18 @@ EOF
     printf 'dev-new-repo: set DEV_SESSION_ID to the current writer before creation or resume\n' >&2
     return 2
   fi
-  if [ -e "$TARGET" ]; then
+  if [ "$PERSONAL_CODEX" -eq 1 ]; then
+    enter_personal_checkout
+    if [ "$RESUME" -eq 0 ]; then git init --template= -b main >/dev/null; fi
+    check_checkout_location
+    PERSONAL_BINDING="$(python3 -I -B "$PERSONAL_TARGET" binding "$PERSONAL_PATH" "$FIXTURE_ROOT" "$FIXTURE_REPOSITORY_ID")"
+  fi
+  if { [ "$PERSONAL_CODEX" -eq 1 ] && [ "$RESUME" -eq 1 ]; } ||
+     { [ "$PERSONAL_CODEX" -eq 0 ] && [ -e "$TARGET" ]; }; then
     [ "$RESUME" -eq 1 ] ||
       { printf 'dev-new-repo: target exists (refusing): %s\n' "$TARGET" >&2; return 1; }
     git -C "$TARGET" rev-parse --git-dir >/dev/null 2>&1 ||
       { printf 'dev-new-repo: resume target is not a git repository\n' >&2; return 1; }
-    if [ "$PERSONAL_CODEX" -eq 1 ]; then
-      bind_personal_checkout
-    fi
     state_file="$(state_file_for_target)"
     [ -f "$state_file" ] ||
       { printf 'dev-new-repo: no resumable born-v2 operation state\n' >&2; return 1; }
@@ -782,11 +802,7 @@ EOF
   else
     [ "$RESUME" -eq 0 ] ||
       { printf 'dev-new-repo: persisted_replay_intent_mismatch: target/name %s\n' "$TARGET" >&2; return 1; }
-    if [ "$PERSONAL_CODEX" -eq 1 ]; then
-      mkdir -m 700 -- "$TARGET"
-      git -C "$TARGET" init --template= -b main >/dev/null
-      bind_personal_checkout
-    else
+    if [ "$PERSONAL_CODEX" -eq 0 ]; then
       mkdir -p "$TARGET"
       git -C "$TARGET" init -b main >/dev/null
     fi
@@ -824,6 +840,7 @@ EOF
   trap cleanup_born_v2_temp_state EXIT
 
   if [ "$phase" = "initialized" ]; then
+    check_checkout_location
     bash "$INSTALL_GUARD" "$TARGET" >/dev/null
     if [ -n "$(git -C "$TARGET" status --porcelain)" ]; then
       if [ -n "$FIXTURE_ROOT" ]; then
@@ -841,6 +858,7 @@ EOF
           return 75
         }
     else
+      check_checkout_location
       if [ -n "$FIXTURE_ROOT" ]; then
         env -u GH_TOKEN -u GITHUB_TOKEN \
           GH_CONFIG_DIR="$(dirname "$state_file")/doc-warden-gh-config" \
@@ -866,6 +884,7 @@ EOF
       exact_greenfield_apply
       if [ "$TEST_SHARDING_REQUIRED" -eq 1 ]; then
         local aggregate_gate="ci-required"
+        check_checkout_location
         python3 "$TEST_SHARDING" bootstrap --repo "$TARGET" --aggregate "$aggregate_gate" >/dev/null
       fi
       run_doc_warden_v2 greenfield verify \
@@ -903,6 +922,7 @@ EOF
   fi
 
   if [ "$PERSONAL_CODEX" -eq 1 ] && [ -z "$FIXTURE_ROOT" ]; then
+    check_checkout_location
     [ "$(gh api --hostname github.com user --jq .login)" = "$OM_GH_USER" ] ||
       { printf 'dev-new-repo: personal GitHub account unavailable; local operation retained\n' >&2; return 75; }
   fi
@@ -937,6 +957,7 @@ EOF
   fi
 
   if [ "$phase" = "remote-create-attempted" ]; then
+    check_checkout_location
     validate_remote_creation_metadata "" ""
     local remote_metadata remote_rc=0
     "$GITHUB_CLI" auth status -h github.com >/dev/null 2>&1 ||
@@ -973,6 +994,7 @@ EOF
   fi
 
   if [ "$phase" = "remote-created-marked" ]; then
+    check_checkout_location
     validate_remote_creation_metadata "" ""
     local marked_metadata marked_homepage
     marked_metadata="$(github_repository_metadata)" ||
@@ -1029,6 +1051,7 @@ EOF
       update_operation_state "$state_file" remote-created "$GITHUB_REPOSITORY_ID"
     fi
     if [ "$PERSONAL_CODEX" -eq 1 ]; then
+      check_checkout_location
       validate_remote_creation_metadata "$(github_repository_metadata)" "" "$GITHUB_REPOSITORY_ID" >/dev/null
     fi
     exact_remote_observation_apply
@@ -1064,6 +1087,7 @@ EOF
     if [ "$PERSONAL_CODEX" -eq 1 ]; then
       validate_remote_creation_metadata "$(github_repository_metadata)" "" "$GITHUB_REPOSITORY_ID" >/dev/null
     fi
+    check_checkout_location
     # Idempotent push: skip when origin/main already matches HEAD so --resume does not
     # re-push after interruption left phase at second-committed.
     if ! git -C "$TARGET" rev-parse --verify refs/remotes/origin/main >/dev/null 2>&1 || \

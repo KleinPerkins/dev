@@ -253,6 +253,21 @@ class NewRepositoryEndToEndTests(unittest.TestCase):
             self.assertNotEqual(foreign.returncode, 0)
             self.assertIn("origin or push URL changed", foreign.stderr)
 
+    def test_personal_create_requires_the_selected_parent_as_cwd(self):
+        helper = ROOT / "_ops/portability/personal_scaffold.py"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            owner = root / "personal/src/KleinPerkins"
+            owner.mkdir(parents=True)
+            args = ["python3", "-I", "-B", str(helper), "acquire", "sample", str(root), "0"]
+            refused = subprocess.run(args, cwd=root, capture_output=True, text=True)
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn("selected owner directory changed", refused.stderr)
+            self.assertEqual(list(owner.iterdir()), [])
+            selected = subprocess.check_output(args, cwd=owner, text=True).strip()
+            info = (owner / "sample").stat()
+            self.assertEqual(selected, f"{info.st_dev}:{info.st_ino}")
+
     def test_personal_remote_replay_preserves_unrelated_work(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()

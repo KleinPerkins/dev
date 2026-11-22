@@ -16,7 +16,7 @@ from personal_scope import absolute_directory, child_directory, operator_home
 LAYOUT = ("personal", "src", "KleinPerkins")
 
 
-def target(name, fixture, resume):
+def target(name, fixture, resume, *, acquire=False):
     if (not re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}", name)
             or name.endswith(".") or name.lower().endswith(".git")
             or name.casefold() in {"repo-platform", "dev-main-sync"}):
@@ -43,12 +43,28 @@ def target(name, fixture, resume):
     else:
         root = operator_home()
         parts = ("dev", *LAYOUT)
+    if any(key in os.environ for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
+            "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+            "GIT_NAMESPACE", "GIT_QUARANTINE_PATH")):
+        raise ValueError("redirected Git storage")
     fd = absolute_directory(root)
     try:
         if os.fstat(fd).st_uid != os.getuid():
             raise ValueError("operator-owned root required")
         owner = child_directory(fd, parts)
         try:
+            if acquire:
+                if not os.path.samestat(os.stat("."), os.fstat(owner)):
+                    raise ValueError("selected owner directory changed")
+                if not resume:
+                    os.mkdir(name, mode=0o700, dir_fd=owner)
+                selected = child_directory(owner, (name,))
+                try:
+                    if not resume and os.listdir(selected):
+                        raise ValueError("new checkout is no longer empty")
+                    return node_id(os.fstat(selected))
+                finally:
+                    os.close(selected)
             if resume:
                 checkout = child_directory(owner, (name, ".git"))
                 os.close(checkout)
@@ -63,21 +79,31 @@ def target(name, fixture, resume):
             os.close(owner)
     finally:
         os.close(fd)
-    # Git's location overrides could redirect init or subsequent writes elsewhere.
-    if any(key in os.environ for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
-            "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-            "GIT_NAMESPACE", "GIT_QUARANTINE_PATH")):
-        raise ValueError("redirected Git storage")
     return root.joinpath(*parts, name)
+
+
+def node_id(info):
+    return f"{info.st_dev}:{info.st_ino}"
+
+
+def lock_checkout(path, expected):
+    selected = absolute_directory(path)
+    try:
+        info = os.fstat(selected)
+        if (node_id(info) != expected or not os.path.samestat(info, os.fstat(9))
+                or not os.path.samestat(info, os.stat("."))):
+            raise ValueError("selected checkout changed before entry")
+        fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    finally:
+        os.close(selected)
 
 
 def binding(checkout, fixture, repository_id):
     def git(*args):
-        return subprocess.check_output(["git", "-C", str(checkout), *args], text=True).strip()
+        return subprocess.check_output(["git", *args], text=True).strip()
 
-    if not os.path.samestat(os.fstat(9), checkout.lstat()):
-        raise ValueError("checkout directory changed before writer acquisition")
-    fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    if checkout != Path.cwd() or not os.path.samestat(os.fstat(9), checkout.lstat()):
+        raise ValueError("pinned checkout location changed")
     gitdir = checkout / ".git"
     if (git("rev-parse", "--show-toplevel") != str(checkout)
             or git("rev-parse", "--absolute-git-dir") != str(gitdir)
@@ -124,8 +150,10 @@ def stage(checkout, operation, phase):
 if __name__ == "__main__":
     action, name, fixture, option = sys.argv[1:]
     try:
-        if action == "target":
-            print(target(name, fixture, option == "1"))
+        if action in {"target", "acquire"}:
+            print(target(name, fixture, option == "1", acquire=action == "acquire"))
+        elif action == "lock":
+            lock_checkout(Path(name), fixture)
         elif action == "binding":
             print(binding(Path(name), fixture, option))
         elif action == "stage":
