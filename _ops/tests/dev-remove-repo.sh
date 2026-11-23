@@ -497,10 +497,10 @@ class DevRemoveRepoTests(unittest.TestCase):
             subprocess.run([str(ROOT / "_ops/bin/dev-new-repo.sh"), "--personal-codex", checkout.name,
                             "--fixture-root", str(root)], env=env, capture_output=True, check=True)
 
+            command = [str(SCRIPT), "view", "--personal-codex", "--open-files",
+                       "--fixture-root", str(root), str(checkout)]
             def inspect():
-                result = subprocess.run([str(SCRIPT), "view", "--personal-codex", "--open-files",
-                                         "--fixture-root", str(root), str(checkout), "--json"],
-                                        env=env, cwd=root, capture_output=True, timeout=55)
+                result = subprocess.run([*command, "--json"], env=env, cwd=root, capture_output=True, timeout=55)
                 self.assertTrue(result.stdout, result.stderr)
                 row = json.loads(result.stdout)
                 self.assertEqual(result.returncode, row["exit"])
@@ -568,6 +568,9 @@ class DevRemoveRepoTests(unittest.TestCase):
                 {"paths": ["edits/hardlink"], "outside_count": 2},
                 {"paths": ["edits/peer-link"], "outside_count": 1},
             ])
+            human = subprocess.check_output(command, env=env, cwd=root, timeout=55, text=True)
+            self.assertIn('Additional hard links outside the checkout for "edits/hardlink": 2.', human)
+            self.assertIn('Additional hard links outside the checkout for "edits/peer-link": 1.', human)
             shared.unlink()
             (peer / "other-link").unlink()
             self.assertEqual(inspect()["open_files"]["external_hard_links"], [])
