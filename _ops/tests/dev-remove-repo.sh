@@ -549,9 +549,28 @@ class DevRemoveRepoTests(unittest.TestCase):
                 self.assertNotIn(other_writer, first)
                 os.link(other, shared)
                 self.assertIn("writable-descriptor", matches()[other_writer])
+                second = nested / "second-name"
+                os.link(shared, second)
+                self.assertEqual(inspect()["open_files"]["external_hard_links"],
+                                 [{"paths": ["edits/hardlink", "edits/second-name"], "outside_count": 1}])
                 shared.unlink()
+                second.unlink()
                 self.assertNotIn(other_writer, matches())
             self.assertNotIn(writer, matches())
+            # An outside name remains relevant after its writer exits. A pair
+            # wholly inside the selection and a symlink's target are independent.
+            os.link(work, nested / "internal-name")
+            link = nested / "peer-link"
+            os.link(link, peer / "other-link", follow_symlinks=False)
+            os.link(other, shared)
+            os.link(other, peer / "second-retained-name")
+            self.assertEqual(inspect()["open_files"]["external_hard_links"], [
+                {"paths": ["edits/hardlink"], "outside_count": 2},
+                {"paths": ["edits/peer-link"], "outside_count": 1},
+            ])
+            shared.unlink()
+            (peer / "other-link").unlink()
+            self.assertEqual(inspect()["open_files"]["external_hard_links"], [])
             (nested / ".git").write_text("gitdir: elsewhere")
             self.assertIn("nested repository", inspect()["refused"])
             self.assertEqual(work.read_text(), "unfinished work")
@@ -582,6 +601,16 @@ class DevRemoveRepoTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "changed during"):
                     module.inspect_open_files(fd)
             self.assertEqual(work.read_text(), "preserve this change")
+            with tempfile.TemporaryDirectory() as retained:
+                outside = Path(retained) / "another-name"
+                def link_outside(*args, **kwargs):
+                    result = real_run(*args, **kwargs)
+                    os.link(work, outside)
+                    return result
+                with patch.object(module.subprocess, "run", side_effect=link_outside):
+                    with self.assertRaisesRegex(ValueError, "changed during"):
+                        module.inspect_open_files(fd)
+                self.assertTrue(work.samefile(outside))
 
     def test_personal_view_observes_selected_peers_and_configured_jobs(self):
         with tempfile.TemporaryDirectory() as tmp:
