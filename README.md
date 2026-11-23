@@ -66,9 +66,9 @@ After the released clean repository is active, a genuinely new empty host can us
 the repository's bootstrap procedure. A personal-only host uses the bounded
 personal reconstruction route in [_ops/portability](_ops/portability/README.md);
 it must not fall back to work integration or broad host installation.
-Configure the core playbook for Personal Codex on the new machine with
+Install the core capability playbook, personal repository doctor and product creator with
 `bash bootstrap.sh --profile personal-codex configure`. Its `--check` option
-verifies the installed release and user skill entry.
+verifies the three versioned runtimes and their Personal Codex user entries.
 
 The allow-list `.gitignore` tracks only reviewed operating-model source. Local
 identity remains `KleinPerkins <49759187+KleinPerkins@users.noreply.github.com>`;

@@ -70,7 +70,7 @@ complete owner workflow; raw descriptor hashes are not installed hashes.
 
 ## Usage
 
-### Configure the core capability in Personal Codex
+### Configure the standard Personal Codex skills
 
 On a new machine with a Dev checkout and Personal Codex, run this from the
 Dev root as part of configuring the machine:
@@ -80,26 +80,40 @@ bash bootstrap.sh --profile personal-codex configure
 bash bootstrap.sh --profile personal-codex configure --check
 ```
 
-The first command installs the core `capability` playbook for the selected
-Codex home. It fetches the three public Skills files at the pinned revision,
-verifies their contents and executable flags, and exposes the versioned
-release in the user skills directory. A repeat run can use the existing
-release offline. An occupied slot is preserved. A matching earlier installation
-remains under its original owner's control. Open a fresh Codex session to use
-the playbook. Plugin installation stays with the operator, and Ecosystem
-Orchestrator governs propagation into work repositories.
+The first command exposes three user skills. `capability` uses the three
+hash-verified files from its pinned public Skills release. `dev-doctor` uses
+the Dev release from PR 13 and `dev-new-repo` uses the Dev release from PR 15.
+The [release manifest](personal-dev-skills.json) lists each Dev file’s Git
+mode, length and SHA-256. Setup stages only these runtime files in the working
+directory of each release. The creator keeps a read-only Git object store
+for Doc-Warden. Setup checks the pinned commit, the entire object store and
+the permitted Git metadata before accepting that authority. A full Dev clone supplies the source objects
+locally. A shallow clone can fetch a missing pinned revision over public HTTPS.
 
-To withdraw an entry created by this command, use
-`bash bootstrap.sh --profile personal-codex configure --withdraw`. The
-versioned files stay available for reconfiguration. `--check` verifies the
-local files and discovery entry. The source reconstruction report below tracks
-the selected transfer manifest separately and retains its historical decisions.
+Open a fresh Personal Codex session after configuration. The check verifies the
+published files and their discovery links. Existing installations pointing to
+the verified releases retain their original ownership. An occupied slot
+pointing elsewhere is reported and preserved. Repeating setup can use the
+verified releases offline. Plugin installation stays with the operator, and
+Ecosystem Orchestrator governs downstream distribution.
+
+If setup reports that an earlier creator needs a sealed Dev authority directory,
+its discovery link and release stay in place. Use the installing owner's
+recovery record to qualify a replacement before switching the existing release.
+
+To withdraw profile-owned discovery links, run
+`bash bootstrap.sh --profile personal-codex configure --withdraw`. Earlier
+matching installations remain in place. The versioned files remain available
+for reconfiguration. Each skill has its own ownership record and recovery
+history. Interrupted setup can be retried. An interrupted withdrawal can be
+resumed using the same command. The source reconstruction report below tracks
+the selected transfer manifest separately.
 
 If another writer replaces the entry during withdrawal, the installer restores
 that entry when the slot is vacant. If a second entry already occupies the slot,
 the command reports both paths and preserves the displaced entry. Each withdrawal
-keeps its own recovery directory under `dev-personal-core/withdrawals` in the
-selected Codex home. Once
+keeps its own recovery directory under the skill’s control directory in the selected Codex home. The core
+capability retains its existing `dev-personal-core/withdrawals` history. Once
 the operator has preserved the new occupant and vacated the slot, another
 `configure --withdraw` restores the displaced entry.
 
