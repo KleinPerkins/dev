@@ -1369,6 +1369,54 @@ class DevRemoveRepoTests(unittest.TestCase):
         self.assertEqual(done.rc, 0, done.text)
         self.assertFalse(marker.exists())
 
+    def test_writer_check_outage_after_rename_preserves_personal_checkout_until_recovery(self):
+        fx = self.fx
+        repo = fx.repo("personal/alpha")
+        before = digest_tree(repo)
+        fx.adapter("lsof", """#!/bin/sh
+test -d "$DEV_REMOVE_REPO_FIXTURE_ROOT/dev/personal/alpha" || exit 2
+printf 'p1\\ncinit\\nftxt\\nn/sbin/init\\n'
+""")
+        preview, data = fx.preview("personal/alpha")
+        self.assertEqual(preview.rc, 0, preview.text)
+        self.assertNotIn("writer-proof-unavailable", data["required_waivers"])
+        first = fx.confirm(data)
+        self.assertEqual(first.rc, 1, first.text)
+        marker, = repo.parent.glob(".drr-*.removing")
+        self.assertEqual(digest_tree(marker), before)
+        operation = data["operation"]
+        failure = [e for e in fx.events(operation) if e["kind"] == "failure"][-1]
+        self.assertIn("writer-proof-unavailable", failure["reason"])
+        retry = fx.run("resume", "--operation", operation, "--json")
+        self.assertEqual(retry.rc, 1, retry.text)
+        self.assertEqual(digest_tree(marker), before)
+        self.assertNotIn("purge-start", fx.kinds(operation))
+        fx.adapter("lsof", LSOF_SHIM)
+        recovered = fx.run("resume", "--operation", operation, "--json")
+        self.assertEqual(recovered.rc, 0, recovered.text)
+        self.assertFalse(marker.exists())
+
+    def test_previewed_writer_check_outage_remains_waivable_on_personal_resume(self):
+        fx = self.fx
+        repo = fx.repo("personal/alpha")
+        fx.lsof_off()
+        preview, data = fx.preview("personal/alpha")
+        self.assertEqual(preview.rc, 0, preview.text)
+        self.assertIn("writer-proof-unavailable", data["required_waivers"])
+        step, = fx.step_ids(data, "delete-checkout")
+        stopped = fx.confirm(data, interrupt="after-rename:" + step)
+        self.assertEqual(stopped.rc, 75, stopped.text)
+        marker, = repo.parent.glob(".drr-*.removing")
+        fx.lsof_on()
+        fx.lsof([(424242, "editor", "cwd", str(marker))])
+        blocked = fx.run("resume", "--operation", data["operation"], "--json")
+        self.assertEqual(blocked.rc, 1, blocked.text)
+        self.assertTrue(marker.is_dir())
+        fx.lsof_off()
+        resumed = fx.run("resume", "--operation", data["operation"], "--json")
+        self.assertEqual(resumed.rc, 0, resumed.text)
+        self.assertFalse(marker.exists())
+
     def test_an_affirm_resume_without_writer_proof_stops_and_leaves_the_marker(self):
         fx = self.fx
         fx.policy(True)
