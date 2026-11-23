@@ -201,6 +201,14 @@ def checkout_installation(entry, action):
     if entry.checkout is None or not points_to(entry.slot, entry.checkout):
         return None
     if action == "withdraw":
+        anchor = entry.control / entry.slot.name
+        if os.path.lexists(anchor):
+            # The original discovery link is already gone. Like a normal
+            # withdrawal, retain its witness and release for offline reuse.
+            if not points_to(anchor, entry.release):
+                raise ValueError(f"the {entry.label} ownership record changed")
+            entry.verify()
+            return f"preserved independently installed {entry.label}; verified cached profile release for reuse"
         return f"preserved independently installed {entry.label}"
     before = entry.slot.lstat()
     verify_skill_tree(entry.checkout, AUTHORING_RELEASE["skills"][entry.label], checkout=True)

@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 import tempfile
@@ -307,6 +308,52 @@ class StandardDevSkillTests(unittest.TestCase):
         self.assertEqual({p.name for p in self.slots.iterdir()}, set(original))
         self.assertTrue(all(os.path.samestat(info, (self.slots / name).lstat()) for name, info in original.items()))
         self.assertEqual(altered.read_bytes(), b"modified independently")
+
+    def test_checkout_replacing_profile_entry_survives_withdrawal_and_offline_restore(self):
+        self.configure("install")
+        name = "verification-before-completion"
+        slot = self.slots / name
+        anchor = self.codex / "dev-personal-core" / name / name
+        release = slot.resolve()
+        original = anchor.lstat()
+        self.assertTrue(os.path.samestat(slot.lstat(), original))
+        checkout = self.home / "dev/capabilities/skills/global/skills" / name
+        checkout.parent.mkdir(parents=True)
+        shutil.copytree(release, checkout)
+        slot.unlink()
+        slot.symlink_to(checkout)
+        replacement = slot.lstat()
+
+        for _ in range(2):
+            messages = self.configure("withdraw")
+            self.assertIn(f"preserved independently installed {name}; verified cached profile release for reuse", messages)
+            self.assertTrue(os.path.samestat(slot.lstat(), replacement))
+            self.assertTrue(os.path.samestat(anchor.lstat(), original))
+
+        saved = anchor.with_name("saved-witness")
+        anchor.rename(saved)
+        anchor.symlink_to(checkout)
+        with self.assertRaisesRegex(ValueError, "ownership record changed"):
+            self.configure("withdraw")
+        self.assertTrue(os.path.samestat(slot.lstat(), replacement))
+        anchor.unlink()
+        saved.rename(anchor)
+        file = release / "SKILL.md"
+        raw = file.read_bytes()
+        file.chmod(0o600)
+        file.write_bytes(b"changed release")
+        with self.assertRaisesRegex(ValueError, "SKILL.md"):
+            self.configure("withdraw")
+        self.assertTrue(os.path.samestat(slot.lstat(), replacement))
+        file.write_bytes(raw)
+        file.chmod(0o400)
+
+        slot.unlink()
+        self.design_read.side_effect = AssertionError("offline restore attempted to download")
+        self.configure("install")
+        self.configure("check")
+        self.assertTrue(os.path.samestat(slot.lstat(), original))
+        self.assertEqual((checkout / "SKILL.md").read_bytes(), raw)
 
     def test_design_notice_and_nested_files_are_both_required(self):
         self.configure("install")

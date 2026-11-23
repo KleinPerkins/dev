@@ -119,7 +119,10 @@ To withdraw profile-owned discovery links, run
 `bash bootstrap.sh --profile personal-codex configure --withdraw`. Earlier
 matching installations remain in place. The versioned files remain available
 for reconfiguration. Each skill has its own ownership record and recovery
-history. Interrupted setup can be retried. An interrupted withdrawal can be
+history. When a link to the independent Skills checkout replaces an installed
+authoring skill, withdrawal leaves that checkout in place and checks the
+earlier ownership record and cached release. Once the user vacates the slot,
+configuration can restore the cached release offline. Interrupted setup can be retried. An interrupted withdrawal can be
 resumed using the same command. The source reconstruction report below tracks
 the selected transfer manifest separately.
 
