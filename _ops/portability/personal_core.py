@@ -31,6 +31,7 @@ FILES = {
 DESIGN_RELEASE = json.loads(Path(__file__).with_name("personal-design-skills.json").read_bytes())
 ISOKIT_RELEASE = json.loads(Path(__file__).with_name("personal-isokit.json").read_bytes())
 AUTHORING_RELEASE = json.loads(Path(__file__).with_name("personal-authoring-skills.json").read_bytes())
+SAVE_GAME_RELEASE = json.loads(Path(__file__).with_name("personal-save-game.json").read_bytes())
 
 
 def physical_path(path):
@@ -296,6 +297,8 @@ def checkout_installation(entry, action):
     entry.verify_checkout()
     if not points_to(entry.slot, entry.checkout) or not os.path.samestat(before, entry.slot.lstat()):
         raise ValueError(f"the {entry.label} checkout entry changed during verification")
+    if entry.label == "save-game":
+        return "verified save-game from the existing Skills release"
     return f"verified {entry.label} from the existing Skills checkout"
 
 
@@ -394,13 +397,19 @@ def configure_profile(home, codex_home, action):
         bundle = DevSkillRelease(name, home, slot)
         entries.append(SkillEntry(slot, bundle.skill,
                                   physical_path(core.control / name), name, bundle.prepare, bundle.verify))
-    for release in (DESIGN_RELEASE, AUTHORING_RELEASE, ISOKIT_RELEASE):
+    skills_checkout = home / "dev/capabilities/skills"
+    save_game_source = home / ".local/share/save-game/source" / SAVE_GAME_RELEASE["revision"]
+    for release, existing_root in (
+        (DESIGN_RELEASE, None),
+        (AUTHORING_RELEASE, skills_checkout / "global/skills"),
+        (ISOKIT_RELEASE, skills_checkout / "local/skills"),
+        (SAVE_GAME_RELEASE, save_game_source / "global/skills"),
+    ):
         for name in release["skills"]:
             folder = core.release.parent.parent / f"{name}-{release['revision']}" / name
             populate = partial(write_skill_package, release=release)
             verify = partial(verify_skill_package, release=release)
-            collection = "local" if release is ISOKIT_RELEASE else "global"
-            checkout = None if release is DESIGN_RELEASE else home / "dev/capabilities/skills" / collection / "skills" / name
+            checkout = existing_root / name if existing_root is not None else None
             verify_checkout = partial(verify_selected_skill, checkout, release, checkout=True) if checkout else None
             entries.append(SkillEntry(core.slot.with_name(name), folder, physical_path(core.control / name),
                                       name, partial(prepare_release, folder, populate, verify),

@@ -80,7 +80,7 @@ bash bootstrap.sh --profile personal-codex configure
 bash bootstrap.sh --profile personal-codex configure --check
 ```
 
-The first command exposes eight user skills. `capability` uses the three
+The first command exposes nine user skills. `capability` uses the three
 hash-verified files from its pinned public Skills release. Frontend Design and
 Web Artifacts Builder include their complete pinned skill directories, licenses
 and the third-party notice from Skills. The [design package manifest](personal-design-skills.json)
@@ -103,6 +103,12 @@ imports the browser API. The browser executable has a separate operator-approved
 download when you use the checker. If Codex already links to the matching IsoKit
 checkout under `~/dev/capabilities/skills/local/skills`, configuration verifies it
 in place and withdrawal preserves its link. [IsoKit release manifest](personal-isokit.json).
+
+Save-Game saves a private checkpoint and resumes it in a fresh session. Dev
+installs the complete Skills release pinned by Doc-Warden. If the Codex entry
+already points to that release under `~/.local/share/save-game/source`, Dev
+verifies its contents in place. Withdrawing the profile preserves that
+independent entry and the private checkpoint data. [Save-Game release manifest](personal-save-game.json).
 
 `dev-doctor` uses
 the Dev release from PR 13 and `dev-new-repo` uses the Dev release from PR 15.
