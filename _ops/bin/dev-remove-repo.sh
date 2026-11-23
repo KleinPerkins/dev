@@ -1559,7 +1559,36 @@ def tombstone_rel(rel, name):
     return parent + "/" + name
 
 
-def delete_tree(ctx, base, comps, expected_identity, hook=None, tombstone=None, guard=None):
+def unlink_open_directory(parent_fd, name, fd, record=None):
+    """Witness unlink on the opened directory before recording completion."""
+    with ExitStack() as stack:
+        queue = None
+        if record and sys.platform == "darwin":
+            queue = select.kqueue()
+            stack.callback(queue.close)
+            change = select.kevent(fd, filter=select.KQ_FILTER_VNODE, flags=select.KQ_EV_ADD | select.KQ_EV_CLEAR,
+                                   fflags=select.KQ_NOTE_DELETE | select.KQ_NOTE_RENAME)
+            queue.control([change], 0, 0)
+        st = os.fstat(fd)
+        if not os.path.samestat(st, os.stat(name, dir_fd=parent_fd, follow_symlinks=False)):
+            raise Refusal("the directory changed before its final removal")
+        try:
+            os.rmdir(name, dir_fd=parent_fd)
+        except OSError as exc:
+            raise _remove_failure(name, exc)
+        if record:
+            if queue is None:
+                unlinked = os.fstat(fd).st_nlink == 0
+            else:
+                unlinked = any(ev.ident == fd and ev.filter == select.KQ_FILTER_VNODE
+                               and not (ev.flags & select.KQ_EV_ERROR or ev.fflags & select.KQ_NOTE_RENAME)
+                               and ev.fflags & select.KQ_NOTE_DELETE for ev in queue.control([], 1, 1))
+            if not unlinked:
+                raise Refusal("could not verify unlink of the opened checkout; preserve the operation journal")
+            record(stat_identity(st), stat_identity(os.fstat(parent_fd)))
+
+
+def delete_tree(ctx, base, comps, expected_identity, hook=None, tombstone=None, guard=None, emptied_parent=None, record_unlink=None):
     """Remove one whole directory tree through a no-follow descriptor chain.
 
     With a tombstone name the directory is first renamed (atomically, same parent) so the real path
@@ -1591,6 +1620,8 @@ def delete_tree(ctx, base, comps, expected_identity, hook=None, tombstone=None, 
                 lst = os.lstat(name, dir_fd=parent_fd)
             except FileNotFoundError:
                 return {"absent": True, "entries": 0}
+            if emptied_parent is not None:
+                raise Refusal("the original location is occupied after the checkout was emptied")
             if stat.S_ISLNK(lst.st_mode):
                 raise Refusal("the checkout path is now a symbolic link; refusing to follow it")
             if not stat.S_ISDIR(lst.st_mode):
@@ -1619,15 +1650,20 @@ def delete_tree(ctx, base, comps, expected_identity, hook=None, tombstone=None, 
                 raise Refusal("the checkout is owned by another user")
             if guard is not None:
                 guard(os.path.join(ctx.root, *comps[:-1], work) if base == ctx.root else work, tfd)
-            _make_writable(tfd, st)
             counters = {"entries": 0}
-            _rm_contents(tfd, st.st_dev, counters, hook)
+            if emptied_parent is None:
+                _make_writable(tfd, st)
+                _rm_contents(tfd, st.st_dev, counters, hook)
+            elif stat_identity(os.fstat(parent_fd)) != emptied_parent:
+                raise Refusal("the removal marker's parent changed after the checkout was emptied")
+            if tombstone:
+                if os.listdir(tfd):
+                    raise Refusal("new items appeared in the emptied checkout; preserve them before resuming")
+                if hook is not None and emptied_parent is None:
+                    hook("empty", {"parent": stat_identity(os.fstat(parent_fd)), "identity": stat_identity(st)})
+            unlink_open_directory(parent_fd, work, tfd, record_unlink)
         finally:
             os.close(tfd)
-        try:
-            os.rmdir(work, dir_fd=parent_fd)
-        except OSError as exc:
-            raise _remove_failure(work, exc)
         return {"absent": False, "entries": counters["entries"] + 1}
     finally:
         os.close(parent_fd)
@@ -1635,8 +1671,8 @@ def delete_tree(ctx, base, comps, expected_identity, hook=None, tombstone=None, 
             os.close(grand)
 
 
-def delete_checkout(ctx, rel, expected_identity, hook=None, tombstone=None, guard=None):
-    return delete_tree(ctx, ctx.root, rel.split("/"), expected_identity, hook, tombstone, guard)
+def delete_checkout(ctx, rel, expected_identity, hook=None, tombstone=None, guard=None, emptied_parent=None, record_unlink=None):
+    return delete_tree(ctx, ctx.root, rel.split("/"), expected_identity, hook, tombstone, guard, emptied_parent, record_unlink)
 
 
 def unlink_link_nofollow(ctx, link_path, expected_readlink):
@@ -3435,7 +3471,7 @@ def build_plan(ctx, targets, cohort_size, agent_route_available):
                 "delete-checkout",
                 cid,
                 t["rel"],
-                {"rel": t["rel"], "identity": t["identity"]},
+                {"rel": t["rel"], "identity": t["identity"], "completion_proof": "empty-directory/v1"},
                 {"tree:" + t["rel"]: t["aspects"]["tree:" + t["rel"]], "git:" + t["rel"]: t["aspects"].get("git:" + t["rel"])},
                 "%s no longer exists" % t["rel"],
                 ("no-writer", "path-chain", "affirm-gate", "fleet", "worktrees-gone"),
@@ -3702,8 +3738,40 @@ class Runner(object):
         if kind == "worktree-remove":
             return not lexists_nofollow(p["path"])
         if kind == "delete-checkout":
-            return not lexists_under(ctx, p["rel"]) and not lexists_under(ctx, tombstone_rel(p["rel"], self.tombstone(step)))
+            if not p.get("completion_proof"):
+                return not lexists_under(ctx, p["rel"]) and not lexists_under(ctx, tombstone_rel(p["rel"], self.tombstone(step)))
+            parent_id = self.checkout_parent(step, "checkout-unlinked")
+            if parent_id is None:
+                return False
+            parts = p["rel"].split("/")
+            try:
+                fd, ancestor = open_chain(ctx, parts[:-1])
+            except PathProblem:
+                return False
+            try:
+                if stat_identity(os.fstat(fd)) != parent_id:
+                    return False
+                for name in (parts[-1], self.tombstone(step)):
+                    try:
+                        os.stat(name, dir_fd=fd, follow_symlinks=False)
+                    except FileNotFoundError:
+                        continue
+                    return False
+                return True
+            except OSError:
+                return False
+            finally:
+                os.close(fd)
+                if ancestor is not None:
+                    os.close(ancestor)
         return False
+
+    def checkout_parent(self, step, event_kind):
+        for event in reversed(self.j.load().events):
+            if (event["kind"] == event_kind and event.get("step") == step["id"]
+                    and event.get("target") == step["target"] and event.get("identity") == step["params"]["identity"]):
+                return event["parent"]
+        return None
 
     def tombstone(self, step):
         return tombstone_name(self.op["operation_id"], step["id"], step["params"]["rel"])
@@ -3757,7 +3825,12 @@ class Runner(object):
         if kind == "delete-checkout":
             rel = step["params"]["rel"]
             tomb = os.path.join(self.ctx.root, tombstone_rel(rel, self.tombstone(step)))
-            if lexists_nofollow(tomb):
+            marker_present = lexists_nofollow(tomb)
+            if not marker_present and not lexists_under(self.ctx, rel):
+                if step["params"].get("completion_proof") and not self.observe(step):
+                    return False, "the checkout is missing without evidence of removal from its original parent; restore the original location before resuming"
+                return True, ""
+            if marker_present:
                 # Already renamed away under the approval, but finishing the delete still re-proves nothing is using it.
                 # (lsof reports a renamed directory under its new path, so scanning the marker path is what finds users.)
                 if is_under(self.ctx.start_cwd, tomb) or is_under(self.ctx.start_cwd, os.path.join(self.ctx.root, rel)):
@@ -3783,6 +3856,8 @@ class Runner(object):
                 return True, ""
             t = self.fresh_target(rel)
             if t["state"] == "absent":
+                if step["params"].get("completion_proof"):
+                    return False, "the checkout moved during inspection; resume to check its location again"
                 return True, ""
             if t["blockers"]:
                 return False, "; ".join(b["message"] for b in t["blockers"][:3])
@@ -3867,6 +3942,9 @@ class Runner(object):
                     ctx.interrupt("after-rename:" + sid)
                 elif point == "entry" and counters["entries"] == 3:
                     ctx.interrupt("mid-delete:" + sid)
+                elif point == "empty" and p.get("completion_proof"):
+                    self.j.append("checkout-empty", step=sid, subsystem="delete-checkout", target=step["target"], **counters)
+                    ctx.interrupt("after-empty:" + sid)
 
             def guard(work_path, tfd, rel=p["rel"]):
                 # The checkout has just been set aside under its marker name. lsof reports an open file under its
@@ -3877,7 +3955,13 @@ class Runner(object):
                 self.check_set_aside_writers(rel, work_path)
                 self.check_set_aside_registrations(step, work_path, tfd, start_purge=True)
 
-            res = delete_checkout(ctx, p["rel"], p["identity"], hook, self.tombstone(step), guard)
+            def record_unlink(identity, parent):
+                ctx.interrupt("before-unlink-receipt:" + sid)
+                self.j.append("checkout-unlinked", step=sid, subsystem="delete-checkout", target=step["target"],
+                              identity=identity, parent=parent)
+
+            res = delete_checkout(ctx, p["rel"], p["identity"], hook, self.tombstone(step), guard,
+                                  self.checkout_parent(step, "checkout-empty"), record_unlink if p.get("completion_proof") else None)
             return {"entries": res["entries"], "already_absent": res["absent"]}
         if kind == "refresh-index":
             adapter = ctx.adapter("agent-route")
