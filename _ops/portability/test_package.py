@@ -88,12 +88,68 @@ class PersonalCoreTests(unittest.TestCase):
         self.codex = self.home / "selected" / "codex"
         self.slot = self.codex / "skills/capability"
         self.run_action("install")
-        self.slot.rename(self.codex / ".dev-personal-core/withdrawn")
+        control = self.codex / "dev-personal-core"
+        os.link(control / "capability", control / "withdrawal-in-progress", follow_symlinks=False)
+        self.slot.rename(control / "recover-capability-entry")
         self.run_action("withdraw")
         self.assertFalse(os.path.lexists(self.slot))
         self.assertFalse((self.home / ".codex").exists())
         self.run_action("install")
         self.run_action("check")
+
+    def test_release_modes_admit_git_and_private_files_only(self):
+        self.run_action("install")
+        script = self.release / "install.sh"
+        descriptor = self.release / "SKILL.md"
+        for script_mode, descriptor_mode in ((0o755, 0o644), (0o700, 0o600)):
+            script.chmod(script_mode)
+            descriptor.chmod(descriptor_mode)
+            self.run_action("check")
+        for path, mode in ((script, 0o777), (script, 0o1755), (descriptor, 0o666)):
+            old_mode = path.stat().st_mode & 0o7777
+            path.chmod(mode)
+            with self.subTest(mode=oct(mode)), self.assertRaises(ValueError):
+                self.run_action("check")
+            path.chmod(old_mode)
+
+    def test_concurrent_slot_substitutions_have_recoverable_paths(self):
+        self.run_action("install")
+        parked = self.codex / "dev-personal-core/recover-capability-entry"
+        rename = personal_core._rename_noreplace
+
+        def race(src, dst):
+            if src == self.slot:
+                self.slot.unlink()
+                self.slot.mkdir()
+                (self.slot / "draft").write_text("first writer")
+                rename(src, dst)
+                self.slot.write_text("second writer")
+            else:
+                rename(src, dst)
+
+        with patch.object(personal_core, "_rename_noreplace", side_effect=race):
+            with self.assertRaisesRegex(ValueError, str(parked)):
+                self.run_action("withdraw")
+        self.assertEqual(self.slot.read_text(), "second writer")
+        self.assertEqual((parked / "draft").read_text(), "first writer")
+        with self.assertRaisesRegex(ValueError, "preserved"):
+            self.run_action("withdraw")
+        second = self.home / "preserved-second"
+        self.slot.rename(second)
+        with self.assertRaisesRegex(ValueError, "Restored"):
+            self.run_action("withdraw")
+        self.assertEqual((self.slot / "draft").read_text(), "first writer")
+        self.assertEqual(second.read_text(), "second writer")
+        self.assertFalse(parked.exists())
+
+    def test_unowned_recovery_path_stays_in_place(self):
+        self.run_action("install")
+        parked = self.codex / "dev-personal-core/recover-capability-entry"
+        parked.write_text("other operation")
+        with self.assertRaisesRegex(ValueError, "unowned recovery entry"):
+            self.run_action("withdraw")
+        self.assertTrue(self.slot.is_symlink())
+        self.assertEqual(parked.read_text(), "other operation")
 
     def test_release_link_or_discovery_parent_alias_is_refused(self):
         self.slot.parent.parent.mkdir(parents=True)

@@ -36,9 +36,10 @@ def verify_release(directory):
     for name, (length, digest, executable) in FILES.items():
         path = directory / name
         info = path.lstat()
+        # Existing Git-mode releases and private copies are both supported.
+        modes = (0o700, 0o755) if executable else (0o600, 0o644)
         if (not stat.S_ISREG(info.st_mode) or info.st_size != length
-                or bool(info.st_mode & stat.S_IXUSR) != executable
-                or (not executable and info.st_mode & 0o111)
+                or stat.S_IMODE(info.st_mode) not in modes
                 or hashlib.sha256(path.read_bytes()).hexdigest() != digest):
             raise ValueError(f"core capability release differs from the published {name}")
 
@@ -83,13 +84,30 @@ def owns_slot(slot, anchor, release):
             and os.path.samestat(slot.lstat(), anchor.lstat()))
 
 
+def finish_withdrawal(parked, slot, anchor, release):
+    # Inspect the actual entry captured by the exclusive rename. The hardlink
+    # witness keeps the expected inode alive even if the discovery name changes.
+    if owns_slot(parked, anchor, release):
+        parked.unlink()
+        return
+    try:
+        _rename_noreplace(parked, slot)
+    except SafetyError as error:
+        raise ValueError(
+            f"Withdrawal stopped. The entry captured from {slot} is preserved at {parked}. "
+            "When the discovery slot is vacant, rerun --withdraw to restore it."
+        ) from error
+    raise ValueError(f"Withdrawal stopped. Restored the independently changed entry to {slot}")
+
+
 def configure(home, codex_home, action):
     slot = physical_path(codex_home / "skills") / "capability"
     releases = physical_path(home / ".local/share/personal-portability/releases")
     release = releases / f"capability-{REVISION}" / "capability"
-    control = physical_path(codex_home / ".dev-personal-core")
+    control = physical_path(codex_home / "dev-personal-core")
     anchor = control / "capability"
-    parked = control / "withdrawn"
+    intent = control / "withdrawal-in-progress"
+    parked = control / "recover-capability-entry"
 
     if action == "check":
         if not points_to(slot, release):
@@ -104,21 +122,23 @@ def configure(home, codex_home, action):
 
     control.mkdir(parents=True, exist_ok=True)
     with FileLock(control / "writer.lock"):
-        if os.path.lexists(parked):
-            if not owns_slot(parked, anchor, release):
-                raise ValueError(f"preserve the changed entry at {parked} before retrying")
-            parked.unlink()
+        if os.path.lexists(intent):
+            if not owns_slot(intent, anchor, release):
+                raise ValueError(f"unexpected withdrawal record at {intent}")
+            if os.path.lexists(parked):
+                finish_withdrawal(parked, slot, anchor, release)
+            intent.unlink()
+        elif os.path.lexists(parked):
+            raise ValueError(f"unowned recovery entry at {parked}; preserved")
         if action == "withdraw":
             if not os.path.lexists(slot):
                 return "core capability entry already absent"
             if not owns_slot(slot, anchor, release):
                 raise ValueError("the Codex entry changed or belongs to another installer")
+            os.link(anchor, intent, follow_symlinks=False)
             _rename_noreplace(slot, parked)
-            if not owns_slot(parked, anchor, release):
-                # Preserve a substitution made by an independent writer.
-                _rename_noreplace(parked, slot)
-                raise ValueError("the Codex entry changed during withdrawal")
-            parked.unlink()
+            finish_withdrawal(parked, slot, anchor, release)
+            intent.unlink()
             return "withdrew the owned Codex entry and kept the versioned release"
         if os.path.lexists(slot):
             if not points_to(slot, release):

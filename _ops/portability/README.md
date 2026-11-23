@@ -95,6 +95,13 @@ versioned files stay available for reconfiguration. `--check` verifies the
 local files and discovery entry. The source reconstruction report below tracks
 the selected transfer manifest separately and retains its historical decisions.
 
+If another writer replaces the entry during withdrawal, the installer restores
+that entry when the slot is vacant. If a second entry already occupies the slot,
+the command reports both paths and preserves the displaced entry under
+`dev-personal-core/recover-capability-entry` in the selected Codex home. Once
+the operator has preserved the new occupant and vacated the slot, another
+`configure --withdraw` restores the displaced entry.
+
 ### Reconstruct sources
 
 From a curated package, run `python3 engine.py --help`. From a safe development checkout, use:
