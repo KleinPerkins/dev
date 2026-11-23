@@ -486,6 +486,103 @@ class DevRemoveRepoTests(unittest.TestCase):
             self.assertEqual(view(checkout), observed)
             self.assertFalse((root / "state/dev-repo-removal").exists())
 
+    def test_personal_view_observes_open_objects_in_the_selected_checkout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            owner = root / "personal/src/KleinPerkins"
+            owner.mkdir(parents=True)
+            checkout = owner / "open-files.product"
+            env = {**os.environ, "DEV_SESSION_ID": "retirement-fixture-" + root.name,
+                   "XDG_STATE_HOME": str(root / "state")}
+            subprocess.run([str(ROOT / "_ops/bin/dev-new-repo.sh"), "--personal-codex", checkout.name,
+                            "--fixture-root", str(root)], env=env, capture_output=True, check=True)
+
+            def inspect():
+                result = subprocess.run([str(SCRIPT), "view", "--personal-codex", "--open-files",
+                                         "--fixture-root", str(root), str(checkout), "--json"],
+                                        env=env, cwd=root, capture_output=True, timeout=55)
+                self.assertTrue(result.stdout, result.stderr)
+                row = json.loads(result.stdout)
+                self.assertEqual(result.returncode, row["exit"])
+                return row
+
+            if sys.platform != "darwin":
+                self.assertIn("requires macOS", inspect()["refused"])
+                return
+            nested = checkout / "edits"
+            nested.mkdir()
+            work = nested / "unshared"
+            work.write_text("unfinished work")
+            peer = root / "separate"
+            peer.mkdir()
+            other = peer / "retained"
+            other.write_text("retained work")
+            (nested / "peer-link").symlink_to(peer)
+            shared = nested / "hardlink"
+            import contextlib
+            import select
+            with contextlib.ExitStack() as stack:
+                def hold(path, cwd):
+                    proc = stack.enter_context(subprocess.Popen(
+                        [sys.executable, "-I", "-c",
+                         "import sys; f=open(sys.argv[1], 'r+'); print('ready', flush=True); sys.stdin.readline()",
+                         str(path)], cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE))
+                    stack.callback(proc.stdin.close)
+                    self.assertTrue(select.select([proc.stdout], [], [], 10)[0])
+                    self.assertEqual(proc.stdout.readline(), b"ready\n")
+                    return proc.pid
+
+                writer = hold(work, nested)
+                other_writer = hold(other, peer)
+                def matches():
+                    result = inspect()
+                    self.assertTrue(result["ok"], result)
+                    self.assertFalse(result["removal_ready"])
+                    evidence = result["open_files"]
+                    self.assertGreater(evidence["skipped_symlinks"], 0)
+                    self.assertGreater(evidence["objects"], 1)
+                    return {p["pid"]: p["observations"] for p in evidence["processes"]}
+
+                first = matches()
+                self.assertIn("working-directory", first[writer])
+                self.assertIn("writable-descriptor", first[writer])
+                self.assertNotIn(other_writer, first)
+                os.link(other, shared)
+                self.assertIn("writable-descriptor", matches()[other_writer])
+                shared.unlink()
+                self.assertNotIn(other_writer, matches())
+            self.assertNotIn(writer, matches())
+            (nested / ".git").write_text("gitdir: elsewhere")
+            self.assertIn("nested repository", inspect()["refused"])
+            self.assertEqual(work.read_text(), "unfinished work")
+            self.assertEqual(other.read_text(), "retained work")
+            self.assertFalse((root / "state/dev-repo-removal").exists())
+
+    @unittest.skipUnless(sys.platform == "darwin", "selected object observation uses macOS lsof")
+    def test_personal_open_file_incomplete_and_changed_observations_stop(self):
+        from unittest.mock import patch
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("checkout_open_files", ROOT / "_ops/portability/personal_checkout_open_files.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp) / "new-work"
+            fd = os.open(tmp, os.O_RDONLY | os.O_DIRECTORY)
+            self.addCleanup(os.close, fd)
+            missing = subprocess.CompletedProcess([], 0, stdout=b"", stderr=b"")
+            with patch.object(module.subprocess, "run", return_value=missing):
+                with self.assertRaisesRegex(ValueError, "held descriptor"):
+                    module.inspect_open_files(fd)
+            real_run = subprocess.run
+            def change(*args, **kwargs):
+                result = real_run(*args, **kwargs)
+                work.write_text("preserve this change")
+                return result
+            with patch.object(module.subprocess, "run", side_effect=change):
+                with self.assertRaisesRegex(ValueError, "changed during"):
+                    module.inspect_open_files(fd)
+            self.assertEqual(work.read_text(), "preserve this change")
+
     def test_personal_view_observes_selected_peers_and_configured_jobs(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
@@ -3534,6 +3631,7 @@ printf 'p1\\ncinit\\nftxt\\nn/sbin/init\\n'
 
 # The fast tier that verify-operating-model.sh runs (about a minute); `make dev-remove-repo-verify` runs everything.
 SMOKE = (
+    "test_personal_view_observes_open_objects_in_the_selected_checkout",
     "test_personal_view_recognises_original_scaffold_after_restore",
     "test_personal_view_observes_selected_peers_and_configured_jobs",
     "test_skill_runbook_and_installer_are_wired",
