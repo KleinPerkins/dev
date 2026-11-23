@@ -80,7 +80,7 @@ bash bootstrap.sh --profile personal-codex configure
 bash bootstrap.sh --profile personal-codex configure --check
 ```
 
-The first command exposes seven user skills. `capability` uses the three
+The first command exposes eight user skills. `capability` uses the three
 hash-verified files from its pinned public Skills release. Frontend Design and
 Web Artifacts Builder include their complete pinned skill directories, licenses
 and the third-party notice from Skills. The [design package manifest](personal-design-skills.json)
@@ -94,6 +94,15 @@ Verification Before Completion supplies the evidence-checking instructions. The
 skill directories. When the Codex link already points into the corresponding
 `~/dev/capabilities/skills/global/skills` checkout, setup checks the selected
 files there. Withdrawal preserves that checkout and its link.
+
+IsoKit includes the figure library, examples and browser checker. On first setup,
+install Node.js 20 or later and npm. Dev verifies the selected public Skills files,
+then runs the Skills installer in a temporary home to provision Playwright Core
+1.64.1 from the owner’s lockfile. Setup checks the installed dependency files and
+imports the browser API. The browser executable has a separate operator-approved
+download when you use the checker. If Codex already links to the matching IsoKit
+checkout under `~/dev/capabilities/skills/local/skills`, configuration verifies it
+in place and withdrawal preserves its link. [IsoKit release manifest](personal-isokit.json).
 
 `dev-doctor` uses
 the Dev release from PR 13 and `dev-new-repo` uses the Dev release from PR 15.
