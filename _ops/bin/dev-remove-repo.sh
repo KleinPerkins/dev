@@ -1525,6 +1525,10 @@ def personal_scaffold_view(args):
     if open_files is not None:
         data["open_files"] = open_files
         lines.append("Visible processes holding references to the selected checkout: %d." % len(open_files["processes"]))
+        for group in open_files["external_hard_links"]:
+            names = ", ".join(json.dumps(path, ensure_ascii=True) for path in group["paths"])
+            lines.append("  Additional hard links outside the checkout for %s: %d." %
+                         (names, group["outside_count"]))
         for process in open_files["processes"]:
             lines.append("  PID %d: %s." % (process["pid"], ", ".join(process["observations"])))
     if peers:

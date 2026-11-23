@@ -92,6 +92,13 @@ during the scan and size or time limits stop the operation. An empty process lis
 describes a point-in-time observation with the invoking account's visibility.
 Repeat the observation after resolving a writer and before acting on a checkout.
 
+The same scan reports `open_files.external_hard_links` for regular files and
+symlinks with additional names outside the checkout. Each group lists its
+checkout-relative paths and the number of outside names, even when the file is
+closed. The scan compares inode link counts with the names found inside the
+checkout. Outside paths stay unopened. Restoring an archive of this checkout
+alone can give the restored file a different inode from a retained outside name.
+
 Preserve the original directories if the creation operation must resume after
 recovery. A byte copy receives new directory identities. This inspection leaves
 the checkout and retirement journals untouched. Personal removal still requires

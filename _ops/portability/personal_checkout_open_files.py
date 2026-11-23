@@ -8,6 +8,22 @@ import sys
 import time
 
 
+def external_hard_links(entries):
+    names = {}
+    for path, (device, inode, mode, _, links) in entries.items():
+        if stat.S_ISREG(mode) or stat.S_ISLNK(mode):
+            names.setdefault((device, inode), []).append(path)
+
+    result = []
+    for paths in names.values():
+        links = entries[paths[0]][4]
+        if links < len(paths) or any(entries[path][4] != links for path in paths):
+            raise ValueError("the number of hard links changed during checkout inspection")
+        if links > len(paths):
+            result.append({"paths": sorted(paths), "outside_count": links - len(paths)})
+    return sorted(result, key=lambda row: row["paths"][0])
+
+
 def inspect_open_files(root):
     if sys.platform != "darwin":
         raise ValueError("the selected checkout open-file observation requires macOS")
@@ -78,7 +94,7 @@ def inspect_open_files(root):
                 raise ValueError("the selected checkout exceeds the open-file inspection limit")
             if info.st_dev != device or info.st_uid != os.getuid():
                 raise ValueError("a checkout entry has a different volume or owner")
-            entries[path] = (info.st_dev, info.st_ino, info.st_mode, info.st_ctime_ns)
+            entries[path] = (info.st_dev, info.st_ino, info.st_mode, info.st_ctime_ns, info.st_nlink)
 
         def walk(fd, path, depth):
             nonlocal symlinks
@@ -130,4 +146,5 @@ def inspect_open_files(root):
     return {"scope": "visible-processes-on-selected-regular-files-and-directories",
             "objects": len({r[:2] for r in before.values() if not stat.S_ISLNK(r[2])}),
             "skipped_symlinks": symlinks, "batches": groups,
+            "external_hard_links": external_hard_links(before),
             "processes": [{"pid": pid, "observations": sorted(kinds)} for pid, kinds in sorted(processes.items())]}
