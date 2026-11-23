@@ -1,0 +1,406 @@
+{
+  "revision": "1afae724d8e7d42110d3d9670d85a467c436935c",
+  "skills": {
+    "local-jobs": {
+      ".github/workflows/conformance.yml": [
+        "100644",
+        861,
+        "451d2df06537c606b08d5987dfd12bb135e52db3af2677547e13e4600475cd61"
+      ],
+      ".gitignore": [
+        "100644",
+        275,
+        "9a69afb3f414ecf1b35c24578c9e648eb35bb4f4b6b20bab255a282c9c3c3701"
+      ],
+      "ABI.md": [
+        "100644",
+        8768,
+        "9013ea6365fbabc79a4ade2b782b84acdf021d066beea710c2d1d95343837162"
+      ],
+      "README.md": [
+        "100644",
+        6532,
+        "bc7da93da093a0f32a7a5a6caac130d80cb84a79f3bfdc578fa2fb6c69777e9d"
+      ],
+      "SKILL.md": [
+        "100644",
+        5329,
+        "083013521ab145d4262fceeb8143c9a3af8a1a249fecea98e72cef941be8fda3"
+      ],
+      "backends/incremental-git-fetch/common.sh": [
+        "100755",
+        2955,
+        "dbe58a96dcc3a9f9dbd4cc3f3847d2b98e2314e43735e9a6e7959a9131ab0a17"
+      ],
+      "backends/incremental-git-fetch/config.py": [
+        "100755",
+        25087,
+        "612aafa992a675c54a7487d867bfb70c3f70eeb8aba354a0d832a2d40a8de43d"
+      ],
+      "backends/incremental-git-fetch/fetch-repo.sh": [
+        "100755",
+        4448,
+        "059e8c8fcac33205c8be30a4e94cae2d7799f64e73193a3d46e9bffa86c22362"
+      ],
+      "backends/incremental-git-fetch/install-launchd.sh": [
+        "100755",
+        3931,
+        "890a902c49a616ad0d25fb01351ddf687bb25850622c594019ea215fdbf5a0e0"
+      ],
+      "backends/incremental-git-fetch/run-all.sh": [
+        "100755",
+        7290,
+        "906901783e78aa8237ee67a9c1f6f2307ddcd00971b92d010ea2039b32a667d1"
+      ],
+      "backends/incremental-git-fetch/uninstall-launchd.sh": [
+        "100755",
+        1048,
+        "f98ae5f80b7381bd9b0b55c3058655dc20e57457a63676f79ccffafd22e3aeb7"
+      ],
+      "bin/add-job-type.sh": [
+        "100755",
+        6325,
+        "b93f69696e64844960a7b2653709655f85be0226d77d320f2087ec2b0a189178"
+      ],
+      "bin/adopt-job.sh": [
+        "100755",
+        5606,
+        "a1e29d42b11f946485c85d53e976d9744945185939564449f28e5c9bdac2299a"
+      ],
+      "bin/canvas-run-bridge.sh": [
+        "100755",
+        4301,
+        "c90e2633bc144bf957df36a00a2dc63afe0ade2b461bd1160667d874acd08622"
+      ],
+      "bin/dispatch-run.sh": [
+        "100755",
+        6611,
+        "27f0e7c590a884aeb8a6448accba615f4cd83bfde1fa7663cc3633795b715d6d"
+      ],
+      "bin/generate-dashboard-canvas.sh": [
+        "100755",
+        2880,
+        "faf43068c3da4d52465e40bcd71fde0a3be0f8ba9583b34b7ef69f53a359a962"
+      ],
+      "bin/install-hooks.sh": [
+        "100755",
+        1027,
+        "e4f5e47d088424786a48a04dd5fa75df9497ee614747bd619ef91ea0f4ded562"
+      ],
+      "bin/local-jobs.sh": [
+        "100755",
+        19732,
+        "0e03fef810f2257c6ce02c9e5f846e40d856d762907d007a4f1e0163f6f8b5e1"
+      ],
+      "bin/run-scheduled.sh": [
+        "100755",
+        808,
+        "cb2fcf16ba3dfa7f978a47d5e918abbe313b6266672bf8efeaca1080016a1aa6"
+      ],
+      "bin/test-local-jobs.sh": [
+        "100755",
+        118710,
+        "2cc35bf6b94a842a80aa6540f42fb68f10c134a2d1834c228809d59374feb31e"
+      ],
+      "bin/update-job-type.sh": [
+        "100755",
+        2833,
+        "320d9131fad9df5b8e3b1fa48a59237e84c646452f8b335d97bdb729a406842d"
+      ],
+      "bin/verify-canvas-sidecar.sh": [
+        "100755",
+        2181,
+        "2976f9c41e8ecea619ea3ed43b61a822dc5d56fd76f5b27017df746e620b459e"
+      ],
+      "canvases/README.md": [
+        "100644",
+        5762,
+        "6f133593998d51d76b0f6afb4098dfdf7a0e5a35529d548150ef070ee13c7811"
+      ],
+      "canvases/local-jobs-dashboard.canvas.tsx": [
+        "100644",
+        79814,
+        "8ef56421dfd87b1a83f75db537f15289b33d980c792b3cbe524fec5fe1db5701"
+      ],
+      "canvases/local-jobs-dashboard.template.tsx": [
+        "100644",
+        79240,
+        "43447e33baeb310180785b6e3b60753a206546a102698d3cd8b8ea1f5e023db3"
+      ],
+      "config/registry.yml": [
+        "100644",
+        810,
+        "d3a92d4e0ad8ad543cab1a6a822c1df52623b60488727e05ddc7800a2fe03813"
+      ],
+      "handlers/command.sh": [
+        "100755",
+        4670,
+        "d128b2d0781dbed7ab3bca6d9b25d6e5a6401d38d53df2a14d6dd987a5bc2f64"
+      ],
+      "handlers/incremental-git-fetch.sh": [
+        "100755",
+        26258,
+        "cc96277659e320f6cd8fba50f3236323855a474c9dfe60943ca2297efab86c33"
+      ],
+      "install.sh": [
+        "100755",
+        1802,
+        "3b7b7ed19bf74027bf7fdfbc85f8a1bb370ba33c74e4ce6e05e3d867842d5dad"
+      ],
+      "lib/authoring.py": [
+        "100644",
+        6940,
+        "f630792ffe9d065e525a028604abcd5760ca58a720aeb60e0042f64033a8929f"
+      ],
+      "lib/canvas_bridge.py": [
+        "100644",
+        12257,
+        "de5d252f3b352bc2d82b07651caea8ababd84099687fd42c439cd6bf2055c247"
+      ],
+      "lib/canvas_emit.py": [
+        "100755",
+        4119,
+        "689e57410d06b338f3a747acd4050f2d4a2b756321e668149d36397c7479212e"
+      ],
+      "lib/common.sh": [
+        "100644",
+        4376,
+        "0d2927183d51035cb6b03384a7c7b1bc55c30553c8febf7eaf0cfc7915dc0754"
+      ],
+      "lib/configured.py": [
+        "100644",
+        7253,
+        "8aba8858d8bc1a7fdaee297a19d10301be2bfc7fc90eb582a40603109021b4c4"
+      ],
+      "lib/contract.py": [
+        "100644",
+        16212,
+        "e7c4c48f2762e348a7286ecc79e87da8aea7ad5d637e46913f3cbf0d324b987a"
+      ],
+      "lib/dashboard.py": [
+        "100755",
+        17106,
+        "c80ee81d6552cf67b90eb72219e0540e73fd21aa0cac7d0fec28332a4d29a904"
+      ],
+      "lib/events.py": [
+        "100644",
+        7877,
+        "d97ef337e49a83f1ad83bc191aae7045e57be0db6437dddf7f8b3414cb81d5d8"
+      ],
+      "lib/explain.py": [
+        "100644",
+        11091,
+        "d62cdb52bdfc4f923417700ad2e0d85b49c4d804eeb5d065dae8cb0312a91446"
+      ],
+      "lib/explain_agent_queue.py": [
+        "100644",
+        1712,
+        "878ac7cf21099e332f7761a4c270a5b901e126b64712696bdfdda45c482da127"
+      ],
+      "lib/explain_cache.py": [
+        "100644",
+        2045,
+        "af39e2e3f6e4c0a484b9f8112151749ec6737b55b04cd720c33c8c97a6120041"
+      ],
+      "lib/explain_inspect.py": [
+        "100644",
+        2490,
+        "22e900814ad2eb07d3725f1717f28499f93e87393848cca4bb7ce952f9e0d0a5"
+      ],
+      "lib/explain_synthesize.py": [
+        "100644",
+        9722,
+        "f0fa2864b0be1dddb96598b25e6bf221fd4bcef2299d6d6c0bae88947d844ee6"
+      ],
+      "lib/flock.py": [
+        "100755",
+        1008,
+        "cf8ef7941df45ce38de852f575de7ef56b46cf0b7ceb88e690cc9de88562672d"
+      ],
+      "lib/handler_lib.sh": [
+        "100644",
+        15262,
+        "72340fdffc56be28325882d03c931fe37e82ac0c60b39b8f87c9abe8dcf7772a"
+      ],
+      "lib/handler_runtime.py": [
+        "100644",
+        5483,
+        "2c53f238605480fde5a1b9e4648e3a69a175a78f9b66f5b2e6df070fe5e265a5"
+      ],
+      "lib/launchd.py": [
+        "100644",
+        9141,
+        "474bc34180b46e4fd06200cc35f56580e10eba6b54dce9249342cab88a03fcd0"
+      ],
+      "lib/migrate.py": [
+        "100644",
+        2500,
+        "4eb3f4d1723801f7b3380fcd9d7359ced8287cf812b706c8e23b826b2aa99910"
+      ],
+      "lib/registry.py": [
+        "100755",
+        25732,
+        "11750cd63fa43d8a96d629a19984080fba7253483cf56d2d94e18b2b3e37ad72"
+      ],
+      "lib/resolver.py": [
+        "100644",
+        3057,
+        "76fc868571ad347faaeb96d660bf7b06ed88c63ababeefada29b56da8136c4df"
+      ],
+      "lib/run_log.py": [
+        "100755",
+        4088,
+        "1ed0487e1ff9093541a74a1660a9ca545ae6e373c310db1ad22f3a0be2945f75"
+      ],
+      "lib/running.py": [
+        "100644",
+        6701,
+        "5d9dcfe6859bd406a8380332fab89aae1b379f21a2eb0e5a84af49e7bf670f24"
+      ],
+      "lib/schedule.py": [
+        "100644",
+        10586,
+        "8feac61904c1e232555227ac0a656d8a08571d28dd845e26eacc47def1597e79"
+      ],
+      "lib/settings.py": [
+        "100644",
+        3604,
+        "7a39a0cdd28e251dde02fc18ba528384004509f558256f1477cfb4f35dc889df"
+      ],
+      "lib/store.py": [
+        "100644",
+        12838,
+        "4b36c374f47c51832e13a4ebe4e6882da03cc6ba7dec3c951f319b9408688844"
+      ],
+      "lib/summarize.py": [
+        "100755",
+        2839,
+        "b95e34145dcc8c04785e1c3c3b56ef6552170571de3c08eeed1be1111979c7c2"
+      ],
+      "meta.yml": [
+        "100644",
+        163,
+        "8a0a9a44e71de12e2585a67481c9141fba73f033c63413deee96565096aa21db"
+      ],
+      "scripts/local-jobs.sh": [
+        "100755",
+        2209,
+        "5b3c97d59266a5280a3f610e813619f03645dab7360cf887f129d6c83f3ac03d"
+      ],
+      "tests/fixtures/runs.jsonl": [
+        "100644",
+        1286,
+        "aa5c584caca38158c05b15773706c08729fa7fb9b06913742b0bf5664ce81866"
+      ],
+      "tests/test_configured.py": [
+        "100644",
+        6428,
+        "f91b4731573ccd746a30de1d9ae044472a240b4ce1a798bc6c638210d389675d"
+      ]
+    }
+  },
+  "pyyaml": {
+    "archive": "https://files.pythonhosted.org/packages/05/8e/961c0007c59b8dd7729d542c61a4d537767a59645b82a0b521206e1e25c2/pyyaml-6.0.3.tar.gz",
+    "length": 130960,
+    "sha256": "d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f",
+    "files": {
+      "PyYAML-LICENSE.txt": [
+        "100644",
+        1101,
+        "8d3928f9dc4490fd635707cb88eb26bd764102a7282954307d3e5167a577e8a4"
+      ],
+      "yaml/__init__.py": [
+        "100644",
+        12311,
+        "b19dfcc333d6a75dfd73073901164507252f271b41d3b5f7d85510033a0547a7"
+      ],
+      "yaml/composer.py": [
+        "100644",
+        4883,
+        "fcaa37d16afa783594794a5ab94193dcb720f503c19ce3d59539c8311189f453"
+      ],
+      "yaml/constructor.py": [
+        "100644",
+        28639,
+        "90d8247da78b524c10618fd0e857f54f3d97570fe91b5c5513d024ef3faf88b0"
+      ],
+      "yaml/cyaml.py": [
+        "100644",
+        3851,
+        "e99ac01bd7c062f7557b614aff0d21997a06ed962ca185306a91bc0a20bbd87d"
+      ],
+      "yaml/dumper.py": [
+        "100644",
+        2837,
+        "3cb72d66563064ba7b5e679477046ebf89d8399d940670c8532f3e94a7cb17ea"
+      ],
+      "yaml/emitter.py": [
+        "100644",
+        43006,
+        "8e086d694ede170837d5b1b407b45979aff6f40762f422a65eafd08e04290a44"
+      ],
+      "yaml/error.py": [
+        "100644",
+        2533,
+        "021f73fada072546c4f63f8cf18a7181244ce4280b09cc15cc980b2d1176171a"
+      ],
+      "yaml/events.py": [
+        "100644",
+        2445,
+        "e74fd392c810884e2ea7e94aa3f57e9c1cbeb402319083d0c58e6a0e1282787c"
+      ],
+      "yaml/loader.py": [
+        "100644",
+        2061,
+        "5156becc8aa6905482218abf3e04869b835226db4763645fff3438fdbd5f1cdd"
+      ],
+      "yaml/nodes.py": [
+        "100644",
+        1440,
+        "80f28d8fca4a09d87677882bde021820d9cf39a3b11a12405226211919cf13ce"
+      ],
+      "yaml/parser.py": [
+        "100644",
+        25495,
+        "8a55a9e6fbe0a07146cef3990c8b45a068c3e83e369e1959ad9ca30306b4a09a"
+      ],
+      "yaml/reader.py": [
+        "100644",
+        6794,
+        "d1d9b38ab3a20c6e17a38d519ee412ecaf6b918df18c78956ac7c330d4ea08dc"
+      ],
+      "yaml/representer.py": [
+        "100644",
+        14190,
+        "22e58ff9c016f6c1ca1274b4802a926bcf78935060e1c813c5a0f021c6d143e6"
+      ],
+      "yaml/resolver.py": [
+        "100644",
+        9004,
+        "f4bf9561f9b89961f1503d558385fbae30d12bfed565de9bf76c33abb63620a6"
+      ],
+      "yaml/scanner.py": [
+        "100644",
+        51279,
+        "60433788b652690c17710460da5d91e0c753d3318fd85f5e1e42862a71f25906"
+      ],
+      "yaml/serializer.py": [
+        "100644",
+        4165,
+        "0a1b85826854d35863e31808f0668abfabdf33606e8f06bd8bb7761401e3edc0"
+      ],
+      "yaml/tokens.py": [
+        "100644",
+        2573,
+        "953408cd2570f0c83dc2fe39f7e4e388e41eeb05738aa69196a5f6ffcf6ba79e"
+      ]
+    },
+    "independent_native": {
+      "yaml/_yaml.cpython-313-darwin.so": [
+        "100755",
+        381208,
+        "ba1d658938053d44a1bf09dfcaab837676ecad1b0d5d6ac35cc15d7a31d7bb33"
+      ]
+    }
+  }
+}

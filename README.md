@@ -68,8 +68,8 @@ personal reconstruction route in [_ops/portability](_ops/portability/README.md);
 it must not fall back to work integration or broad host installation.
 Run `bash bootstrap.sh --profile personal-codex configure` to install the core
 capability playbook, personal repository doctor, product creator, Frontend Design,
-Web Artifacts Builder, Prompt Architect, Verification Before Completion, IsoKit
-and Save-Game. Its `--check` option verifies the nine versioned
+Web Artifacts Builder, Prompt Architect, Verification Before Completion, IsoKit,
+Save-Game and Local Jobs. Its `--check` option verifies the ten versioned
 packages and their Personal Codex user entries.
 
 The allow-list `.gitignore` tracks only reviewed operating-model source. Local

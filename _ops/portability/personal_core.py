@@ -18,6 +18,8 @@ from typing import Callable
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from engine import FileLock, PortabilityError, SafetyError, _rename_noreplace
 from personal_dev_skills import DevSkillRelease
+from personal_package_files import physical_path, seal_directories, verify_file, verify_skill_tree
+import personal_local_jobs
 
 
 REVISION = "1afae724d8e7d42110d3d9670d85a467c436935c"
@@ -31,21 +33,8 @@ FILES = {
 DESIGN_RELEASE = json.loads(Path(__file__).with_name("personal-design-skills.json").read_bytes())
 ISOKIT_RELEASE = json.loads(Path(__file__).with_name("personal-isokit.json").read_bytes())
 AUTHORING_RELEASE = json.loads(Path(__file__).with_name("personal-authoring-skills.json").read_bytes())
+LOCAL_JOBS_RELEASE = json.loads(Path(__file__).with_name("personal-local-jobs.json").read_bytes())
 SAVE_GAME_RELEASE = json.loads(Path(__file__).with_name("personal-save-game.json").read_bytes())
-
-
-def physical_path(path):
-    if not path.is_absolute() or path.resolve(strict=False) != path:
-        raise ValueError(f"expected an absolute path without aliases: {path}")
-    return path
-
-
-def verify_file(path, length, digest, modes):
-    info = path.lstat()
-    if (not stat.S_ISREG(info.st_mode) or info.st_size != length
-            or stat.S_IMODE(info.st_mode) not in modes
-            or hashlib.sha256(path.read_bytes()).hexdigest() != digest):
-        raise ValueError(f"release differs from the published {path.name}")
 
 
 def verify_release(directory):
@@ -98,29 +87,6 @@ def prepare_release(directory, populate=write_capability, verify=verify_release)
         verify(directory)
 
 
-def verify_skill_tree(directory, files, *, checkout=False, extra_root=()):
-    physical_path(directory)
-    directories = {parent for name in files for parent in Path(name).parents}
-    entries = directories | {Path(name) for name in files}
-    for relative in sorted(directories, key=lambda path: len(path.parts)):
-        folder = directory / relative
-        mode = folder.lstat().st_mode
-        if not checkout and mode != (stat.S_IFDIR | 0o500):
-            raise ValueError(f"{directory.name} requires read-only skill directories")
-        if checkout and not stat.S_ISDIR(mode):
-            raise ValueError(f"{directory.name} requires physical skill directories")
-        expected = {p.name for p in entries if p != relative and p.parent == relative}
-        if relative == Path("."):
-            expected.update(extra_root)
-        if {p.name for p in folder.iterdir()} != expected:
-            raise ValueError(f"unexpected entries in {directory.name}/{relative}")
-    for name, (mode, length, digest) in files.items():
-        modes = (0o500,) if mode == "100755" else (0o400,)
-        if checkout:
-            modes += (0o700, 0o755, 0o555) if mode == "100755" else (0o600, 0o644, 0o444)
-        verify_file(directory / name, length, digest, modes)
-
-
 def verify_skill_package(directory, release):
     physical_path(directory)
     names = {directory.name}
@@ -160,12 +126,10 @@ def write_skill_package(stage, release):
         (modules / ".package-lock.json").chmod(0o400)
         (modules / ".bin").chmod(0o500)
         modules.chmod(0o500)
+    if "pyyaml" in release:
+        dependency = release["pyyaml"]
+        personal_local_jobs.provision(stage, dependency, read_url(dependency["archive"], dependency["length"]))
     seal_directories(stage, files)
-
-
-def seal_directories(stage, files):
-    for directory in {parent for relative in files for parent in Path(relative).parents}:
-        (stage / directory).chmod(0o500)
 
 
 def provision_isokit(stage):
@@ -214,10 +178,15 @@ def verify_isokit_runtime(directory, files, *, checkout):
 
 def verify_selected_skill(directory, release, *, checkout):
     files = release["skills"][directory.name]
+    if "pyyaml" in release:
+        extras = personal_local_jobs.output_entries(directory, checkout=checkout)
+        verify_skill_tree(directory, files, checkout=checkout, extra_entries=["_ops", *extras])
+        personal_local_jobs.verify(directory, release["pyyaml"], checkout=checkout)
+        return
     if "runtime" not in release:
         verify_skill_tree(directory, files, checkout=checkout)
         return
-    verify_skill_tree(directory, files, checkout=checkout, extra_root=("node_modules",))
+    verify_skill_tree(directory, files, checkout=checkout, extra_entries=("node_modules",))
     verify_isokit_runtime(directory, release["runtime"], checkout=checkout)
     probe = ('import {chromium} from "playwright-core"; '
              'if (parseInt(process.versions.node, 10) < 20 || typeof chromium.launch !== "function") process.exit(1)')
@@ -297,8 +266,8 @@ def checkout_installation(entry, action):
     entry.verify_checkout()
     if not points_to(entry.slot, entry.checkout) or not os.path.samestat(before, entry.slot.lstat()):
         raise ValueError(f"the {entry.label} checkout entry changed during verification")
-    if entry.label == "save-game":
-        return "verified save-game from the existing Skills release"
+    if entry.label in ("save-game", "local-jobs"):
+        return f"verified {entry.label} from the existing Skills release"
     return f"verified {entry.label} from the existing Skills checkout"
 
 
@@ -399,11 +368,13 @@ def configure_profile(home, codex_home, action):
                                   physical_path(core.control / name), name, bundle.prepare, bundle.verify))
     skills_checkout = home / "dev/capabilities/skills"
     save_game_source = home / ".local/share/save-game/source" / SAVE_GAME_RELEASE["revision"]
+    local_jobs_source = home / ".local/share/local-jobs/releases" / LOCAL_JOBS_RELEASE["revision"]
     for release, existing_root in (
         (DESIGN_RELEASE, None),
         (AUTHORING_RELEASE, skills_checkout / "global/skills"),
         (ISOKIT_RELEASE, skills_checkout / "local/skills"),
         (SAVE_GAME_RELEASE, save_game_source / "global/skills"),
+        (LOCAL_JOBS_RELEASE, local_jobs_source / "global/skills"),
     ):
         for name in release["skills"]:
             folder = core.release.parent.parent / f"{name}-{release['revision']}" / name

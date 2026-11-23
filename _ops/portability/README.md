@@ -80,7 +80,7 @@ bash bootstrap.sh --profile personal-codex configure
 bash bootstrap.sh --profile personal-codex configure --check
 ```
 
-The first command exposes nine user skills. `capability` uses the three
+The first command exposes ten user skills. `capability` uses the three
 hash-verified files from its pinned public Skills release. Frontend Design and
 Web Artifacts Builder include their complete pinned skill directories, licenses
 and the third-party notice from Skills. The [design package manifest](personal-design-skills.json)
@@ -109,6 +109,15 @@ installs the complete Skills release pinned by Doc-Warden. If the Codex entry
 already points to that release under `~/.local/share/save-game/source`, Dev
 verifies its contents in place. Withdrawing the profile preserves that
 independent entry and the private checkpoint data. [Save-Game release manifest](personal-save-game.json).
+
+Local Jobs runs on-demand commands and schedules explicitly configured jobs.
+Setup installs the global Skills release and a private Python fallback with
+PyYAML 6.0.3. It uses the system Python supplied with the Mac developer tools.
+The generated dashboard has one owner-writable file alongside the read-only
+source. Job definitions, history and launch agents retain their existing owners.
+Setup exposes the Codex skill without scheduling any jobs. Withdrawal preserves
+the private job state and an existing matching independent installation under
+`~/.local/share/local-jobs/releases`. [Local Jobs release manifest](personal-local-jobs.json).
 
 `dev-doctor` uses
 the Dev release from PR 13 and `dev-new-repo` uses the Dev release from PR 15.
