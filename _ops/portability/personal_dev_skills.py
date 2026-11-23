@@ -18,12 +18,19 @@ AUTHORITY_CONFIG = f'[core]\n\trepositoryformatversion = 0\n\tbare = false\n[rem
 
 
 class DevSkillRelease:
-    def __init__(self, name, home):
+    def __init__(self, name, home, slot=None):
         self.name = name
         self.revision = RELEASES[name]["revision"]
         self.files = RELEASES[name]["files"]
-        self.root = home / ".local/share/dev-personal-skills/releases" / self.revision
-        self.skill = self.root / "_ops/skills/personal" / name
+        store = home / ".local/share/dev-personal-skills"
+        self.package = store / "packages" / self.revision
+        previous = store / "releases" / self.revision
+        skill_path = Path("_ops/skills/personal") / name
+        earlier_entry = slot is not None and slot.is_symlink() and os.readlink(slot) == str(previous / skill_path)
+        self.root = self.package / "runtime"
+        if earlier_entry or (not os.path.lexists(self.package) and os.path.lexists(previous)):
+            self.root = previous
+        self.skill = self.root / skill_path
         self.git = GitRunner()
 
     def verify(self, root=None):
@@ -109,11 +116,15 @@ class DevSkillRelease:
         if os.path.lexists(self.root):
             self.verify()
             return
-        self.root.parent.mkdir(parents=True, exist_ok=True)
-        # Publish within one directory. macOS permits renaming a sealed sibling
-        # here, while a move from a different parent needs a writable release.
-        with tempfile.TemporaryDirectory(prefix=".dev-skill-", dir=self.root.parent) as temporary:
-            stage = Path(temporary)
+        if self.root != self.package / "runtime" or os.path.lexists(self.package):
+            raise ValueError(f"{self.name} has an incomplete release; preserved")
+        self.package.parent.mkdir(parents=True, exist_ok=True)
+        # Some macOS versions refuse to rename a read-only directory. Publish
+        # its enclosing package atomically with the runtime already sealed.
+        with tempfile.TemporaryDirectory(prefix=".dev-skill-", dir=self.package.parent) as temporary:
+            package = Path(temporary)
+            stage = package / "runtime"
+            stage.mkdir(mode=0o700)
             # A normal Dev clone already contains the pinned objects. A shallow
             # clone can fetch just the pinned revision from the public successor.
             local = self.git._run(["--no-lazy-fetch", "--no-replace-objects", "cat-file", "-e",
@@ -157,7 +168,7 @@ class DevSkillRelease:
                 (stage / directory).chmod(0o500)
             self.verify(stage)
             try:
-                _rename_noreplace(stage, self.root)
+                _rename_noreplace(package, self.package)
             except SafetyError:
                 if not self.root.is_dir():
                     raise

@@ -255,7 +255,16 @@ class StandardDevSkillTests(unittest.TestCase):
         self.assertFalse((self.home / ".cursor").exists())
 
     def test_published_runtime_protects_its_top_level_directory(self):
-        self.configure("install")
+        import personal_dev_skills as dev
+        publish = dev._rename_noreplace
+
+        def rename_on_older_macos(source, destination):
+            self.assertTrue(source.stat().st_mode & 0o200)
+            self.assertEqual((source / "runtime").stat().st_mode & 0o777, 0o500)
+            publish(source, destination)
+
+        with patch.object(dev, "_rename_noreplace", side_effect=rename_on_older_macos):
+            self.configure("install")
         for bundle in self.bundles.values():
             with self.subTest(skill=bundle.name):
                 self.assertEqual(bundle.root.stat().st_mode & 0o777, 0o500)
@@ -265,13 +274,16 @@ class StandardDevSkillTests(unittest.TestCase):
                 bundle.verify()
 
     def test_preexisting_doctor_export_is_checked_and_preserved(self):
+        import shutil
         doctor = self.bundles["dev-doctor"]
         doctor.prepare()
-        doctor.root.chmod(0o700)  # Recreate the earlier standalone export.
-        self.assertFalse((doctor.root / ".git").exists())
+        legacy = self.home / ".local/share/dev-personal-skills/releases" / doctor.revision
+        shutil.copytree(doctor.root, legacy)
+        legacy.chmod(0o700)  # Recreate the earlier standalone export.
+        self.assertFalse((legacy / ".git").exists())
         self.slots.mkdir(parents=True)
         slot = self.slots / doctor.name
-        slot.symlink_to(doctor.skill)
+        slot.symlink_to(legacy / "_ops/skills/personal/dev-doctor")
         original = slot.lstat()
         self.configure("install")
         self.configure("check")
@@ -379,13 +391,16 @@ class StandardDevSkillTests(unittest.TestCase):
                 bundle.verify()
 
     def test_earlier_creator_with_writable_metadata_is_preserved(self):
+        import shutil
         creator = self.bundles["dev-new-repo"]
         creator.prepare()
+        legacy = self.home / ".local/share/dev-personal-skills/releases" / creator.revision
+        shutil.copytree(creator.root, legacy)
         self.slots.mkdir(parents=True)
         slot = self.slots / creator.name
-        slot.symlink_to(creator.skill)
+        slot.symlink_to(legacy / "_ops/skills/personal/dev-new-repo")
         original = slot.lstat()
-        metadata = creator.root / ".git"
+        metadata = legacy / ".git"
         metadata.chmod(0o700)
         with self.assertRaisesRegex(ValueError, "sealed Dev authority"):
             self.configure("install")

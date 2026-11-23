@@ -196,8 +196,9 @@ def configure_profile(home, codex_home, action):
     core = core_entry(home, codex_home)
     entries = [core]
     for name in ("dev-doctor", "dev-new-repo"):
-        bundle = DevSkillRelease(name, home)
-        entries.append(SkillEntry(core.slot.with_name(name), bundle.skill,
+        slot = core.slot.with_name(name)
+        bundle = DevSkillRelease(name, home, slot)
+        entries.append(SkillEntry(slot, bundle.skill,
                                   physical_path(core.control / name), name, bundle.prepare, bundle.verify))
 
     if action == "check":
