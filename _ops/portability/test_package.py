@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 import tarfile
@@ -435,6 +436,32 @@ class StandardDevSkillTests(unittest.TestCase):
         self.configure("withdraw")
         self.assertTrue(os.path.samestat(independent, slot.lstat()))
         self.assertFalse((self.home / "private-output").exists())
+
+    def test_local_jobs_checks_independent_bytecode_without_changing_the_installation(self):
+        self.configure("install")
+        slot = self.slots / "local-jobs"
+        revision = personal_core.LOCAL_JOBS_RELEASE["revision"]
+        independent = self.home / ".local/share/local-jobs/releases" / revision / "global/skills/local-jobs"
+        independent.parent.mkdir(parents=True)
+        shutil.copytree(slot.resolve(), independent, symlinks=True)
+        slot.unlink()
+        slot.symlink_to(independent)
+        module, = independent.glob("_ops/.venv/lib/python*/site-packages/yaml/__init__.py")
+        module.parent.chmod(0o700)
+        interpreter = (independent / "_ops/.venv/bin/python3").resolve()
+        for options in ([], ["-O"]):
+            subprocess.run([interpreter, "-ISB", *options, "-m", "py_compile", module],
+                           check=True, env={"PATH": os.defpath})
+        self.configure("check")
+        cache, = module.parent.glob("__pycache__/*.opt-1.pyc")
+        before = cache.read_bytes()
+        cache.chmod(0o600)
+        changed = before[:-1] + bytes([before[-1] ^ 1])
+        cache.write_bytes(changed)
+        with self.assertRaisesRegex(ValueError, "pyc"):
+            self.configure("check")
+        self.assertEqual(cache.read_bytes(), changed)
+        self.assertEqual(slot.resolve(), independent)
 
     def test_isokit_dependency_failure_keeps_new_profile_unexposed(self):
         self.provision.side_effect = ValueError("dependency unavailable")

@@ -11,6 +11,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 
 from personal_package_files import physical_path, seal_directories, verify_file, verify_skill_tree
 
@@ -84,6 +85,40 @@ def provision(directory, dependency, archive):
     (directory / CANVAS).touch(mode=0o600, exist_ok=False)
 
 
+def verify_python_cache(package, interpreter, version, sources):
+    """Recompile pinned sources with the trusted interpreter, without importing the package."""
+    cache = physical_path(package / "__pycache__")
+    info = cache.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o022:
+        raise ValueError("unexpected Local Jobs bytecode cache directory")
+    cached = {p.name: p for p in cache.iterdir()}
+    tag = "cpython-" + version.removeprefix("python").replace(".", "")
+    with tempfile.TemporaryDirectory() as raw:
+        directory = Path(raw).resolve()
+        compiled = directory / package.relative_to(package.anchor)
+        for suffix, flags in (("", []), (".opt-1", ["-O"]), (".opt-2", ["-OO"])):
+            names = {source.stem + "." + tag + suffix + ".pyc": source for source in sources}
+            selected = cached.keys() & names.keys()
+            if not selected:
+                continue
+            try:
+                subprocess.run([interpreter, "-ISB", *flags, "-X", "pycache_prefix=" + str(directory),
+                                "-m", "py_compile", *(names[name] for name in sorted(selected))],
+                               check=True, timeout=20, env={"PATH": os.defpath}, stderr=subprocess.PIPE)
+            except (OSError, subprocess.SubprocessError) as error:
+                raise ValueError("could not reproduce Local Jobs bytecode") from error
+            for name in selected:
+                path = cached.pop(name)
+                info = path.lstat()
+                if info.st_uid != os.getuid() or info.st_nlink != 1:
+                    raise ValueError("unexpected Local Jobs bytecode ownership")
+                expected = (compiled / name).read_bytes()
+                verify_file(path, len(expected), hashlib.sha256(expected).hexdigest(),
+                            (0o400, 0o444, 0o600, 0o644))
+    if cached:
+        raise ValueError("unexpected files in the Local Jobs bytecode cache")
+
+
 def verify_independent(root, dependency):
     """Inspect the separately installed environment without starting its Python or loading job state."""
     env = physical_path(root / ".venv")
@@ -128,8 +163,7 @@ def verify_independent(root, dependency):
             verify_file(native, length, digest, (0o500, 0o700, 0o711, 0o755))
             names.add(native.name)
     cache = package / "__pycache__"
-    if cache.exists():
-        physical_path(cache)
+    if os.path.lexists(cache):
         names.add(cache.name)
     if {entry.name for entry in package.iterdir()} != names:
         raise ValueError("unexpected contents in the independent Local Jobs PyYAML package")
@@ -138,6 +172,9 @@ def verify_independent(root, dependency):
         if name == "PyYAML-LICENSE.txt" and not os.path.lexists(path):
             path = physical_path(site / "pyyaml-6.0.3.dist-info/licenses") / "LICENSE"
         verify_file(path, length, digest, (0o400, 0o444, 0o600, 0o644))
+    if cache.name in names:
+        sources = [site / name for name in dependency["files"] if name.endswith(".py")]
+        verify_python_cache(package, target, version, sources)
 
 
 def verify(directory, dependency, *, checkout):
