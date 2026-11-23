@@ -1496,7 +1496,15 @@ def personal_scaffold_view(args):
             peers.append((peer, peer_id))
         peer_skills = {}
         jobs = None
-        with bound_scaffold(root, parts, name, fixture, supplied_id) as (_, saved, recorded_id, records):
+        open_files = None
+        with bound_scaffold(root, parts, name, fixture, supplied_id) as (target_fd, saved, recorded_id, records):
+            if args.open_files:
+                from personal_checkout_open_files import inspect_open_files
+                try:
+                    open_files = inspect_open_files(target_fd)
+                except (OSError, ValueError) as exc:
+                    reason = exc.strerror if isinstance(exc, OSError) else str(exc)
+                    raise Refusal("selected open-file observation unavailable: " + reason) from None
             for peer, peer_id in peers:
                 peer_path = checkout.with_name(peer)
                 with bound_scaffold(root, parts, peer, fixture, peer_id) as (fd, peer_saved, _, _):
@@ -1514,6 +1522,11 @@ def personal_scaffold_view(args):
             "removal_ready": False}
     lines = [slug + ": the creation record matches this checkout and Git directory.",
              "Linked registrations in the primary checkout: %d." % len(records)]
+    if open_files is not None:
+        data["open_files"] = open_files
+        lines.append("Visible processes holding references to the selected checkout: %d." % len(open_files["processes"]))
+        for process in open_files["processes"]:
+            lines.append("  PID %d: %s." % (process["pid"], ", ".join(process["observations"])))
     if peers:
         data["retained_scaffold_skills"] = peer_skills
         for peer, observation in peer_skills.items():
@@ -4883,6 +4896,7 @@ def build_parser():
     common(v, True)
     v.add_argument("--operation")
     v.add_argument("--personal-codex", action="store_true", help="inspect one canonical personal scaffold")
+    v.add_argument("--open-files", action="store_true", help="observe visible processes using selected checkout objects on macOS")
     v.add_argument("--retained-scaffold", action="append", default=[], metavar="NAME[=FIXTURE_ID]",
                    help="inspect .agents/skills links inside an explicitly retained personal scaffold")
     v.add_argument("--jobs-stdin", action="store_true", help="read a Local Jobs configuration-only JSON report on stdin")
@@ -4928,7 +4942,8 @@ def main(argv):
         personal = getattr(args, "personal_codex", False)
         if not personal and (getattr(args, "fixture_root", None) is not None
                              or getattr(args, "fixture_repository_id", None) is not None
-                             or getattr(args, "jobs_stdin", False) or getattr(args, "retained_scaffold", [])):
+                             or getattr(args, "open_files", False) or getattr(args, "jobs_stdin", False)
+                             or getattr(args, "retained_scaffold", [])):
             raise Refusal("personal inspection options require view --personal-codex", EXIT_USAGE)
         ctx = None if personal else Ctx()
     except Refusal as exc:

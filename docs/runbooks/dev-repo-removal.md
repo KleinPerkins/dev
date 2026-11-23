@@ -80,6 +80,18 @@ only the named peers' skill links and the supplied base job configuration.
 It does not establish use by other clients, historical snapshots, active jobs or
 other repositories. The view always reports `removal_ready: false`.
 
+On macOS, add `--open-files` to the personal view to find visible processes
+holding objects in the selected checkout. It checks regular files and directories,
+including the checkout's Git administration files. Each batch must include a
+known descriptor for every selected object. The result reports process IDs and
+distinguishes a working directory, a writable descriptor and other open references.
+A hard link can identify a process that opened the same file at another location.
+The observer leaves symlink targets and linked working directories unopened.
+Unsupported filesystems, incomplete observations, nested repositories, changes
+during the scan and size or time limits stop the operation. An empty process list
+describes a point-in-time observation with the invoking account's visibility.
+Repeat the observation after resolving a writer and before acting on a checkout.
+
 Preserve the original directories if the creation operation must resume after
 recovery. A byte copy receives new directory identities. This inspection leaves
 the checkout and retirement journals untouched. Personal removal still requires
