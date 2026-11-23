@@ -301,6 +301,37 @@ class StandardDevSkillTests(unittest.TestCase):
         self.assertEqual(occupant.read_text(), "other installer")
         self.download.assert_not_called()
 
+    def test_conflicting_last_ownership_record_stops_before_publication(self):
+        control = self.codex / "dev-personal-core/dev-new-repo"
+        control.mkdir(parents=True)
+        anchor = control / "dev-new-repo"
+        anchor.write_text("earlier owner")
+        with self.assertRaisesRegex(ValueError, "ownership record changed"):
+            self.configure("install")
+        self.assertFalse(self.slots.exists())
+        self.assertEqual(anchor.read_text(), "earlier owner")
+        self.download.assert_not_called()
+
+    def test_authority_refuses_a_valid_unreachable_git_object(self):
+        import zlib
+        bundle = self.bundles["dev-new-repo"]
+        bundle.prepare()
+        raw = b"blob 7\0fixture"
+        oid = hashlib.sha1(raw).hexdigest()
+        objects = bundle.root / ".git/objects"
+        objects.chmod(0o700)
+        folder = objects / oid[:2]
+        folder.mkdir(exist_ok=True)
+        folder.chmod(0o700)
+        extra = folder / oid[2:]
+        self.assertFalse(extra.exists())
+        extra.write_bytes(zlib.compress(raw))
+        extra.chmod(0o400)
+        folder.chmod(0o500)
+        objects.chmod(0o500)
+        with self.assertRaisesRegex(ValueError, "outside the pinned Dev authority"):
+            bundle.verify()
+
     def test_runtime_or_authority_drift_stops_before_publication(self):
         creator = self.bundles["dev-new-repo"]
         creator.prepare()

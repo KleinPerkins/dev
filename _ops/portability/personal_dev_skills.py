@@ -83,6 +83,7 @@ class DevSkillRelease:
         fixed = self.authority_files()
         pending = [metadata]
         seen = set()
+        packs = {}
         while pending:
             directory = pending.pop()
             if not os.path.lexists(directory) or directory.lstat().st_mode != (stat.S_IFDIR | 0o500):
@@ -100,15 +101,21 @@ class DevSkillRelease:
                     r"objects/(?:[0-9a-f]{2}/[0-9a-f]{38}|pack/pack-[0-9a-f]{40}\.(?:pack|idx|rev))", relative
                 ):
                     raise ValueError(f"unexpected Dev authority entry: {relative}")
+                elif path.parent == metadata / "objects/pack":
+                    packs.setdefault(path.stem, set()).add(path.suffix)
         if seen != fixed.keys() or not all((metadata / name).is_dir() for name in ("objects", "refs")):
             raise ValueError("incomplete Dev authority metadata")
+        if any(not {".pack", ".idx"}.issubset(parts) for parts in packs.values()):
+            raise ValueError("incomplete Dev authority object pack")
         options = ["--no-lazy-fetch", "--no-replace-objects", "-c", "protocol.allow=never"]
         for check in (["cat-file", "-e", self.revision + "^{commit}"],
-                      ["fsck", "--full", "--strict", "--no-reflogs", "--no-dangling", self.revision]):
+                      ["fsck", "--full", "--strict", "--no-reflogs", "--unreachable", self.revision]):
             result = self.git._run([*options, *check], cwd=root, operation="Dev authority integrity",
                                    check=False, timeout=120)
             if result.returncode:
                 raise ValueError("dev-new-repo is missing a valid Dev authority object store")
+            if result.stdout.strip():
+                raise ValueError("dev-new-repo contains objects outside the pinned Dev authority")
 
     def prepare(self):
         if self.root.resolve(strict=False) != self.root:

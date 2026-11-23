@@ -1,6 +1,7 @@
 """Provision the standard operator and repository skills in a Personal Codex home."""
 
 import argparse
+from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import partial
 import hashlib
@@ -143,10 +144,9 @@ def configure(home, codex_home, action):
 def configure_entry(entry, action):
     slot, release, control = entry.slot, entry.release, entry.control
     label = entry.label
-    anchor = control / slot.name
-    history = physical_path(control / "withdrawals")
 
     if action == "check":
+        physical_path(control / "withdrawals")
         if not points_to(slot, release):
             raise ValueError(f"the selected Codex home does not expose the pinned {label}")
         entry.verify()
@@ -159,37 +159,52 @@ def configure_entry(entry, action):
 
     control.mkdir(parents=True, exist_ok=True)
     with FileLock(control / "writer.lock"):
-        if history.exists():
-            for operation in sorted(history.glob("withdraw-*")):
-                finish_withdrawal(operation, slot, anchor, release)
-        if action == "withdraw":
-            if not os.path.lexists(slot):
-                return f"{label} entry already absent"
-            if not owns_slot(slot, anchor, release):
-                raise ValueError("the Codex entry changed or belongs to another installer")
-            history.mkdir(exist_ok=True)
-            operation = Path(tempfile.mkdtemp(prefix="withdraw-", dir=history))
-            os.link(anchor, operation / "witness", follow_symlinks=False)
-            _rename_noreplace(slot, operation / "entry")
-            finish_withdrawal(operation, slot, anchor, release)
-            return f"withdrew the owned Codex entry; recovery record: {operation}"
-        if os.path.lexists(slot):
-            if not points_to(slot, release):
-                raise ValueError(f"the Codex {slot.name} slot is occupied")
-            entry.verify()
-            return f"{label} files and Codex entry already present"
-        entry.prepare()
-        if not os.path.lexists(anchor):
-            anchor.symlink_to(release, target_is_directory=True)
-        if not points_to(anchor, release):
-            raise ValueError(f"the {label} ownership record changed")
-        slot.parent.mkdir(parents=True, exist_ok=True)
-        # Link the ownership witness itself. Equality of the target string alone
-        # cannot establish authority to withdraw a pre-existing or replaced link.
-        os.link(anchor, slot, follow_symlinks=False)
+        recover_withdrawals(entry)
+        return change_entry(entry, action)
+
+
+def recover_withdrawals(entry):
+    history = physical_path(entry.control / "withdrawals")
+    if history.exists():
+        if not history.is_dir():
+            raise ValueError(f"invalid withdrawal history for {entry.label}")
+        for operation in sorted(history.glob("withdraw-*")):
+            finish_withdrawal(operation, entry.slot, entry.control / entry.slot.name, entry.release)
+
+
+def change_entry(entry, action):
+    slot, release, control = entry.slot, entry.release, entry.control
+    label = entry.label
+    anchor = control / slot.name
+    history = control / "withdrawals"
+    if action == "withdraw":
+        if not os.path.lexists(slot):
+            return f"{label} entry already absent"
         if not owns_slot(slot, anchor, release):
-            raise ValueError("the new Codex entry could not be verified")
-        return f"configured {label} for Personal Codex"
+            raise ValueError("the Codex entry changed or belongs to another installer")
+        history.mkdir(exist_ok=True)
+        operation = Path(tempfile.mkdtemp(prefix="withdraw-", dir=history))
+        os.link(anchor, operation / "witness", follow_symlinks=False)
+        _rename_noreplace(slot, operation / "entry")
+        finish_withdrawal(operation, slot, anchor, release)
+        return f"withdrew the owned Codex entry; recovery record: {operation}"
+    if os.path.lexists(slot):
+        if not points_to(slot, release):
+            raise ValueError(f"the Codex {slot.name} slot is occupied")
+        entry.verify()
+        return f"{label} files and Codex entry already present"
+    entry.prepare()
+    if not os.path.lexists(anchor):
+        anchor.symlink_to(release, target_is_directory=True)
+    if not points_to(anchor, release):
+        raise ValueError(f"the {label} ownership record changed")
+    slot.parent.mkdir(parents=True, exist_ok=True)
+    # Link the ownership witness itself. Equality of the target string alone
+    # cannot establish authority to withdraw a pre-existing or replaced link.
+    os.link(anchor, slot, follow_symlinks=False)
+    if not owns_slot(slot, anchor, release):
+        raise ValueError("the new Codex entry could not be verified")
+    return f"configured {label} for Personal Codex"
 
 
 def configure_profile(home, codex_home, action):
@@ -212,12 +227,22 @@ def configure_profile(home, codex_home, action):
     core.control.mkdir(parents=True, exist_ok=True)
     with FileLock(core.control / "profile.lock"):
         if action == "install":
-            # Catch conflicts and incomplete downloads before publishing new entries.
-            for entry in entries:
-                if os.path.lexists(entry.slot) and not points_to(entry.slot, entry.release):
-                    raise ValueError(f"the Codex {entry.slot.name} slot is occupied")
-            for entry in entries:
-                entry.prepare()
+            # Hold the same per-entry locks as standalone installers throughout
+            # recovery, preflight and publication, in stable profile order.
+            with ExitStack() as locks:
+                for entry in entries:
+                    physical_path(entry.control).mkdir(parents=True, exist_ok=True)
+                    locks.enter_context(FileLock(entry.control / "writer.lock"))
+                for entry in entries:
+                    recover_withdrawals(entry)
+                    if os.path.lexists(entry.slot) and not points_to(entry.slot, entry.release):
+                        raise ValueError(f"the Codex {entry.slot.name} slot is occupied")
+                    anchor = entry.control / entry.slot.name
+                    if os.path.lexists(anchor) and not points_to(anchor, entry.release):
+                        raise ValueError(f"the {entry.label} ownership record changed")
+                for entry in entries:
+                    entry.prepare()
+                return [change_entry(entry, action) for entry in entries]
         messages = []
         errors = []
         for entry in entries:
