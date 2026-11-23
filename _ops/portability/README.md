@@ -70,6 +70,41 @@ complete owner workflow; raw descriptor hashes are not installed hashes.
 
 ## Usage
 
+### Configure the core capability in Personal Codex
+
+On a new machine with a Dev checkout and Personal Codex, run this from the
+Dev root as part of configuring the machine:
+
+```sh
+bash bootstrap.sh --profile personal-codex configure
+bash bootstrap.sh --profile personal-codex configure --check
+```
+
+The first command installs the core `capability` playbook for the selected
+Codex home. It fetches the three public Skills files at the pinned revision,
+verifies their contents and executable flags, and exposes the versioned
+release in the user skills directory. A repeat run can use the existing
+release offline. An occupied slot is preserved. A matching earlier installation
+remains under its original owner's control. Open a fresh Codex session to use
+the playbook. Plugin installation stays with the operator, and Ecosystem
+Orchestrator governs propagation into work repositories.
+
+To withdraw an entry created by this command, use
+`bash bootstrap.sh --profile personal-codex configure --withdraw`. The
+versioned files stay available for reconfiguration. `--check` verifies the
+local files and discovery entry. The source reconstruction report below tracks
+the selected transfer manifest separately and retains its historical decisions.
+
+If another writer replaces the entry during withdrawal, the installer restores
+that entry when the slot is vacant. If a second entry already occupies the slot,
+the command reports both paths and preserves the displaced entry. Each withdrawal
+keeps its own recovery directory under `dev-personal-core/withdrawals` in the
+selected Codex home. Once
+the operator has preserved the new occupant and vacated the slot, another
+`configure --withdraw` restores the displaced entry.
+
+### Reconstruct sources
+
 From a curated package, run `python3 engine.py --help`. From a safe development checkout, use:
 
 ```sh
