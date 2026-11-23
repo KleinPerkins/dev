@@ -150,6 +150,12 @@ needs cleanup or an exception.
   registrations), confirm the effect in the config, and preview again. A completion that
   was reported but not observed is not a completion (see section 13).
 
+After the journal sets a checkout aside, it checks for writers again before removing
+its contents. If the check becomes unavailable, the set-aside directory stays in
+place. Restore the process check and resume the same operation. Outside `affirm/`,
+an explicit `writer-proof-unavailable` waiver in the original confirmation covers
+that outage. An observed writer always blocks removal.
+
 ## 4. Retire remote automation (operator-owned)
 
 Do this before any checkout whose automation would otherwise start failing, and before

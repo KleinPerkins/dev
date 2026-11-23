@@ -3719,6 +3719,18 @@ class Runner(object):
                 collect_core(ctx, t, fleet_slugs(ctx), {}, {t["rel"]})
         return t
 
+    def check_set_aside_writers(self, rel, path):
+        ctx = self.ctx
+        ctx.cache.pop("lsof", None)
+        affirm = classify_path(ctx, rel)[2] in ("affirm-src", "affirm-vendor")
+        found, risks = writer_blockers(ctx, rel, path, os.path.join(path, ".git"), affirm,
+                                      (os.path.join(ctx.root, rel),))
+        if found:
+            raise Refusal("could not remove the checkout after it was set aside. " + "; ".join(b["message"] for b in found[:3]))
+        unwaived = sorted({r["id"] for r in risks} - self.waived)
+        if unwaived:
+            raise Refusal("the preview did not waive " + ", ".join(unwaived) + ". Restore the writer check and resume.")
+
     def check_set_aside_registrations(self, step, path, fd, start_purge=False):
         rel = step["target"]
         approved = next(row for row in self.op["targets"] if row["rel"] == rel).get("registrations")
@@ -3748,17 +3760,13 @@ class Runner(object):
             if lexists_nofollow(tomb):
                 # Already renamed away under the approval, but finishing the delete still re-proves nothing is using it.
                 # (lsof reports a renamed directory under its new path, so scanning the marker path is what finds users.)
-                self.ctx.cache.pop("lsof", None)
                 if is_under(self.ctx.start_cwd, tomb) or is_under(self.ctx.start_cwd, os.path.join(self.ctx.root, rel)):
                     return False, "the shell running this command is inside the checkout; change directory out of it and retry"
                 if lexists_under(self.ctx, rel):
                     # The old checkout is safe under its marker, but the approval was for the path as it was then: look first, delete nothing.
                     return False, "something new now exists at %s while the old checkout is set aside under its removal marker; nothing more was deleted. Move the new item away, then resume" % rel
-                affirm = classify_path(self.ctx, rel)[2] in ("affirm-src", "affirm-vendor")
-                found, _risks = writer_blockers(self.ctx, rel, tomb, os.path.join(tomb, ".git"), affirm, (os.path.join(self.ctx.root, rel),))
-                if found:
-                    return False, "; ".join(b["message"] for b in found[:3])
                 try:
+                    self.check_set_aside_writers(rel, tomb)
                     fd, parent = open_chain(self.ctx, tombstone_rel(rel, self.tombstone(step)).split("/"))
                     try:
                         self.check_set_aside_registrations(step, tomb, fd)
@@ -3860,18 +3868,13 @@ class Runner(object):
                 elif point == "entry" and counters["entries"] == 3:
                     ctx.interrupt("mid-delete:" + sid)
 
-            affirm = classify_path(ctx, p["rel"])[2] in ("affirm-src", "affirm-vendor")
-
-            def guard(work_path, tfd, rel=p["rel"], affirm=affirm):
+            def guard(work_path, tfd, rel=p["rel"]):
                 # The checkout has just been set aside under its marker name. lsof reports an open file under its
                 # new path, so scanning the marker is what finds a program that started after the last check; the
                 # original spelling is searched too, in case a tool still reports it that way. A worktree added
                 # since the last look is found in the checkout's own Git state; nothing can add one by the old
                 # path now, so after this look the set of worktrees is settled.
-                ctx.cache.pop("lsof", None)
-                found, _risks = writer_blockers(ctx, rel, work_path, os.path.join(work_path, ".git"), affirm, (os.path.join(ctx.root, rel),))
-                if found:
-                    raise Refusal("something started using the checkout after it was set aside: " + "; ".join(b["message"] for b in found[:3]))
+                self.check_set_aside_writers(rel, work_path)
                 self.check_set_aside_registrations(step, work_path, tfd, start_purge=True)
 
             res = delete_checkout(ctx, p["rel"], p["identity"], hook, self.tombstone(step), guard)
