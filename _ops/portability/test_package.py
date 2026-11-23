@@ -194,6 +194,121 @@ class PersonalCoreTests(unittest.TestCase):
         self.assertFalse(os.path.lexists(self.slot))
 
 
+class StandardDevSkillTests(unittest.TestCase):
+    def setUp(self):
+        import subprocess
+        import personal_dev_skills as dev
+
+        self.home_context = tempfile.TemporaryDirectory()
+        self.addCleanup(self.home_context.cleanup)
+        self.home = Path(self.home_context.name).resolve()
+        self.codex = self.home / "selected-codex"
+        self.source = self.home / "source"
+        self.source.mkdir()
+        git = ["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+               "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
+        git_env = dev.GitRunner()._environment()
+
+        def run(*args):
+            return subprocess.check_output([*git, *args], cwd=self.source, env=git_env, text=True).strip()
+
+        run("init", "--quiet", "--template=")
+        releases = {}
+        for name in ("dev-doctor", "dev-new-repo"):
+            key = f"_ops/skills/personal/{name}/SKILL.md"
+            file = self.source / key
+            file.parent.mkdir(parents=True)
+            payload = f"---\nname: {name}\n---\n".encode()
+            file.write_bytes(payload)
+            run("add", "--", key)
+            run("commit", "--quiet", "-m", name)
+            releases[name] = {"revision": run("rev-parse", "HEAD"),
+                              "files": {key: ["100644", len(payload), hashlib.sha256(payload).hexdigest()]}}
+        self.addCleanup(patch.stopall)
+        patch.object(dev, "DEV_SOURCE", self.source).start()
+        patch.object(dev, "RELEASES", releases).start()
+        core = b"fixture core"
+        patch.object(personal_core, "FILES", {"SKILL.md": (len(core), hashlib.sha256(core).hexdigest(), False)}).start()
+        self.download = patch.object(personal_core, "fetch_file", return_value=core).start()
+        self.bundles = {name: dev.DevSkillRelease(name, self.home) for name in releases}
+        self.slots = self.codex / "skills"
+
+    def configure(self, action):
+        return personal_core.configure_profile(self.home, self.codex, action)
+
+    def test_clean_profile_repeat_withdraw_and_offline_reinstall(self):
+        self.configure("install")
+        self.assertEqual(sorted(p.name for p in self.slots.iterdir()), ["capability", "dev-doctor", "dev-new-repo"])
+        originals = {p.name: p.lstat() for p in self.slots.iterdir()}
+        self.configure("check")
+        self.configure("install")
+        self.assertTrue(all(os.path.samestat(info, (self.slots / name).lstat()) for name, info in originals.items()))
+        # Each sparse checkout contains its own runtime, even if the commit also contains the other one.
+        creator = self.bundles["dev-new-repo"]
+        self.assertFalse(creator.skill.with_name("dev-doctor").exists())
+        self.configure("withdraw")
+        self.assertEqual(list(self.slots.iterdir()), [])
+        self.source.rename(self.home / "source-offline")
+        self.configure("install")
+        self.configure("check")
+        self.assertEqual(self.download.call_count, 1)
+        self.assertFalse((self.home / ".cursor").exists())
+
+    def test_preexisting_doctor_export_is_checked_and_preserved(self):
+        import shutil
+        doctor = self.bundles["dev-doctor"]
+        doctor.prepare()
+        shutil.rmtree(doctor.root / ".git")
+        self.slots.mkdir(parents=True)
+        slot = self.slots / doctor.name
+        slot.symlink_to(doctor.skill)
+        original = slot.lstat()
+        self.configure("install")
+        self.configure("check")
+        self.configure("withdraw")
+        self.assertEqual(list(self.slots.iterdir()), [slot])
+        self.assertTrue(os.path.samestat(original, slot.lstat()))
+
+    def test_foreign_last_slot_stops_before_new_entries_are_published(self):
+        self.slots.mkdir(parents=True)
+        occupant = self.slots / "dev-new-repo"
+        occupant.write_text("other installer")
+        with self.assertRaisesRegex(ValueError, "occupied"):
+            self.configure("install")
+        self.assertEqual(list(self.slots.iterdir()), [occupant])
+        self.assertEqual(occupant.read_text(), "other installer")
+        self.download.assert_not_called()
+
+    def test_runtime_or_authority_drift_stops_before_publication(self):
+        creator = self.bundles["dev-new-repo"]
+        creator.prepare()
+        metadata = creator.root / ".git"
+        metadata.rename(self.home / "saved-metadata")
+        with self.assertRaisesRegex(ValueError, "authority"):
+            self.configure("install")
+        self.assertFalse(self.slots.exists())
+        (self.home / "saved-metadata").rename(metadata)
+        file = creator.skill / "SKILL.md"
+        file.chmod(0o600)
+        data = file.read_bytes()
+        file.write_bytes(data[:-1] + b"x")
+        with self.assertRaisesRegex(ValueError, "differs"):
+            self.configure("install")
+        self.assertFalse(self.slots.exists())
+        file.write_bytes(data)
+        self.configure("install")
+
+    def test_changed_entry_preserved_while_other_owned_entries_are_withdrawn(self):
+        self.configure("install")
+        picked = self.slots / "dev-doctor"
+        picked.unlink()
+        picked.write_text("replacement")
+        with self.assertRaisesRegex(ValueError, "dev-doctor"):
+            self.configure("withdraw")
+        self.assertEqual(list(self.slots.iterdir()), [picked])
+        self.assertEqual(picked.read_text(), "replacement")
+
+
 class PackageTests(unittest.TestCase):
     def payload(self):
         result = {name: b"safe fixture\n" for name in package.PAYLOAD}
