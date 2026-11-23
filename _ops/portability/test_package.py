@@ -1,6 +1,8 @@
 import hashlib
 import importlib.util
 import json
+import os
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -10,6 +12,103 @@ import zipfile
 SPEC = importlib.util.spec_from_file_location("personal_package", Path(__file__).with_name("package.py"))
 package = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(package)
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import personal_core
+
+
+class PersonalCoreTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.home = Path(temporary.name).resolve()
+        self.codex = self.home / ".codex"
+        self.slot = self.codex / "skills/capability"
+        self.release = self.home / ".local/share/personal-portability/releases" / (
+            "capability-" + personal_core.REVISION) / "capability"
+        self.payload = {name: f"fixture {name}".encode() for name in personal_core.FILES}
+        files = {name: (len(raw), hashlib.sha256(raw).hexdigest(), name == "install.sh")
+                 for name, raw in self.payload.items()}
+        self.addCleanup(patch.stopall)
+        patch.object(personal_core, "FILES", files).start()
+        self.fetch = patch.object(personal_core, "fetch_file",
+                                  side_effect=lambda name, length: self.payload[name]).start()
+
+    def run_action(self, action):
+        return personal_core.configure(self.home, self.codex, action)
+
+    def test_clean_configuration_repeat_offline_and_recovery(self):
+        with self.assertRaises(ValueError):
+            self.run_action("check")
+        self.assertFalse(self.codex.exists())
+        self.run_action("install")
+        self.assertEqual(self.fetch.call_count, 3)
+        self.assertEqual(self.slot.resolve(), self.release)
+        before = self.slot.lstat()
+        self.run_action("install")
+        self.run_action("check")
+        self.assertTrue(os.path.samestat(before, self.slot.lstat()))
+        self.run_action("withdraw")
+        self.run_action("withdraw")
+        self.assertFalse(os.path.lexists(self.slot))
+        self.run_action("install")
+        self.assertEqual(self.fetch.call_count, 3)
+        self.assertEqual((self.slot / "SKILL.md").read_bytes(), self.payload["SKILL.md"])
+
+    def test_occupied_and_replaced_entries_are_preserved(self):
+        self.slot.mkdir(parents=True)
+        with self.assertRaises(ValueError):
+            self.run_action("install")
+        self.assertEqual(self.fetch.call_count, 0)
+        self.slot.rmdir()
+        self.run_action("install")
+        self.slot.unlink()
+        self.slot.symlink_to(self.release)
+        self.run_action("install")
+        with self.assertRaises(ValueError):
+            self.run_action("withdraw")
+        self.assertTrue(self.slot.is_symlink())
+
+    def test_failed_download_and_modified_existing_release(self):
+        self.fetch.side_effect = lambda name, length: b"wrong"
+        with self.assertRaises(ValueError):
+            self.run_action("install")
+        self.assertFalse(self.release.parent.exists())
+        self.assertFalse(os.path.lexists(self.slot))
+        self.fetch.side_effect = lambda name, length: self.payload[name]
+        self.run_action("install")
+        (self.release / "meta.yml").write_text("changed")
+        for action in ("install", "check"):
+            with self.assertRaises(ValueError):
+                self.run_action(action)
+        self.assertEqual((self.release / "meta.yml").read_text(), "changed")
+
+    def test_interrupted_withdrawal_and_alternative_home(self):
+        self.codex = self.home / "selected" / "codex"
+        self.slot = self.codex / "skills/capability"
+        self.run_action("install")
+        self.slot.rename(self.codex / ".dev-personal-core/withdrawn")
+        self.run_action("withdraw")
+        self.assertFalse(os.path.lexists(self.slot))
+        self.assertFalse((self.home / ".codex").exists())
+        self.run_action("install")
+        self.run_action("check")
+
+    def test_release_link_or_discovery_parent_alias_is_refused(self):
+        self.slot.parent.parent.mkdir(parents=True)
+        peer = self.home / "peer"
+        peer.mkdir()
+        self.slot.parent.symlink_to(peer)
+        with self.assertRaises(ValueError):
+            self.run_action("install")
+        self.assertEqual(list(peer.iterdir()), [])
+        self.slot.parent.unlink()
+        self.release.parent.mkdir(parents=True)
+        self.release.symlink_to(peer)
+        with self.assertRaises(ValueError):
+            self.run_action("install")
+        self.assertFalse(os.path.lexists(self.slot))
 
 
 class PackageTests(unittest.TestCase):

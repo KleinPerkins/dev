@@ -18,12 +18,16 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 cd "$ROOT"
 
 # Personal setup must dispatch before *any* legacy installer or host mutation.
-# This lane reconstructs allowlisted sources and reports owner-gated capabilities;
-# it never falls through to the work-machine bootstrap on an error.
+# Source reconstruction and Personal Codex configuration have separate entry points.
+# Neither falls through to the work-machine bootstrap on an error.
 if [ "${1:-}" = "--profile" ]; then
   case "${2:-}" in
     personal|personal-codex)
       shift 2
+      if [ "${1:-}" = configure ]; then
+        shift
+        exec python3 -I -B "$ROOT/_ops/portability/personal_core.py" "$@"
+      fi
       exec env PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/_ops/portability/engine.py" "$@"
       ;;
     *)
