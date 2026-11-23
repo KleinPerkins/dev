@@ -1,10 +1,13 @@
 import hashlib
+import io
 import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -249,7 +252,7 @@ class StandardDevSkillTests(unittest.TestCase):
         self.notice = published["notice"]["name"]
         responses = {public + self.notice: b"fixture notice"}
         notice = {"name": self.notice, "length": 14, "sha256": hashlib.sha256(b"fixture notice").hexdigest()}
-        for variable in ("DESIGN_RELEASE", "AUTHORING_RELEASE", "SAVE_GAME_RELEASE"):
+        for variable in ("DESIGN_RELEASE", "AUTHORING_RELEASE", "SAVE_GAME_RELEASE", "LOCAL_JOBS_RELEASE"):
             release = dict(getattr(personal_core, variable))
             if "notice" in release:
                 release["notice"] = notice
@@ -262,6 +265,23 @@ class StandardDevSkillTests(unittest.TestCase):
                     data = key.encode()
                     responses[source + key] = data
                     skills[name][relative] = [mode, len(data), hashlib.sha256(data).hexdigest()]
+            if variable == "LOCAL_JOBS_RELEASE":
+                runtime = {"yaml/__init__.py": b'__version__ = "6.0.3"\ndef safe_load(s): return {"active": True}\n',
+                           "PyYAML-LICENSE.txt": b"fixture license"}
+                archive = io.BytesIO()
+                with tarfile.open(fileobj=archive, mode="w:gz") as tar:
+                    for name, data in runtime.items():
+                        source = "LICENSE" if name == "PyYAML-LICENSE.txt" else "lib/" + name
+                        member = tarfile.TarInfo("pyyaml-6.0.3/" + source)
+                        member.size = len(data)
+                        tar.addfile(member, io.BytesIO(data))
+                raw = archive.getvalue()
+                responses["fixture://pyyaml"] = raw
+                release["pyyaml"] = {
+                    "archive": "fixture://pyyaml", "length": len(raw), "sha256": hashlib.sha256(raw).hexdigest(),
+                    "independent_native": {}, "files": {
+                        name: ["100644", len(data), hashlib.sha256(data).hexdigest()]
+                        for name, data in runtime.items()}}
             patch.object(personal_core, variable, dict(release, skills=skills)).start()
         # Model the separate Skills installer and its one locked npm package.
         iso = personal_core.ISOKIT_RELEASE
@@ -304,7 +324,7 @@ class StandardDevSkillTests(unittest.TestCase):
     def test_clean_profile_repeat_withdraw_and_offline_reinstall(self):
         self.configure("install")
         self.assertEqual(sorted(p.name for p in self.slots.iterdir()), [
-            "capability", "dev-doctor", "dev-new-repo", "frontend-design", "isokit", "prompt-architect",
+            "capability", "dev-doctor", "dev-new-repo", "frontend-design", "isokit", "local-jobs", "prompt-architect",
             "save-game", "verification-before-completion", "web-artifacts-builder"])
         originals = {p.name: p.lstat() for p in self.slots.iterdir()}
         self.configure("check")
@@ -372,6 +392,76 @@ class StandardDevSkillTests(unittest.TestCase):
         self.assertTrue(os.path.samestat(independent, slot.lstat()))
         self.assertEqual(engine.read_bytes(), b"independent edit")
         self.assertEqual(checkpoint.read_bytes(), b"private saved state")
+
+    def test_local_jobs_validates_runtime_and_keeps_generated_dashboard_and_job_state(self):
+        self.configure("install")
+        slot = self.slots / "local-jobs"
+        original = slot.lstat()
+        canvas = slot / personal_core.personal_local_jobs.CANVAS
+        canvas.write_text("my dashboard")
+        state = self.home / ".local-jobs/events.jsonl"
+        state.parent.mkdir()
+        state.write_text("my job history")
+        self.configure("check")
+        self.configure("withdraw")
+        self.design_read.side_effect = AssertionError("offline restore attempted to download")
+        self.configure("install")
+        self.assertTrue(os.path.samestat(original, slot.lstat()))
+        self.assertEqual(canvas.read_text(), "my dashboard")
+        self.assertEqual(state.read_text(), "my job history")
+        module, = slot.glob("_ops/.venv/lib/python*/site-packages/yaml/__init__.py")
+        module.chmod(0o600)
+        module.write_text("other code")
+        with self.assertRaisesRegex(ValueError, "__init__.py"):
+            self.configure("check")
+
+    def test_local_jobs_refuses_a_linked_output_and_preserves_an_independent_install(self):
+        self.configure("install")
+        slot = self.slots / "local-jobs"
+        rev = personal_core.LOCAL_JOBS_RELEASE["revision"]
+        checkout = self.home / ".local/share/local-jobs/releases" / rev / "global/skills/local-jobs"
+        checkout.parent.mkdir(parents=True)
+        shutil.copytree(slot.resolve(), checkout, symlinks=True)
+        slot.unlink()
+        slot.symlink_to(checkout)
+        independent = slot.lstat()
+        self.configure("check")
+        self.configure("install")
+        canvas = slot / personal_core.personal_local_jobs.CANVAS
+        canvas.parent.chmod(0o700)
+        canvas.unlink()
+        canvas.symlink_to(self.home / "private-output")
+        with self.assertRaisesRegex(ValueError, "owner-controlled output"):
+            self.configure("check")
+        self.configure("withdraw")
+        self.assertTrue(os.path.samestat(independent, slot.lstat()))
+        self.assertFalse((self.home / "private-output").exists())
+
+    def test_local_jobs_checks_independent_bytecode_without_changing_the_installation(self):
+        self.configure("install")
+        slot = self.slots / "local-jobs"
+        revision = personal_core.LOCAL_JOBS_RELEASE["revision"]
+        independent = self.home / ".local/share/local-jobs/releases" / revision / "global/skills/local-jobs"
+        independent.parent.mkdir(parents=True)
+        shutil.copytree(slot.resolve(), independent, symlinks=True)
+        slot.unlink()
+        slot.symlink_to(independent)
+        module, = independent.glob("_ops/.venv/lib/python*/site-packages/yaml/__init__.py")
+        module.parent.chmod(0o700)
+        interpreter = (independent / "_ops/.venv/bin/python3").resolve()
+        for options in ([], ["-O"]):
+            subprocess.run([interpreter, "-ISB", *options, "-m", "py_compile", module],
+                           check=True, env={"PATH": os.defpath})
+        self.configure("check")
+        cache, = module.parent.glob("__pycache__/*.opt-1.pyc")
+        before = cache.read_bytes()
+        cache.chmod(0o600)
+        changed = before[:-1] + bytes([before[-1] ^ 1])
+        cache.write_bytes(changed)
+        with self.assertRaisesRegex(ValueError, "pyc"):
+            self.configure("check")
+        self.assertEqual(cache.read_bytes(), changed)
+        self.assertEqual(slot.resolve(), independent)
 
     def test_isokit_dependency_failure_keeps_new_profile_unexposed(self):
         self.provision.side_effect = ValueError("dependency unavailable")
