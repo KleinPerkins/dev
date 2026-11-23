@@ -6,7 +6,7 @@ import json
 import os
 import subprocess
 import tempfile
-import os
+import shutil
 from pathlib import Path
 import sys
 import unittest
@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).parent))
 import personal_doctor as m
-from test_personal_git import fixture
+from test_personal_git import FIXTURE_FLAGS, fixture, qualified_fixture_tool
 from test_personal_controls import active
 from test_personal_baseline import complete as baseline_complete
 from test_personal_documentation import complete as documentation_complete,PLAN,write
@@ -42,6 +42,57 @@ def commit(git):git('add','-A');git('commit','--allow-empty','-m','synthetic doc
 
 
 class Primary(unittest.TestCase):
+    def test_new_personal_checkout_is_bound_to_the_creator_and_reports_real_local_state(self):
+        source = Path(__file__).resolve().parents[2]
+        name = 'sample.created-doctor'
+        with tempfile.TemporaryDirectory(dir='/tmp') as raw, qualified_fixture_tool(), patch.object(m.g, 'FLAGS', FIXTURE_FLAGS):
+            root = Path(raw).resolve()
+            parent = root / 'personal/src/KleinPerkins'
+            parent.mkdir(parents=True)
+            checkout = parent / name
+            env = {**os.environ, 'DEV_SESSION_ID': 'created-doctor-' + root.name,
+                   'XDG_STATE_HOME': str(root / 'state'), 'GIT_CONFIG_GLOBAL': '/dev/null',
+                   'GIT_CONFIG_NOSYSTEM': '1', 'GIT_ALLOW_PROTOCOL': 'file'}
+            subprocess.run(['bash', str(source / '_ops/bin/dev-new-repo.sh'), '--personal-codex',
+                            name, '--fixture-root', str(root)], cwd=parent, env=env,
+                           capture_output=True, check=True)
+
+            def git(*args):
+                return subprocess.check_output(['git', '--no-optional-locks', *args], cwd=checkout, env=env)
+
+            def inspect(code=0):
+                image = lambda: (git('rev-parse', 'HEAD'), git('for-each-ref'), git('status', '--porcelain', '-z'),
+                                 (checkout / '.git/index').read_bytes(), (checkout / '.git/config').read_bytes(),
+                                 (checkout / '.git/doc-warden-new-repo.json').read_bytes())
+                before = image()
+                with redirect_stdout(io.StringIO()) as output:
+                    actual = m.main(['inspect-created', '--repository', 'KleinPerkins/' + name,
+                                     '--fixture-root', str(root)])
+                result = json.loads(output.getvalue())
+                self.assertEqual(actual, code, result)
+                self.assertEqual(image(), before)
+                return result
+
+            clean = inspect()
+            self.assertEqual(clean['head'], git('rev-parse', 'HEAD').decode().strip())
+            self.assertEqual(clean['branch'], 'main')
+            self.assertEqual(clean['local_git_verdict'], 'OK')
+            self.assertEqual(clean['linked_registrations'], 0)
+            self.assertIsNone(clean['recorded_repository_id'])
+            self.assertFalse(clean['hosted_identity_verified'])
+            self.assertIsNone(clean['upstream'])
+            with (checkout / 'README.md').open('a') as stream:
+                stream.write('\nfixture change\n')
+            self.assertEqual(inspect()['codes'], {' M': 1})
+            git('add', 'README.md')
+            self.assertEqual(inspect()['codes'], {'M ': 1})
+            git('config', '--local', 'user.email', 'different@example.invalid')
+            self.assertEqual(inspect(1)['local_git_verdict'], 'VIOLATION')
+            original = root / 'original'
+            checkout.rename(original)
+            shutil.copytree(original, checkout, symlinks=True)
+            self.assertEqual(inspect(2)['status'], 'refused')
+
     def test_detached_primary_preserves_all_exclusions_and_known_hook_advisory(self):
         with fixture() as (root,scope,tool,git):
             git('switch','--detach');result=diagnose(scope,tool);self.assertTrue(result['available'],result)

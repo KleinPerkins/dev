@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 
 HERE=Path(__file__).absolute().parent
@@ -367,12 +368,31 @@ def summary(result):
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=['inspect', 'inspect-codex'])
+    parser.add_argument('operation', choices=['inspect', 'inspect-codex', 'inspect-created'])
     parser.add_argument('--repository', action='append')
     parser.add_argument('--input-stdin',action='store_true');parser.add_argument('--remote',action='store_true')
     parser.add_argument('--quiet',action='store_true')
+    parser.add_argument('--fixture-root', help='disposable creator root for inspect-created')
+    parser.add_argument('--fixture-repository-id', help='exact ID supplied to the fixture creator')
     args=parser.parse_args(argv)
     try:
+        if args.operation == 'inspect-created':
+            if (len(args.repository or ()) != 1 or args.remote or args.input_stdin
+                    or args.fixture_root == ''):
+                parser.error('inspect-created requires one explicit repository and local observations')
+            import personal_created_doctor as created
+            try:
+                result = created.diagnose(args.repository[0], args.fixture_root, args.fixture_repository_id)
+            except (g.Refusal, created.creator.ScaffoldMismatch) as error:
+                print(json.dumps({'status': 'refused', 'reason': str(error)}))
+                return 2
+            except subprocess.SubprocessError:
+                print(json.dumps({'status': 'refused', 'reason': 'creator-check-unavailable'}))
+                return 2
+            print(json.dumps(result, sort_keys=True))
+            return 1 if result['local_git_verdict'] == 'VIOLATION' else 0
+        if args.fixture_root is not None or args.fixture_repository_id is not None:
+            parser.error('fixture selection is available only for inspect-created')
         if args.operation == 'inspect-codex':
             # The historical cohort includes retired, work-only and held repositories.
             # Select explicitly before opening any repository or reading connector input.
