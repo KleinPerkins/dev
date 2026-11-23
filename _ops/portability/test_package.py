@@ -230,6 +230,21 @@ class StandardDevSkillTests(unittest.TestCase):
         core = b"fixture core"
         patch.object(personal_core, "FILES", {"SKILL.md": (len(core), hashlib.sha256(core).hexdigest(), False)}).start()
         self.download = patch.object(personal_core, "fetch_file", return_value=core).start()
+        published = personal_core.DESIGN_RELEASE
+        public = f"https://raw.githubusercontent.com/KleinPerkins/skills/{published['revision']}/global/"
+        self.notice = published["notice"]["name"]
+        responses = {public + self.notice: b"fixture notice"}
+        skills = {}
+        for name, files in published["skills"].items():
+            skills[name] = {}
+            for relative, (mode, _, _) in files.items():
+                key = f"skills/{name}/{relative}"
+                data = key.encode()
+                responses[public + key] = data
+                skills[name][relative] = [mode, len(data), hashlib.sha256(data).hexdigest()]
+        notice = {"name": self.notice, "length": 14, "sha256": hashlib.sha256(b"fixture notice").hexdigest()}
+        patch.object(personal_core, "DESIGN_RELEASE", dict(published, notice=notice, skills=skills)).start()
+        self.design_read = patch.object(personal_core, "read_url", side_effect=lambda url, length: responses[url]).start()
         self.bundles = {name: dev.DevSkillRelease(name, self.home) for name in releases}
         self.slots = self.codex / "skills"
 
@@ -238,7 +253,8 @@ class StandardDevSkillTests(unittest.TestCase):
 
     def test_clean_profile_repeat_withdraw_and_offline_reinstall(self):
         self.configure("install")
-        self.assertEqual(sorted(p.name for p in self.slots.iterdir()), ["capability", "dev-doctor", "dev-new-repo"])
+        self.assertEqual(sorted(p.name for p in self.slots.iterdir()), [
+            "capability", "dev-doctor", "dev-new-repo", "frontend-design", "web-artifacts-builder"])
         originals = {p.name: p.lstat() for p in self.slots.iterdir()}
         self.configure("check")
         self.configure("install")
@@ -249,10 +265,57 @@ class StandardDevSkillTests(unittest.TestCase):
         self.configure("withdraw")
         self.assertEqual(list(self.slots.iterdir()), [])
         self.source.rename(self.home / "source-offline")
+        self.design_read.side_effect = AssertionError("design package fetched on offline reinstall")
         self.configure("install")
         self.configure("check")
         self.assertEqual(self.download.call_count, 1)
         self.assertFalse((self.home / ".cursor").exists())
+
+    def test_design_notice_and_nested_files_are_both_required(self):
+        self.configure("install")
+        folder = (self.slots / "web-artifacts-builder").resolve()
+        notice = folder.parent / self.notice
+        self.assertEqual(notice.read_bytes(), b"fixture notice")
+        notice.chmod(0o600)  # Earlier standalone notices used this mode.
+        self.configure("check")
+        notice.write_bytes(b"altered notice")
+        with self.assertRaisesRegex(ValueError, self.notice):
+            self.configure("check")
+        notice.write_bytes(b"fixture notice")
+        nested = folder / "scripts/shadcn-components.tar.gz"
+        nested.chmod(0o600)
+        with self.assertRaisesRegex(ValueError, "shadcn-components"):
+            self.configure("install")
+        nested.chmod(0o400)
+        folder.chmod(0o700)
+        (folder / "scripts").chmod(0o700)
+        (folder / "scripts").rename(self.home / "external-scripts")
+        (self.home / "external-scripts").chmod(0o500)
+        (folder / "scripts").symlink_to(self.home / "external-scripts")
+        folder.chmod(0o500)
+        with self.assertRaisesRegex(ValueError, "read-only skill directories"):
+            self.configure("check")
+
+    def test_failed_design_download_leaves_discovery_empty_and_can_retry(self):
+        read = self.design_read.side_effect
+        self.design_read.side_effect = lambda url, size: b"" if url.endswith(".tar.gz") else read(url, size)
+        with self.assertRaisesRegex(ValueError, "shadcn-components"):
+            self.configure("install")
+        self.assertFalse(self.slots.exists())
+        self.design_read.side_effect = read
+        self.configure("install")
+        # A standalone owner previously installed a link to this same release.
+        slot = self.slots / "frontend-design"
+        destination = slot.resolve()
+        self.configure("withdraw")
+        slot.symlink_to(destination)
+        original = slot.lstat()
+        self.configure("install")
+        # An existing profile ownership witness belongs to the original link.
+        with self.assertRaisesRegex(ValueError, "frontend-design"):
+            self.configure("withdraw")
+        self.assertEqual(list(self.slots.iterdir()), [slot])
+        self.assertTrue(os.path.samestat(slot.lstat(), original))
 
     def test_published_runtime_protects_its_top_level_directory(self):
         import personal_dev_skills as dev
