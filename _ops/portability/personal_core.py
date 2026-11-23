@@ -28,6 +28,7 @@ FILES = {
     "meta.yml": (506, "f84a3d999eb5d79f606e0f6656b89e6d83bf8d650c7f23ef00da08fefd077c48", False),
 }
 DESIGN_RELEASE = json.loads(Path(__file__).with_name("personal-design-skills.json").read_bytes())
+AUTHORING_RELEASE = json.loads(Path(__file__).with_name("personal-authoring-skills.json").read_bytes())
 
 
 def physical_path(path):
@@ -94,34 +95,48 @@ def prepare_release(directory, populate=write_capability, verify=verify_release)
         verify(directory)
 
 
-def verify_design_skill(directory):
+def verify_skill_tree(directory, files, *, checkout=False):
     physical_path(directory)
-    files = DESIGN_RELEASE["skills"][directory.name]
-    notice = DESIGN_RELEASE["notice"]
-    if {p.name for p in directory.parent.iterdir()} != {directory.name, notice["name"]}:
-        raise ValueError(f"unexpected package contents for {directory.name}")
-    verify_file(directory.parent / notice["name"], notice["length"], notice["sha256"], (0o400, 0o600))
     directories = {parent for name in files for parent in Path(name).parents}
     entries = directories | {Path(name) for name in files}
     for relative in sorted(directories, key=lambda path: len(path.parts)):
         folder = directory / relative
-        if folder.lstat().st_mode != (stat.S_IFDIR | 0o500):
+        mode = folder.lstat().st_mode
+        if not checkout and mode != (stat.S_IFDIR | 0o500):
             raise ValueError(f"{directory.name} requires read-only skill directories")
+        if checkout and not stat.S_ISDIR(mode):
+            raise ValueError(f"{directory.name} requires physical skill directories")
         expected = {p.name for p in entries if p != relative and p.parent == relative}
         if {p.name for p in folder.iterdir()} != expected:
             raise ValueError(f"unexpected entries in {directory.name}/{relative}")
     for name, (mode, length, digest) in files.items():
-        verify_file(directory / name, length, digest, (0o500 if mode == "100755" else 0o400,))
+        modes = (0o500,) if mode == "100755" else (0o400,)
+        if checkout:
+            modes += (0o700, 0o755, 0o555) if mode == "100755" else (0o600, 0o644, 0o444)
+        verify_file(directory / name, length, digest, modes)
 
 
-def write_design_skill(stage):
+def verify_skill_package(directory, release):
+    physical_path(directory)
+    names = {directory.name}
+    notice = release.get("notice")
+    if notice:
+        names.add(notice["name"])
+        verify_file(directory.parent / notice["name"], notice["length"], notice["sha256"], (0o400, 0o600))
+    if {p.name for p in directory.parent.iterdir()} != names:
+        raise ValueError(f"unexpected package contents for {directory.name}")
+    verify_skill_tree(directory, release["skills"][directory.name])
+
+
+def write_skill_package(stage, release):
     name = stage.name
-    source = f"https://raw.githubusercontent.com/KleinPerkins/skills/{DESIGN_RELEASE['revision']}/global"
-    notice = DESIGN_RELEASE["notice"]
-    notice_path = stage.parent / notice["name"]
-    notice_path.write_bytes(read_url(f"{source}/{notice['name']}", notice["length"]))
-    notice_path.chmod(0o400)
-    files = DESIGN_RELEASE["skills"][name]
+    source = f"https://raw.githubusercontent.com/KleinPerkins/skills/{release['revision']}/global"
+    notice = release.get("notice")
+    if notice:
+        notice_path = stage.parent / notice["name"]
+        notice_path.write_bytes(read_url(f"{source}/{notice['name']}", notice["length"]))
+        notice_path.chmod(0o400)
+    files = release["skills"][name]
     for relative, (mode, length, _) in files.items():
         path = stage / relative
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -178,6 +193,28 @@ class SkillEntry:
     label: str
     prepare: Callable[[], None]
     verify: Callable[[], None]
+    checkout: Path | None = None
+
+
+def checkout_installation(entry, action):
+    """Recognize the independently installed Skills checkout without acquiring its link."""
+    if entry.checkout is None or not points_to(entry.slot, entry.checkout):
+        return None
+    if action == "withdraw":
+        anchor = entry.control / entry.slot.name
+        if os.path.lexists(anchor):
+            # The original discovery link is already gone. Like a normal
+            # withdrawal, retain its witness and release for offline reuse.
+            if not points_to(anchor, entry.release):
+                raise ValueError(f"the {entry.label} ownership record changed")
+            entry.verify()
+            return f"preserved independently installed {entry.label}; verified cached profile release for reuse"
+        return f"preserved independently installed {entry.label}"
+    before = entry.slot.lstat()
+    verify_skill_tree(entry.checkout, AUTHORING_RELEASE["skills"][entry.label], checkout=True)
+    if not points_to(entry.slot, entry.checkout) or not os.path.samestat(before, entry.slot.lstat()):
+        raise ValueError(f"the {entry.label} checkout entry changed during verification")
+    return f"verified {entry.label} from the existing Skills checkout"
 
 
 def core_entry(home, codex_home):
@@ -198,12 +235,18 @@ def configure_entry(entry, action):
 
     if action == "check":
         physical_path(control / "withdrawals")
+        existing = checkout_installation(entry, action)
+        if existing:
+            return existing
         if not points_to(slot, release):
             raise ValueError(f"the selected Codex home does not expose the pinned {label}")
         entry.verify()
         return f"verified {label} files and Codex entry"
 
     if action == "withdraw" and not control.exists():
+        existing = checkout_installation(entry, action)
+        if existing:
+            return existing
         if os.path.lexists(slot):
             raise ValueError("existing entry has no ownership record for this installer")
         return f"{label} entry already absent"
@@ -228,6 +271,9 @@ def change_entry(entry, action):
     label = entry.label
     anchor = control / slot.name
     history = control / "withdrawals"
+    existing = checkout_installation(entry, action)
+    if existing:
+        return existing
     if action == "withdraw":
         if not os.path.lexists(slot):
             return f"{label} entry already absent"
@@ -266,17 +312,22 @@ def configure_profile(home, codex_home, action):
         bundle = DevSkillRelease(name, home, slot)
         entries.append(SkillEntry(slot, bundle.skill,
                                   physical_path(core.control / name), name, bundle.prepare, bundle.verify))
-    for name in DESIGN_RELEASE["skills"]:
-        folder = core.release.parent.parent / f"{name}-{DESIGN_RELEASE['revision']}" / name
-        entries.append(SkillEntry(core.slot.with_name(name), folder, physical_path(core.control / name),
-                                  name, partial(prepare_release, folder, write_design_skill, verify_design_skill),
-                                  partial(verify_design_skill, folder)))
+    for release in (DESIGN_RELEASE, AUTHORING_RELEASE):
+        for name in release["skills"]:
+            folder = core.release.parent.parent / f"{name}-{release['revision']}" / name
+            populate = partial(write_skill_package, release=release)
+            verify = partial(verify_skill_package, release=release)
+            checkout = home / "dev/capabilities/skills/global/skills" / name if release is AUTHORING_RELEASE else None
+            entries.append(SkillEntry(core.slot.with_name(name), folder, physical_path(core.control / name),
+                                      name, partial(prepare_release, folder, populate, verify),
+                                      partial(verify, folder), checkout))
 
     if action == "check":
         return [configure_entry(entry, action) for entry in entries]
     if action == "withdraw" and not core.control.exists():
         for entry in entries:
-            if os.path.lexists(entry.slot) and not points_to(entry.slot, entry.release):
+            if (os.path.lexists(entry.slot) and not points_to(entry.slot, entry.release)
+                    and not checkout_installation(entry, action)):
                 raise ValueError(f"unrecognized entry preserved at {entry.slot}")
         return ["no profile-owned entries to withdraw"]
 
@@ -291,13 +342,15 @@ def configure_profile(home, codex_home, action):
                     locks.enter_context(FileLock(entry.control / "writer.lock"))
                 for entry in entries:
                     recover_withdrawals(entry)
-                    if os.path.lexists(entry.slot) and not points_to(entry.slot, entry.release):
+                    if (os.path.lexists(entry.slot) and not points_to(entry.slot, entry.release)
+                            and not checkout_installation(entry, action)):
                         raise ValueError(f"the Codex {entry.slot.name} slot is occupied")
                     anchor = entry.control / entry.slot.name
                     if os.path.lexists(anchor) and not points_to(anchor, entry.release):
                         raise ValueError(f"the {entry.label} ownership record changed")
                 for entry in entries:
-                    entry.prepare()
+                    if entry.checkout is None or not points_to(entry.slot, entry.checkout):
+                        entry.prepare()
                 return [change_entry(entry, action) for entry in entries]
         messages = []
         errors = []
