@@ -195,6 +195,19 @@ class PersonalCoreTests(unittest.TestCase):
         self.assertFalse(os.path.lexists(self.slot))
 
 
+class SaveGameReleaseTests(unittest.TestCase):
+    def test_standard_engine_matches_doc_warden_pin(self):
+        pin_path = Path(__file__).resolve().parents[1] / "doc-warden/runtime/save-game-pin.json"
+        pin = json.loads(pin_path.read_bytes())
+        release = personal_core.SAVE_GAME_RELEASE
+        self.assertEqual(release["revision"], pin["revision"])
+        files = release["skills"]["save-game"]
+        runtime = {name: "sha256:" + digest for name, (_, _, digest) in files.items()
+                   if name == "scripts/save-game.sh" or Path(name).match("engine/*.py")
+                   or Path(name).match("engine/schemas/*.schema.json")}
+        self.assertEqual(runtime, pin["files"])
+
+
 class StandardDevSkillTests(unittest.TestCase):
     def setUp(self):
         import subprocess
@@ -236,7 +249,7 @@ class StandardDevSkillTests(unittest.TestCase):
         self.notice = published["notice"]["name"]
         responses = {public + self.notice: b"fixture notice"}
         notice = {"name": self.notice, "length": 14, "sha256": hashlib.sha256(b"fixture notice").hexdigest()}
-        for variable in ("DESIGN_RELEASE", "AUTHORING_RELEASE"):
+        for variable in ("DESIGN_RELEASE", "AUTHORING_RELEASE", "SAVE_GAME_RELEASE"):
             release = dict(getattr(personal_core, variable))
             if "notice" in release:
                 release["notice"] = notice
@@ -292,7 +305,7 @@ class StandardDevSkillTests(unittest.TestCase):
         self.configure("install")
         self.assertEqual(sorted(p.name for p in self.slots.iterdir()), [
             "capability", "dev-doctor", "dev-new-repo", "frontend-design", "isokit", "prompt-architect",
-            "verification-before-completion", "web-artifacts-builder"])
+            "save-game", "verification-before-completion", "web-artifacts-builder"])
         originals = {p.name: p.lstat() for p in self.slots.iterdir()}
         self.configure("check")
         self.configure("install")
@@ -334,6 +347,31 @@ class StandardDevSkillTests(unittest.TestCase):
         self.configure("check")
         self.assertEqual(slot.resolve(), release)
         self.assertEqual(self.provision.call_count, 1)
+
+    def test_save_game_preserves_independent_package_and_checkpoint(self):
+        self.configure("install")
+        slot = self.slots / "save-game"
+        revision = personal_core.SAVE_GAME_RELEASE["revision"]
+        package = self.home / ".local/share/save-game/source" / revision / "global/skills/save-game"
+        package.parent.mkdir(parents=True)
+        shutil.copytree(slot.resolve(), package)
+        slot.unlink()
+        slot.symlink_to(package)
+        independent = slot.lstat()
+        checkpoint = self.home / ".local/state/save-game/v1/checkpoints/fixture.json"
+        checkpoint.parent.mkdir(parents=True)
+        checkpoint.write_bytes(b"private saved state")
+        self.configure("check")
+        self.configure("install")
+        engine = package / "engine/index.py"
+        engine.chmod(0o600)
+        engine.write_bytes(b"independent edit")
+        with self.assertRaisesRegex(ValueError, "index.py"):
+            self.configure("check")
+        self.configure("withdraw")
+        self.assertTrue(os.path.samestat(independent, slot.lstat()))
+        self.assertEqual(engine.read_bytes(), b"independent edit")
+        self.assertEqual(checkpoint.read_bytes(), b"private saved state")
 
     def test_isokit_dependency_failure_keeps_new_profile_unexposed(self):
         self.provision.side_effect = ValueError("dependency unavailable")
