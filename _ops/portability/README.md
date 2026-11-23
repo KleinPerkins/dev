@@ -85,8 +85,9 @@ hash-verified files from its pinned public Skills release. `dev-doctor` uses
 the Dev release from PR 13 and `dev-new-repo` uses the Dev release from PR 15.
 The [release manifest](personal-dev-skills.json) lists each Dev file’s Git
 mode, length and SHA-256. Setup stages only these runtime files in the working
-directory of each release. The creator also retains a detached Git checkout
-for Doc-Warden’s authority check. A full Dev clone supplies the source objects
+directory of each release. The creator keeps a read-only Git object store
+for Doc-Warden. Setup checks the pinned commit, the entire object store and
+the permitted Git metadata before accepting that authority. A full Dev clone supplies the source objects
 locally. A shallow clone can fetch a missing pinned revision over public HTTPS.
 
 Open a fresh Personal Codex session after configuration. The check verifies the
@@ -95,6 +96,10 @@ the verified releases retain their original ownership. An occupied slot
 pointing elsewhere is reported and preserved. Repeating setup can use the
 verified releases offline. Plugin installation stays with the operator, and
 Ecosystem Orchestrator governs downstream distribution.
+
+If setup reports that an earlier creator needs a sealed Dev authority directory,
+its discovery link and release stay in place. Use the installing owner's
+recovery record to qualify a replacement before switching the existing release.
 
 To withdraw profile-owned discovery links, run
 `bash bootstrap.sh --profile personal-codex configure --withdraw`. Earlier

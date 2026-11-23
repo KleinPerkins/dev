@@ -3,6 +3,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
+import shutil
 import stat
 import tempfile
 
@@ -12,6 +14,7 @@ from engine import GitRunner, SafetyError, _rename_noreplace
 DEV_REMOTE = "https://github.com/KleinPerkins/dev.git"
 DEV_SOURCE = Path(__file__).resolve().parents[2]
 RELEASES = json.loads(Path(__file__).with_name("personal-dev-skills.json").read_bytes())
+AUTHORITY_CONFIG = f'[core]\n\trepositoryformatversion = 0\n\tbare = false\n[remote "origin"]\n\turl = {DEV_REMOTE}\n'.encode()
 
 
 class DevSkillRelease:
@@ -33,10 +36,12 @@ class DevSkillRelease:
         seen = set()
         while pending:
             relative = pending.pop()
+            if self.name == "dev-new-repo" and stat.S_IMODE((root / relative).stat().st_mode) != 0o500:
+                raise ValueError("dev-new-repo requires sealed runtime directories")
             for path in (root / relative).iterdir():
                 entry = relative / path.name
                 info = path.lstat()
-                if stat.S_ISDIR(info.st_mode) and entry == Path(".git"):
+                if self.name == "dev-new-repo" and stat.S_ISDIR(info.st_mode) and entry == Path(".git"):
                     continue
                 if stat.S_ISDIR(info.st_mode) and entry in directories:
                     pending.append(entry)
@@ -46,6 +51,8 @@ class DevSkillRelease:
                     raise ValueError(f"{self.name} contains an unexpected entry: {entry}")
                 mode, length, digest = record
                 expected_modes = (0o500, 0o700, 0o755) if mode == "100755" else (0o400, 0o600, 0o644)
+                if self.name == "dev-new-repo":
+                    expected_modes = expected_modes[:1]
                 if (info.st_size != length or stat.S_IMODE(info.st_mode) not in expected_modes
                         or hashlib.sha256(path.read_bytes()).hexdigest() != digest):
                     raise ValueError(f"{self.name} differs from its released file: {entry}")
@@ -54,24 +61,47 @@ class DevSkillRelease:
             raise ValueError(f"{self.name} is missing released files")
         # The earlier doctor package is a plain verified export. The creator's
         # Doc-Warden runtime also needs the exact Dev authority as a Git checkout.
-        if self.name == "dev-new-repo" or (root / ".git").exists():
-            metadata = root / ".git"
-            if (not metadata.is_dir() or metadata.is_symlink()
-                    or (metadata / "HEAD").is_symlink() or (metadata / "config").is_symlink()
-                    or os.path.lexists(metadata / "commondir")
-                    or (metadata / "HEAD").read_bytes() != (self.revision + "\n").encode()
-                    or self.git.head(root) != self.revision
-                    or self.git.remote_urls(root) != {"origin": DEV_REMOTE}):
-                raise ValueError(f"{self.name} has a different Dev authority checkout")
-            # A detached HEAD can still name the pin after its objects disappear.
-            # Verify the local object store before accepting a Doc-Warden authority.
-            options = ["--no-lazy-fetch", "--no-replace-objects", "-c", "protocol.allow=never"]
-            for check in (["cat-file", "-e", self.revision + "^{commit}"],
-                          ["fsck", "--full", "--strict", "--no-reflogs", "--no-dangling", self.revision]):
-                result = self.git._run([*options, *check], cwd=root, operation="Dev authority integrity",
-                                       check=False, timeout=120)
-                if result.returncode:
-                    raise ValueError(f"{self.name} is missing a valid Dev authority object store")
+        if self.name == "dev-new-repo":
+            self.verify_authority(root)
+
+    def authority_files(self):
+        pin = (self.revision + "\n").encode()
+        return {"HEAD": pin, "shallow": pin, "config": AUTHORITY_CONFIG}
+
+    def verify_authority(self, root):
+        # Check the storage layout before Git interprets even one configuration file.
+        # The runtime only reads objects from the pinned commit. It needs no index,
+        # hooks, symbolic refs, alternates, worktree config or remote helpers.
+        metadata = root / ".git"
+        fixed = self.authority_files()
+        pending = [metadata]
+        seen = set()
+        while pending:
+            directory = pending.pop()
+            if not os.path.lexists(directory) or directory.lstat().st_mode != (stat.S_IFDIR | 0o500):
+                raise ValueError("dev-new-repo requires a sealed Dev authority directory")
+            for path in directory.iterdir():
+                relative = path.relative_to(metadata).as_posix()
+                mode = path.lstat().st_mode
+                if stat.S_ISDIR(mode) and re.fullmatch(r"refs|objects(?:/(?:pack|info|[0-9a-f]{2}))?", relative):
+                    pending.append(path)
+                elif mode == (stat.S_IFREG | 0o400) and relative in fixed:
+                    if path.stat().st_size != len(fixed[relative]) or path.read_bytes() != fixed[relative]:
+                        raise ValueError(f"unexpected Dev authority contents: {relative}")
+                    seen.add(relative)
+                elif mode != (stat.S_IFREG | 0o400) or not re.fullmatch(
+                    r"objects/(?:[0-9a-f]{2}/[0-9a-f]{38}|pack/pack-[0-9a-f]{40}\.(?:pack|idx|rev))", relative
+                ):
+                    raise ValueError(f"unexpected Dev authority entry: {relative}")
+        if seen != fixed.keys() or not all((metadata / name).is_dir() for name in ("objects", "refs")):
+            raise ValueError("incomplete Dev authority metadata")
+        options = ["--no-lazy-fetch", "--no-replace-objects", "-c", "protocol.allow=never"]
+        for check in (["cat-file", "-e", self.revision + "^{commit}"],
+                      ["fsck", "--full", "--strict", "--no-reflogs", "--no-dangling", self.revision]):
+            result = self.git._run([*options, *check], cwd=root, operation="Dev authority integrity",
+                                   check=False, timeout=120)
+            if result.returncode:
+                raise ValueError("dev-new-repo is missing a valid Dev authority object store")
 
     def prepare(self):
         if self.root.resolve(strict=False) != self.root:
@@ -101,15 +131,31 @@ class DevSkillRelease:
                 ["checkout", "--quiet", "--detach", self.revision],
             ):
                 self.git._run([*options, *command], cwd=stage, operation=f"{self.name} {command[0]}", timeout=120)
-            self.verify(stage)
-            # Keep normal Python imports in this immutable runtime from adding
-            # bytecode to the released files. Git metadata remains usable by Doc-Warden.
+            metadata = stage / ".git"
+            if self.name == "dev-new-repo":
+                # Rebuild the small read-only Git control directory. Keep only
+                # the freshly fetched objects, never the fetch/checkout settings.
+                objects = stage / "fetched-objects"
+                (metadata / "objects").rename(objects)
+                shutil.rmtree(metadata)
+                metadata.mkdir()
+                objects.rename(metadata / "objects")
+                (metadata / "refs").mkdir()
+                for name, content in self.authority_files().items():
+                    (metadata / name).write_bytes(content)
+                for path in metadata.rglob("*"):
+                    path.chmod(0o500 if path.is_dir() else 0o400)
+                metadata.chmod(0o500)
+            else:
+                shutil.rmtree(metadata)
+            # Keep normal Python imports from adding bytecode to the release.
             directories = set()
             for name, (mode, _, _) in self.files.items():
                 (stage / name).chmod(0o500 if mode == "100755" else 0o400)
                 directories.update(Path(name).parents)
             for directory in directories:
                 (stage / directory).chmod(0o500)
+            self.verify(stage)
             try:
                 _rename_noreplace(stage, self.root)
             except SafetyError:
