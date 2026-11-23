@@ -80,13 +80,20 @@ bash bootstrap.sh --profile personal-codex configure
 bash bootstrap.sh --profile personal-codex configure --check
 ```
 
-The first command exposes five user skills. `capability` uses the three
+The first command exposes seven user skills. `capability` uses the three
 hash-verified files from its pinned public Skills release. Frontend Design and
 Web Artifacts Builder include their complete pinned skill directories, licenses
 and the third-party notice from Skills. The [design package manifest](personal-design-skills.json)
 identifies each source file. Setup verifies these files before publishing the
 discovery links. Web Artifacts Builder uses pnpm and its documented project
 dependencies when you build an artifact.
+
+Prompt Architect includes its framework references, templates, analyzer and evaluator.
+Verification Before Completion supplies the evidence-checking instructions. The
+[authoring skill manifest](personal-authoring-skills.json) pins both complete
+skill directories. When the Codex link already points into the corresponding
+`~/dev/capabilities/skills/global/skills` checkout, setup checks the selected
+files there. Withdrawal preserves that checkout and its link.
 
 `dev-doctor` uses
 the Dev release from PR 13 and `dev-new-repo` uses the Dev release from PR 15.

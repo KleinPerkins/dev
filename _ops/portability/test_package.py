@@ -234,16 +234,21 @@ class StandardDevSkillTests(unittest.TestCase):
         public = f"https://raw.githubusercontent.com/KleinPerkins/skills/{published['revision']}/global/"
         self.notice = published["notice"]["name"]
         responses = {public + self.notice: b"fixture notice"}
-        skills = {}
-        for name, files in published["skills"].items():
-            skills[name] = {}
-            for relative, (mode, _, _) in files.items():
-                key = f"skills/{name}/{relative}"
-                data = key.encode()
-                responses[public + key] = data
-                skills[name][relative] = [mode, len(data), hashlib.sha256(data).hexdigest()]
         notice = {"name": self.notice, "length": 14, "sha256": hashlib.sha256(b"fixture notice").hexdigest()}
-        patch.object(personal_core, "DESIGN_RELEASE", dict(published, notice=notice, skills=skills)).start()
+        for variable in ("DESIGN_RELEASE", "AUTHORING_RELEASE"):
+            release = dict(getattr(personal_core, variable))
+            if "notice" in release:
+                release["notice"] = notice
+            skills = {}
+            source = f"https://raw.githubusercontent.com/KleinPerkins/skills/{release['revision']}/global/"
+            for name, files in release["skills"].items():
+                skills[name] = {}
+                for relative, (mode, _, _) in files.items():
+                    key = f"skills/{name}/{relative}"
+                    data = key.encode()
+                    responses[source + key] = data
+                    skills[name][relative] = [mode, len(data), hashlib.sha256(data).hexdigest()]
+            patch.object(personal_core, variable, dict(release, skills=skills)).start()
         self.design_read = patch.object(personal_core, "read_url", side_effect=lambda url, length: responses[url]).start()
         self.bundles = {name: dev.DevSkillRelease(name, self.home) for name in releases}
         self.slots = self.codex / "skills"
@@ -254,7 +259,8 @@ class StandardDevSkillTests(unittest.TestCase):
     def test_clean_profile_repeat_withdraw_and_offline_reinstall(self):
         self.configure("install")
         self.assertEqual(sorted(p.name for p in self.slots.iterdir()), [
-            "capability", "dev-doctor", "dev-new-repo", "frontend-design", "web-artifacts-builder"])
+            "capability", "dev-doctor", "dev-new-repo", "frontend-design", "prompt-architect",
+            "verification-before-completion", "web-artifacts-builder"])
         originals = {p.name: p.lstat() for p in self.slots.iterdir()}
         self.configure("check")
         self.configure("install")
@@ -270,6 +276,37 @@ class StandardDevSkillTests(unittest.TestCase):
         self.configure("check")
         self.assertEqual(self.download.call_count, 1)
         self.assertFalse((self.home / ".cursor").exists())
+
+    def test_checkout_backed_authoring_skills_are_verified_and_preserved(self):
+        self.slots.mkdir(parents=True)
+        releases = personal_core.AUTHORING_RELEASE
+        original = {}
+        for name, files in releases["skills"].items():
+            checkout = self.home / "dev/capabilities/skills/global/skills" / name
+            for relative, (mode, _, _) in files.items():
+                file = checkout / relative
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_bytes(f"skills/{name}/{relative}".encode())
+                file.chmod(0o755 if mode == "100755" else 0o644)
+            slot = self.slots / name
+            slot.symlink_to(checkout)
+            original[name] = slot.lstat()
+        self.configure("withdraw")
+        self.configure("install")
+        self.configure("check")
+        for name in original:
+            self.assertFalse((self.codex / "dev-personal-core" / name / name).is_symlink())
+            self.assertFalse((self.home / ".local/share/personal-portability/releases"
+                              / f"{name}-{releases['revision']}").exists())
+        altered = self.slots / "prompt-architect/scripts/framework_analyzer.py"
+        altered.write_bytes(b"modified independently")
+        for action in ("check", "install"):
+            with self.assertRaisesRegex(ValueError, "framework_analyzer"):
+                self.configure(action)
+        self.configure("withdraw")
+        self.assertEqual({p.name for p in self.slots.iterdir()}, set(original))
+        self.assertTrue(all(os.path.samestat(info, (self.slots / name).lstat()) for name, info in original.items()))
+        self.assertEqual(altered.read_bytes(), b"modified independently")
 
     def test_design_notice_and_nested_files_are_both_required(self):
         self.configure("install")

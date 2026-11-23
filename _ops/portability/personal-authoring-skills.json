@@ -1,0 +1,334 @@
+{
+  "revision": "1afae724d8e7d42110d3d9670d85a467c436935c",
+  "skills": {
+    "prompt-architect": {
+      "MAP.md": [
+        "100644",
+        9577,
+        "2743cf51a40a70c3a981095b0c7262c5695dd7f5c3b973731a37c328f1fa7fd5"
+      ],
+      "SKILL.md": [
+        "100644",
+        17713,
+        "b499b3fe0c8e1fc1082a64609ff80bd37534c104d5d987f48985645f2ef53453"
+      ],
+      "assets/templates/ape_template.txt": [
+        "100644",
+        230,
+        "daccd8499d0080a4e28f3dc0c8e92f01e8c12e4cbd2c342d592b3f90eade3787"
+      ],
+      "assets/templates/bab_template.txt": [
+        "100644",
+        600,
+        "eb431fa685fc80a4fc982917e31cb00ed39cb2ccef7c1f35f3bd30e7e1fb7c76"
+      ],
+      "assets/templates/broke_template.txt": [
+        "100644",
+        439,
+        "a973e9708dd7fd786878cdadad11160e08f62ce588d9c97e23a85fa9312c8acc"
+      ],
+      "assets/templates/cai-critique-revise_template.txt": [
+        "100644",
+        678,
+        "1ca2a9e1b34e5662e716232a0252c39d118c93a7c805e886b66a6cbeacf97c3f"
+      ],
+      "assets/templates/care_template.txt": [
+        "100644",
+        415,
+        "b0738a6f0d729be768f8c1d33da5b91f3d88f1dc5fd86104738658bbb38be179"
+      ],
+      "assets/templates/chain-of-density_template.txt": [
+        "100644",
+        2494,
+        "93b2711ac3477a31870e92c013e24f70d6f87449d8739f137ff80c4210999de6"
+      ],
+      "assets/templates/chain-of-thought_template.txt": [
+        "100644",
+        2381,
+        "7198497bc1ba89807b4c78d87ecbc63b9cbe83700773788ec7a4391abf7b9660"
+      ],
+      "assets/templates/co-star_template.txt": [
+        "100644",
+        851,
+        "27094e4798d53dc5526924b9c6dc2b22078d3bea6666235dfe9fe3f5343a7296"
+      ],
+      "assets/templates/crispe_template.txt": [
+        "100644",
+        529,
+        "156a6827989786939366b084f607fdbb2be6169a644ef66f77e854ef37c520db"
+      ],
+      "assets/templates/ctf_template.txt": [
+        "100644",
+        564,
+        "658fd3c6459bfe913b4f5d2c59af48e6e90715927da50a9f5f0efd3f932ba7f1"
+      ],
+      "assets/templates/devils-advocate_template.txt": [
+        "100644",
+        1039,
+        "3e2d1f6338a6deec3412f5f1a8c377ed047ec7fa72e2ca4da566f625ca1f546d"
+      ],
+      "assets/templates/hybrid_template.txt": [
+        "100644",
+        3604,
+        "5ac4416ff409f27e07a2eba372838004fb8c2f3aca253837616d07dc2c64dff4"
+      ],
+      "assets/templates/least-to-most_template.txt": [
+        "100644",
+        606,
+        "dab7054dde18574015526f9b15bfdddd967c70fdb0c98c4b3f6eb3188d3f95b0"
+      ],
+      "assets/templates/plan-and-solve_template.txt": [
+        "100644",
+        315,
+        "494f1dbf5cdbdb193a3bc7ff947c9398327917a8a8a0e26a46a8374071c0707f"
+      ],
+      "assets/templates/pre-mortem_template.txt": [
+        "100644",
+        1108,
+        "977f1b71a490c18adb90fb88d43c5654bb0e63087654bb5f6775f8ebff278252"
+      ],
+      "assets/templates/race_template.txt": [
+        "100644",
+        573,
+        "4b3aa629dbed539fb607e78c399a5a986982ace0e51439c677e7bf5247136b10"
+      ],
+      "assets/templates/rcot_template.txt": [
+        "100644",
+        1045,
+        "053ec2358db6cfaf6f5fe340b196b3cda073de11d95dc5cdd8c888c0518e1ff8"
+      ],
+      "assets/templates/react_template.txt": [
+        "100644",
+        913,
+        "1ba72716fddbd685a1fa84600ecedb781f90efbb972d355fda8ea291c71ca71a"
+      ],
+      "assets/templates/reverse-role_template.txt": [
+        "100644",
+        555,
+        "cfe389f9b016d8bcbc3def21868e26a3da5f059f00995cb4357ad62e479980a8"
+      ],
+      "assets/templates/rise-ie_template.txt": [
+        "100644",
+        668,
+        "eb6f2ecf197e0f80fc26c5dd04a9b5c5e4ab60d028a5b884119dd4642eed9731"
+      ],
+      "assets/templates/rise-ix_template.txt": [
+        "100644",
+        851,
+        "70da251c6412e62a112ba6d416035bdfa0e3bf7a0539a0a2d895a3427cfc308e"
+      ],
+      "assets/templates/risen_template.txt": [
+        "100644",
+        757,
+        "e3dd86246a00ce16a03acf326d106777a035afe0a7388004d4664382ec529682"
+      ],
+      "assets/templates/rpef_template.txt": [
+        "100644",
+        923,
+        "b05cfe50490c9e0f1e8990761565948a96c16a2630a5bc3b47c1ce09ca3c3661"
+      ],
+      "assets/templates/rtf_template.txt": [
+        "100644",
+        388,
+        "2085dd4122f8aaa871a3046c7294a91b2a307ebd5a9d9bab68a5bcc6d58bd737"
+      ],
+      "assets/templates/self-refine_template.txt": [
+        "100644",
+        657,
+        "9f98ec98b01e3edcfe4b4a9300212579b83ec3138cc7a2df1a5a01dede7eb540"
+      ],
+      "assets/templates/skeleton-of-thought_template.txt": [
+        "100644",
+        538,
+        "ffc1e2ecae9100361ccff0d27ef12417c841d653b45cc8d0a9c5c53e2ad6415c"
+      ],
+      "assets/templates/step-back_template.txt": [
+        "100644",
+        384,
+        "65881f8cb4bbc284b395011debad2247d0fbc2427e341a7467103c1a60c8240a"
+      ],
+      "assets/templates/tidd-ec_template.txt": [
+        "100644",
+        1456,
+        "1109b214e9d611cf292765376edeb3e58fb71a5a57fb113b72487c5bd94eb2d6"
+      ],
+      "assets/templates/tree-of-thought_template.txt": [
+        "100644",
+        980,
+        "08ee9b5ce5680cb239a0976e36389376ef980951cde620ff04fbb1af0f5f07b5"
+      ],
+      "install.sh": [
+        "100755",
+        3942,
+        "5607e2f22de9d8a525e64dd535989508b1cecc0ea05d8d70c44d7385581b7fff"
+      ],
+      "meta.yml": [
+        "100644",
+        668,
+        "5b69399a5a50684602c2097c64a15d095caad4ec0eaf2258cec6e5f79afc3145"
+      ],
+      "references/frameworks/ape.md": [
+        "100644",
+        5818,
+        "98ba75bf2d12d5d3e080dcce2ec26ffeea0831caea3393a567ee33e0dd628b01"
+      ],
+      "references/frameworks/bab.md": [
+        "100644",
+        7844,
+        "48b22ccc6321aa3dea456de6976797cc46542c30a14a1357796c3b9b5af7b785"
+      ],
+      "references/frameworks/broke.md": [
+        "100644",
+        8834,
+        "3f1529c1b13968bc6f8949f10f38175f54dc263384a2623bc81378a2d0684d41"
+      ],
+      "references/frameworks/cai-critique-revise.md": [
+        "100644",
+        8509,
+        "efc5fe88b7a6a7a0bb57771b37f61cb7233c2fbf2d98ef270f531436fda59dd6"
+      ],
+      "references/frameworks/care.md": [
+        "100644",
+        8963,
+        "b2866a2d1f570b103af87774970d2b4f7a7466c92cb6c834f8768fc57acfc294"
+      ],
+      "references/frameworks/chain-of-density.md": [
+        "100644",
+        11430,
+        "9e5a01f30dc570917a46eb4a88ca26d71c98c36098d9f066ed7b34ee570bc03f"
+      ],
+      "references/frameworks/chain-of-thought.md": [
+        "100644",
+        9632,
+        "3b1a1a350e2493e8a1a60f2c027cbb9224bf78e61ce09c402aff2d6808c48e78"
+      ],
+      "references/frameworks/co-star.md": [
+        "100644",
+        7525,
+        "3fed50f26443ab697a2f7cb154ef6a9d64cce32c503303d4b0ad927f147dab22"
+      ],
+      "references/frameworks/crispe.md": [
+        "100644",
+        10039,
+        "8ef3c5832241b8e99522bfceecdc099939af5e49e1d93d3799cc5655f684e818"
+      ],
+      "references/frameworks/ctf.md": [
+        "100644",
+        6086,
+        "a446d0f92121fb7d2e7208f32217d81d5fd86a869b1f4fdfe6366ade5b0fd9b7"
+      ],
+      "references/frameworks/devils-advocate.md": [
+        "100644",
+        8033,
+        "bdad3138bb61bd71046aa5e9a751a288f1e110655012dbc3cdedb5daaff5864d"
+      ],
+      "references/frameworks/least-to-most.md": [
+        "100644",
+        8480,
+        "1b95bf1a68f778f533fe17d2fdaf4cd1ad76ecf19df32c89701049093b986229"
+      ],
+      "references/frameworks/plan-and-solve.md": [
+        "100644",
+        7311,
+        "a59db8ee742c7fb1919789a97467497f05985bc5c27d1c56590ac42061d5fde8"
+      ],
+      "references/frameworks/pre-mortem.md": [
+        "100644",
+        7881,
+        "e8b2d20630ff3a91addbd32fc36d4b9afa0f9b3a3c1b6df43e03a5fa6cafb5e4"
+      ],
+      "references/frameworks/race.md": [
+        "100644",
+        8016,
+        "710e11bdcfeaa20db37ef07294c50f6a7425ff9e31aaf8adfa22a40c264e0bdc"
+      ],
+      "references/frameworks/rcot.md": [
+        "100644",
+        8262,
+        "191b77e5fc91f5a873886abedfe615f7f100cb02b2349c3cde8011754b0e1433"
+      ],
+      "references/frameworks/react.md": [
+        "100644",
+        9878,
+        "997a6efb04b442a0239ce0a8ce0ecb45601dd390f1b24fd356f44233f96ff8d3"
+      ],
+      "references/frameworks/reverse-role.md": [
+        "100644",
+        7770,
+        "7b1ad61f08f9530369e4e5a9fcca4b32a024c0e2f58750e5401cc084a4250a45"
+      ],
+      "references/frameworks/rise.md": [
+        "100644",
+        15950,
+        "517ce8009ab5ec00ef9588e3601d76d21e6cb5e889c495e973f2f1d4e2a04213"
+      ],
+      "references/frameworks/risen.md": [
+        "100644",
+        8435,
+        "65acca852917b1f9b5b7fe3c745986d36c0995d5d216457b77a6a25924f56f52"
+      ],
+      "references/frameworks/rpef.md": [
+        "100644",
+        7461,
+        "2428fafa6e4f677e40b868d630db6748bdf83716065c01b9de2dcc018f0f64f3"
+      ],
+      "references/frameworks/rtf.md": [
+        "100644",
+        7868,
+        "6b30360c6767281e3bac355c304957ce00e438e08b9e2bc81bf76cb0f83a779a"
+      ],
+      "references/frameworks/self-refine.md": [
+        "100644",
+        7496,
+        "ad3dd4ef00720aa11fb3bbc9665be6aa48f11785e4e48c101ae4c428c1feeff3"
+      ],
+      "references/frameworks/skeleton-of-thought.md": [
+        "100644",
+        7314,
+        "f6bd8cf19fa1428f81463801145faee08b0c0985e81e820311f9e220a589d876"
+      ],
+      "references/frameworks/step-back.md": [
+        "100644",
+        7898,
+        "4fd70f4e0ae4d21f2756a6142946e23d17d05920910b0b6aa19bd244be3ac8ca"
+      ],
+      "references/frameworks/tidd-ec.md": [
+        "100644",
+        15556,
+        "b00d390849f5ebd3eb86cfc745f2cb81245fc6e021774b1df6deb954d1b9ca07"
+      ],
+      "references/frameworks/tree-of-thought.md": [
+        "100644",
+        8574,
+        "40c19b0d936001115da59f48684685dbf11798cd842a4670184c9f249a8fe598"
+      ],
+      "scripts/framework_analyzer.py": [
+        "100644",
+        37770,
+        "36ce75116b9656175a8292481475b50ec655f3630f1c1978e364fb10c45a6cd1"
+      ],
+      "scripts/prompt_evaluator.py": [
+        "100644",
+        12622,
+        "3cfc60ce42a43f2eb254c0a3c835762eb38deccf5a844eed92d4d01d8930f14c"
+      ]
+    },
+    "verification-before-completion": {
+      "SKILL.md": [
+        "100644",
+        4180,
+        "1e6b6b5ba69f021b075c91491d5c449780b553037682f5b9c0c2940b2e4d03fa"
+      ],
+      "install.sh": [
+        "100755",
+        2293,
+        "d5b81be4ba33a80b089ec7278b7e79c15007e83e0a7ac4457fcc75e66e3458de"
+      ],
+      "meta.yml": [
+        "100644",
+        500,
+        "cba2de182d3583e85567e0a8c74f1bffdd3efe66df7ffcfcb8a3a9b1e32be05d"
+      ]
+    }
+  }
+}
