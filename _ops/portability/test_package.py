@@ -89,8 +89,10 @@ class PersonalCoreTests(unittest.TestCase):
         self.slot = self.codex / "skills/capability"
         self.run_action("install")
         control = self.codex / "dev-personal-core"
-        os.link(control / "capability", control / "withdrawal-in-progress", follow_symlinks=False)
-        self.slot.rename(control / "recover-capability-entry")
+        pending = control / "withdrawals/withdraw-fixture"
+        pending.mkdir(parents=True)
+        os.link(control / "capability", pending / "witness", follow_symlinks=False)
+        self.slot.rename(pending / "entry")
         self.run_action("withdraw")
         self.assertFalse(os.path.lexists(self.slot))
         self.assertFalse((self.home / ".codex").exists())
@@ -114,7 +116,7 @@ class PersonalCoreTests(unittest.TestCase):
 
     def test_concurrent_slot_substitutions_have_recoverable_paths(self):
         self.run_action("install")
-        parked = self.codex / "dev-personal-core/recover-capability-entry"
+        history = self.codex / "dev-personal-core/withdrawals"
         rename = personal_core._rename_noreplace
 
         def race(src, dst):
@@ -128,8 +130,9 @@ class PersonalCoreTests(unittest.TestCase):
                 rename(src, dst)
 
         with patch.object(personal_core, "_rename_noreplace", side_effect=race):
-            with self.assertRaisesRegex(ValueError, str(parked)):
+            with self.assertRaisesRegex(ValueError, str(history)):
                 self.run_action("withdraw")
+        parked, = history.glob("withdraw-*/entry")
         self.assertEqual(self.slot.read_text(), "second writer")
         self.assertEqual((parked / "draft").read_text(), "first writer")
         with self.assertRaisesRegex(ValueError, "preserved"):
@@ -142,11 +145,35 @@ class PersonalCoreTests(unittest.TestCase):
         self.assertEqual(second.read_text(), "second writer")
         self.assertFalse(parked.exists())
 
+    def test_replacements_after_the_last_identity_check_are_never_unlinked(self):
+        self.run_action("install")
+        check = personal_core.owns_slot
+
+        def substitute(slot, witness, release):
+            matches = check(slot, witness, release)
+            if matches and slot.name == "entry":
+                slot.unlink()
+                slot.write_text("replaced capture")
+                witness.unlink()
+                witness.write_text("replaced witness")
+            return matches
+
+        with patch.object(personal_core, "owns_slot", side_effect=substitute):
+            self.run_action("withdraw")
+        operation, = (self.codex / "dev-personal-core/withdrawals").iterdir()
+        self.assertFalse(os.path.lexists(self.slot))
+        self.assertEqual((operation / "entry").read_text(), "replaced capture")
+        self.assertEqual((operation / "witness").read_text(), "replaced witness")
+        self.run_action("install")
+        self.assertEqual((operation / "entry").read_text(), "replaced capture")
+        self.assertEqual((operation / "witness").read_text(), "replaced witness")
+
     def test_unowned_recovery_path_stays_in_place(self):
         self.run_action("install")
-        parked = self.codex / "dev-personal-core/recover-capability-entry"
+        parked = self.codex / "dev-personal-core/withdrawals/withdraw-foreign/entry"
+        parked.parent.mkdir(parents=True)
         parked.write_text("other operation")
-        with self.assertRaisesRegex(ValueError, "unowned recovery entry"):
+        with self.assertRaisesRegex(ValueError, "unowned withdrawal record"):
             self.run_action("withdraw")
         self.assertTrue(self.slot.is_symlink())
         self.assertEqual(parked.read_text(), "other operation")

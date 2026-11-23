@@ -84,20 +84,34 @@ def owns_slot(slot, anchor, release):
             and os.path.samestat(slot.lstat(), anchor.lstat()))
 
 
-def finish_withdrawal(parked, slot, anchor, release):
-    # Inspect the actual entry captured by the exclusive rename. The hardlink
-    # witness keeps the expected inode alive even if the discovery name changes.
-    if owns_slot(parked, anchor, release):
-        parked.unlink()
+def finish_withdrawal(operation, slot, anchor, release):
+    # Receipts and captured entries are append-only. A competing writer can
+    # replace a name at any instant, so a successful check never authorizes a
+    # subsequent unlink of that name. Keeping the entry also supports recovery.
+    physical_path(operation)
+    completed = operation / "completed"
+    if completed.exists():
         return
-    try:
-        _rename_noreplace(parked, slot)
-    except SafetyError as error:
-        raise ValueError(
-            f"Withdrawal stopped. The entry captured from {slot} is preserved at {parked}. "
-            "When the discovery slot is vacant, rerun --withdraw to restore it."
-        ) from error
-    raise ValueError(f"Withdrawal stopped. Restored the independently changed entry to {slot}")
+    parked = operation / "entry"
+    witness = operation / "witness"
+    if not owns_slot(witness, anchor, release):
+        if os.path.lexists(parked) or os.path.lexists(witness):
+            raise ValueError(f"unowned withdrawal record at {operation}; preserved")
+        return  # Interrupted before arming; no discovery entry could have moved.
+    restored = False
+    if os.path.lexists(parked) and not owns_slot(parked, witness, release):
+        try:
+            _rename_noreplace(parked, slot)
+        except SafetyError as error:
+            raise ValueError(
+                f"Withdrawal stopped. The entry captured from {slot} is preserved at {parked}. "
+                "When the discovery slot is vacant, rerun --withdraw to restore it."
+            ) from error
+        restored = True
+    with completed.open("xb"):
+        pass
+    if restored:
+        raise ValueError(f"Withdrawal stopped. Restored the independently changed entry to {slot}")
 
 
 def configure(home, codex_home, action):
@@ -106,8 +120,7 @@ def configure(home, codex_home, action):
     release = releases / f"capability-{REVISION}" / "capability"
     control = physical_path(codex_home / "dev-personal-core")
     anchor = control / "capability"
-    intent = control / "withdrawal-in-progress"
-    parked = control / "recover-capability-entry"
+    history = physical_path(control / "withdrawals")
 
     if action == "check":
         if not points_to(slot, release):
@@ -122,24 +135,20 @@ def configure(home, codex_home, action):
 
     control.mkdir(parents=True, exist_ok=True)
     with FileLock(control / "writer.lock"):
-        if os.path.lexists(intent):
-            if not owns_slot(intent, anchor, release):
-                raise ValueError(f"unexpected withdrawal record at {intent}")
-            if os.path.lexists(parked):
-                finish_withdrawal(parked, slot, anchor, release)
-            intent.unlink()
-        elif os.path.lexists(parked):
-            raise ValueError(f"unowned recovery entry at {parked}; preserved")
+        if history.exists():
+            for operation in sorted(history.glob("withdraw-*")):
+                finish_withdrawal(operation, slot, anchor, release)
         if action == "withdraw":
             if not os.path.lexists(slot):
                 return "core capability entry already absent"
             if not owns_slot(slot, anchor, release):
                 raise ValueError("the Codex entry changed or belongs to another installer")
-            os.link(anchor, intent, follow_symlinks=False)
-            _rename_noreplace(slot, parked)
-            finish_withdrawal(parked, slot, anchor, release)
-            intent.unlink()
-            return "withdrew the owned Codex entry and kept the versioned release"
+            history.mkdir(exist_ok=True)
+            operation = Path(tempfile.mkdtemp(prefix="withdraw-", dir=history))
+            os.link(anchor, operation / "witness", follow_symlinks=False)
+            _rename_noreplace(slot, operation / "entry")
+            finish_withdrawal(operation, slot, anchor, release)
+            return f"withdrew the owned Codex entry; recovery record: {operation}"
         if os.path.lexists(slot):
             if not points_to(slot, release):
                 raise ValueError("the Codex capability slot is occupied")
