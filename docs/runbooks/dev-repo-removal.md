@@ -311,12 +311,14 @@ is still pending is an `external-pending` ledger exception, with an honest reaso
   `failed`, with a reason that says so rather than claiming the result is missing. A step
   that is still open or was reported failed is observed again before anything else: if its
   effect is in fact there it is completed, not repeated.
-- For new checkout removals the journal records the emptied directory and its parent
-  before unlinking the removal marker. After an interruption, resume can verify both
-  names are absent in that same parent. If the checkout disappeared before it was
-  emptied, restore its original location before resuming. If new files appeared in an
-  already emptied marker, preserve those files elsewhere first. The final step only
-  removes the empty directory. Older operations retain their original recovery behavior.
+- For new checkout removals the journal records the emptied directory and its parent.
+  It records final unlink separately after observing removal through the open directory
+  descriptor. Resume checks that observation and that both names are absent from the
+  same parent. If the checkout was moved, restore its original location before resuming.
+  If new files appeared in the emptied marker, preserve them elsewhere first. The final
+  step removes only an empty directory. An interruption between unlink and its journal
+  record leaves the outcome unverified. Preserve that journal and any backup for
+  reconciliation. Older operations retain their original recovery behavior.
 - A resume does not trust the old approval blindly. It first re-assesses every
   checkout that is still pending (blockers, new unwaived risks, wiring and the
   preview's recorded state) and stops with a `rescan` entry if anything changed. A

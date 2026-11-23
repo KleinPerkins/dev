@@ -1345,6 +1345,21 @@ class DevRemoveRepoTests(unittest.TestCase):
         self.assertEqual(fx.run("resume", "--operation", data["operation"], "--json").rc, 0)
         self.assertEqual(fx.run("verify", "--operation", data["operation"], "--json").rc, 0)
         self.assertEqual(sum(e["kind"] == "checkout-empty" and e.get("step") == sid for e in fx.events(data["operation"])), 1)
+        self.assertEqual(sum(e["kind"] == "checkout-unlinked" and e.get("step") == sid for e in fx.events(data["operation"])), 1)
+
+    def test_resume_keeps_the_operation_open_if_final_unlink_evidence_was_lost(self):
+        fx = self.fx
+        repo, data, sid, stopped = self.interrupted_run("before-unlink-receipt")
+        self.assertEqual(stopped.rc, 75, stopped.text)
+        self.assertFalse(repo.exists())
+        self.assertEqual(list(repo.parent.glob(".drr-*.removing")), [])
+        op = data["operation"]
+        before = fx.journal(op).read_bytes()
+        self.assertEqual(fx.run("resume", "--operation", op, "--json").rc, 1)
+        self.assertEqual(fx.run("verify", "--operation", op, "--json").rc, 1)
+        self.assertTrue(fx.journal(op).read_bytes().startswith(before))
+        self.assertFalse(any(e["kind"] in ("complete", "checkout-unlinked") and e.get("step") == sid for e in fx.events(op)))
+        self.assertNotIn("close", fx.kinds(op))
 
     def test_final_absence_requires_the_parent_that_held_the_emptied_checkout(self):
         fx = self.fx
