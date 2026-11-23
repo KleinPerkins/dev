@@ -5,6 +5,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from functools import partial
 import hashlib
+import json
 import os
 from pathlib import Path
 import stat
@@ -26,6 +27,7 @@ FILES = {
     "install.sh": (2120, "28a280abbe0e2079ed670d6ba7aefe4e130b28c3ebd6210e8db78ecfee3340f9", True),
     "meta.yml": (506, "f84a3d999eb5d79f606e0f6656b89e6d83bf8d650c7f23ef00da08fefd077c48", False),
 }
+DESIGN_RELEASE = json.loads(Path(__file__).with_name("personal-design-skills.json").read_bytes())
 
 
 def physical_path(path):
@@ -34,29 +36,46 @@ def physical_path(path):
     return path
 
 
+def verify_file(path, length, digest, modes):
+    info = path.lstat()
+    if (not stat.S_ISREG(info.st_mode) or info.st_size != length
+            or stat.S_IMODE(info.st_mode) not in modes
+            or hashlib.sha256(path.read_bytes()).hexdigest() != digest):
+        raise ValueError(f"release differs from the published {path.name}")
+
+
 def verify_release(directory):
     physical_path(directory)
     if {p.name for p in directory.iterdir()} != FILES.keys():
         raise ValueError("core capability release has missing or unexpected files")
     for name, (length, digest, executable) in FILES.items():
         path = directory / name
-        info = path.lstat()
         # Existing Git-mode releases and private copies are both supported.
         modes = (0o700, 0o755) if executable else (0o600, 0o644)
-        if (not stat.S_ISREG(info.st_mode) or info.st_size != length
-                or stat.S_IMODE(info.st_mode) not in modes
-                or hashlib.sha256(path.read_bytes()).hexdigest() != digest):
-            raise ValueError(f"core capability release differs from the published {name}")
+        verify_file(path, length, digest, modes)
 
 
-def fetch_file(name, length):
-    with urllib.request.urlopen(f"{SOURCE}/{name}", timeout=30) as response:
+def read_url(url, length):
+    with urllib.request.urlopen(url, timeout=30) as response:
         return response.read(length + 1)
 
 
-def prepare_release(directory):
+def fetch_file(name, length):
+    return read_url(f"{SOURCE}/{name}", length)
+
+
+def write_capability(stage):
+    for name, (length, digest, executable) in FILES.items():
+        data = fetch_file(name, length)
+        if len(data) != length or hashlib.sha256(data).hexdigest() != digest:
+            raise ValueError(f"downloaded {name} differs from the published revision")
+        (stage / name).write_bytes(data)
+        (stage / name).chmod(0o700 if executable else 0o600)
+
+
+def prepare_release(directory, populate=write_capability, verify=verify_release):
     if os.path.lexists(directory.parent):
-        verify_release(directory)
+        verify(directory)
         return
     releases = physical_path(directory.parent.parent)
     releases.mkdir(parents=True, exist_ok=True)
@@ -64,20 +83,52 @@ def prepare_release(directory):
         bundle = Path(temp) / "release"
         stage = bundle / directory.name
         stage.mkdir(parents=True)
-        for name, (length, digest, executable) in FILES.items():
-            data = fetch_file(name, length)
-            if len(data) != length or hashlib.sha256(data).hexdigest() != digest:
-                raise ValueError(f"downloaded {name} differs from the published revision")
-            (stage / name).write_bytes(data)
-            (stage / name).chmod(0o700 if executable else 0o600)
-        verify_release(stage)
+        populate(stage)
+        verify(stage)
         try:
             _rename_noreplace(bundle, directory.parent)
         except SafetyError:
             if not directory.parent.exists():
                 raise
             # Another Codex profile on this machine can use the same immutable release.
-        verify_release(directory)
+        verify(directory)
+
+
+def verify_design_skill(directory):
+    physical_path(directory)
+    files = DESIGN_RELEASE["skills"][directory.name]
+    notice = DESIGN_RELEASE["notice"]
+    if {p.name for p in directory.parent.iterdir()} != {directory.name, notice["name"]}:
+        raise ValueError(f"unexpected package contents for {directory.name}")
+    verify_file(directory.parent / notice["name"], notice["length"], notice["sha256"], (0o400, 0o600))
+    directories = {parent for name in files for parent in Path(name).parents}
+    entries = directories | {Path(name) for name in files}
+    for relative in sorted(directories, key=lambda path: len(path.parts)):
+        folder = directory / relative
+        if folder.lstat().st_mode != (stat.S_IFDIR | 0o500):
+            raise ValueError(f"{directory.name} requires read-only skill directories")
+        expected = {p.name for p in entries if p != relative and p.parent == relative}
+        if {p.name for p in folder.iterdir()} != expected:
+            raise ValueError(f"unexpected entries in {directory.name}/{relative}")
+    for name, (mode, length, digest) in files.items():
+        verify_file(directory / name, length, digest, (0o500 if mode == "100755" else 0o400,))
+
+
+def write_design_skill(stage):
+    name = stage.name
+    source = f"https://raw.githubusercontent.com/KleinPerkins/skills/{DESIGN_RELEASE['revision']}/global"
+    notice = DESIGN_RELEASE["notice"]
+    notice_path = stage.parent / notice["name"]
+    notice_path.write_bytes(read_url(f"{source}/{notice['name']}", notice["length"]))
+    notice_path.chmod(0o400)
+    files = DESIGN_RELEASE["skills"][name]
+    for relative, (mode, length, _) in files.items():
+        path = stage / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(read_url(f"{source}/skills/{name}/{relative}", length))
+        path.chmod(0o500 if mode == "100755" else 0o400)
+    for directory in {parent for relative in files for parent in Path(relative).parents}:
+        (stage / directory).chmod(0o500)
 
 
 def points_to(path, release):
@@ -215,6 +266,11 @@ def configure_profile(home, codex_home, action):
         bundle = DevSkillRelease(name, home, slot)
         entries.append(SkillEntry(slot, bundle.skill,
                                   physical_path(core.control / name), name, bundle.prepare, bundle.verify))
+    for name in DESIGN_RELEASE["skills"]:
+        folder = core.release.parent.parent / f"{name}-{DESIGN_RELEASE['revision']}" / name
+        entries.append(SkillEntry(core.slot.with_name(name), folder, physical_path(core.control / name),
+                                  name, partial(prepare_release, folder, write_design_skill, verify_design_skill),
+                                  partial(verify_design_skill, folder)))
 
     if action == "check":
         return [configure_entry(entry, action) for entry in entries]

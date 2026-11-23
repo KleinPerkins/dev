@@ -1,0 +1,69 @@
+{
+  "revision": "1afae724d8e7d42110d3d9670d85a467c436935c",
+  "notice": {
+    "name": "THIRD_PARTY_NOTICES-anthropic-skills.md",
+    "length": 46162,
+    "sha256": "a8ff7a84dee9dfb42ab448de281784387ceafdf63881b7c070ee2de7f6ed865c"
+  },
+  "skills": {
+    "frontend-design": {
+      "LICENSE.txt": [
+        "100644",
+        10174,
+        "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+      ],
+      "SKILL.md": [
+        "100644",
+        8260,
+        "1608ea77fbb6fc30d13a97d12cfa8ebf31358d40f0dd97beed24829d6b3f45dd"
+      ],
+      "install.sh": [
+        "100755",
+        4013,
+        "843d8635ac29ee34e46f0b8efcd178af6f0d02e0e7ae3641c8cc1a9ada416dac"
+      ],
+      "meta.yml": [
+        "100644",
+        529,
+        "6e1d4add07a45c48c5c2327bc4d0522940adce04547060a0c75348c053f3a54a"
+      ]
+    },
+    "web-artifacts-builder": {
+      "LICENSE.txt": [
+        "100644",
+        11345,
+        "bc6b3af2f331cbc7fb0da1344efb2cbe5877a31498b4d70dbc7000f3405a1362"
+      ],
+      "SKILL.md": [
+        "100644",
+        3087,
+        "81c5002c6643b0de7b8710b00e7a9038daa6fb9b68d59870ee6adb12da8d10f8"
+      ],
+      "install.sh": [
+        "100755",
+        4013,
+        "843d8635ac29ee34e46f0b8efcd178af6f0d02e0e7ae3641c8cc1a9ada416dac"
+      ],
+      "meta.yml": [
+        "100644",
+        396,
+        "fe685cac39193d125684f1fccd29ac1dce20ac8ee5bb888f2a5e313694fe7c54"
+      ],
+      "scripts/bundle-artifact.sh": [
+        "100755",
+        1517,
+        "abf0e480bf6585b56fab8526a407dfb7dc740812bddd70c636e1e8f3df5f9618"
+      ],
+      "scripts/init-artifact.sh": [
+        "100755",
+        9924,
+        "355e5dd4382aaaee91f01f1627eaeab30b2676ffa8d9b3ec328a1ae450ebccaa"
+      ],
+      "scripts/shadcn-components.tar.gz": [
+        "100644",
+        19967,
+        "1296f069e825de7933de7e8ac63672495cacce3f88f2dc45554dbcddbcbca60f"
+      ]
+    }
+  }
+}
