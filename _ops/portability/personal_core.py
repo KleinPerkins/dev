@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import sys
 import tempfile
 import urllib.request
@@ -28,6 +29,7 @@ FILES = {
     "meta.yml": (506, "f84a3d999eb5d79f606e0f6656b89e6d83bf8d650c7f23ef00da08fefd077c48", False),
 }
 DESIGN_RELEASE = json.loads(Path(__file__).with_name("personal-design-skills.json").read_bytes())
+ISOKIT_RELEASE = json.loads(Path(__file__).with_name("personal-isokit.json").read_bytes())
 AUTHORING_RELEASE = json.loads(Path(__file__).with_name("personal-authoring-skills.json").read_bytes())
 
 
@@ -95,7 +97,7 @@ def prepare_release(directory, populate=write_capability, verify=verify_release)
         verify(directory)
 
 
-def verify_skill_tree(directory, files, *, checkout=False):
+def verify_skill_tree(directory, files, *, checkout=False, extra_root=()):
     physical_path(directory)
     directories = {parent for name in files for parent in Path(name).parents}
     entries = directories | {Path(name) for name in files}
@@ -107,6 +109,8 @@ def verify_skill_tree(directory, files, *, checkout=False):
         if checkout and not stat.S_ISDIR(mode):
             raise ValueError(f"{directory.name} requires physical skill directories")
         expected = {p.name for p in entries if p != relative and p.parent == relative}
+        if relative == Path("."):
+            expected.update(extra_root)
         if {p.name for p in folder.iterdir()} != expected:
             raise ValueError(f"unexpected entries in {directory.name}/{relative}")
     for name, (mode, length, digest) in files.items():
@@ -125,12 +129,13 @@ def verify_skill_package(directory, release):
         verify_file(directory.parent / notice["name"], notice["length"], notice["sha256"], (0o400, 0o600))
     if {p.name for p in directory.parent.iterdir()} != names:
         raise ValueError(f"unexpected package contents for {directory.name}")
-    verify_skill_tree(directory, release["skills"][directory.name])
+    verify_selected_skill(directory, release, checkout=False)
 
 
 def write_skill_package(stage, release):
     name = stage.name
-    source = f"https://raw.githubusercontent.com/KleinPerkins/skills/{release['revision']}/global"
+    collection = "local" if "runtime" in release else "global"
+    source = f"https://raw.githubusercontent.com/KleinPerkins/skills/{release['revision']}/{collection}"
     notice = release.get("notice")
     if notice:
         notice_path = stage.parent / notice["name"]
@@ -142,8 +147,84 @@ def write_skill_package(stage, release):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(read_url(f"{source}/skills/{name}/{relative}", length))
         path.chmod(0o500 if mode == "100755" else 0o400)
+    if "runtime" in release:
+        # Verify the complete owner script, lockfile and other source before running it.
+        verify_skill_tree(stage, files, checkout=True)
+        provision_isokit(stage)
+        dependency = verify_isokit_runtime(stage, release["runtime"], checkout=True)
+        for relative, (mode, _, _) in release["runtime"].items():
+            (dependency / relative).chmod(0o500 if mode == "100755" else 0o400)
+        seal_directories(dependency, release["runtime"])
+        modules = dependency.parent
+        (modules / ".package-lock.json").chmod(0o400)
+        (modules / ".bin").chmod(0o500)
+        modules.chmod(0o500)
+    seal_directories(stage, files)
+
+
+def seal_directories(stage, files):
     for directory in {parent for relative in files for parent in Path(relative).parents}:
         (stage / directory).chmod(0o500)
+
+
+def provision_isokit(stage):
+    # The published Skills installer provisions its lockfile with lifecycle scripts
+    # disabled. Dev owns the one Codex link. Let the operator add browsers separately.
+    with tempfile.TemporaryDirectory(prefix=".isokit-home-", dir=stage.parent.parent) as temporary:
+        env = {"PATH": os.environ["PATH"], "HOME": temporary, "KP_BOOTSTRAP_MANAGES_EXPOSURE": "1",
+               "npm_config_userconfig": os.devnull, "npm_config_globalconfig": str(Path(temporary) / "npmrc"),
+               "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1"}
+        try:
+            subprocess.run(["/bin/bash", stage / "install.sh", "--apply"], cwd=stage, env=env,
+                           check=True, timeout=180)
+        except (subprocess.SubprocessError, OSError) as error:
+            raise ValueError("IsoKit provisioning failed. Check Node.js 20 or later, npm and registry access.") from error
+
+
+def verify_isokit_runtime(directory, files, *, checkout):
+    modules = directory / "node_modules"
+    binaries = modules / ".bin"
+    for folder, expected in ((modules, {"playwright-core", ".bin", ".package-lock.json"}),
+                             (binaries, {"playwright-core"})):
+        mode = folder.lstat().st_mode
+        if not stat.S_ISDIR(mode) or (not checkout and stat.S_IMODE(mode) != 0o500):
+            raise ValueError(f"IsoKit requires a physical runtime directory at {folder}")
+        if {p.name for p in folder.iterdir()} != expected:
+            raise ValueError(f"unexpected IsoKit runtime entries at {folder}")
+    command = binaries / "playwright-core"
+    if not command.is_symlink() or os.readlink(command) != "../playwright-core/cli.js":
+        raise ValueError("IsoKit's Playwright command link differs")
+    lock = modules / ".package-lock.json"
+    info = lock.lstat()
+    modes = (0o400, 0o444, 0o600, 0o644) if checkout else (0o400,)
+    if not stat.S_ISREG(info.st_mode) or info.st_size > 65536 or stat.S_IMODE(info.st_mode) not in modes:
+        raise ValueError("IsoKit requires a regular npm installation lock")
+    installed = json.loads(lock.read_bytes())
+    key = "node_modules/playwright-core"
+    expected = json.loads((directory / "package-lock.json").read_bytes())["packages"][key]
+    packages = installed.get("packages") if isinstance(installed, dict) else None
+    if (not isinstance(packages, dict) or set(packages) != {key} or not isinstance(packages[key], dict)
+            or any(packages[key].get(field) != expected[field] for field in ("version", "resolved", "integrity", "bin"))):
+        raise ValueError("IsoKit's installed dependency differs from its source lock")
+    dependency = modules / "playwright-core"
+    verify_skill_tree(dependency, files, checkout=checkout)
+    return dependency
+
+
+def verify_selected_skill(directory, release, *, checkout):
+    files = release["skills"][directory.name]
+    if "runtime" not in release:
+        verify_skill_tree(directory, files, checkout=checkout)
+        return
+    verify_skill_tree(directory, files, checkout=checkout, extra_root=("node_modules",))
+    verify_isokit_runtime(directory, release["runtime"], checkout=checkout)
+    probe = ('import {chromium} from "playwright-core"; '
+             'if (parseInt(process.versions.node, 10) < 20 || typeof chromium.launch !== "function") process.exit(1)')
+    try:
+        subprocess.run(["node", "--input-type=module", "-e", probe], cwd=directory, env={"PATH": os.environ["PATH"]},
+                       check=True, timeout=20, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (subprocess.SubprocessError, OSError) as error:
+        raise ValueError("IsoKit needs Node.js 20 or later with an importable Playwright Core runtime") from error
 
 
 def points_to(path, release):
@@ -194,6 +275,7 @@ class SkillEntry:
     prepare: Callable[[], None]
     verify: Callable[[], None]
     checkout: Path | None = None
+    verify_checkout: Callable[[], None] | None = None
 
 
 def checkout_installation(entry, action):
@@ -211,7 +293,7 @@ def checkout_installation(entry, action):
             return f"preserved independently installed {entry.label}; verified cached profile release for reuse"
         return f"preserved independently installed {entry.label}"
     before = entry.slot.lstat()
-    verify_skill_tree(entry.checkout, AUTHORING_RELEASE["skills"][entry.label], checkout=True)
+    entry.verify_checkout()
     if not points_to(entry.slot, entry.checkout) or not os.path.samestat(before, entry.slot.lstat()):
         raise ValueError(f"the {entry.label} checkout entry changed during verification")
     return f"verified {entry.label} from the existing Skills checkout"
@@ -312,15 +394,17 @@ def configure_profile(home, codex_home, action):
         bundle = DevSkillRelease(name, home, slot)
         entries.append(SkillEntry(slot, bundle.skill,
                                   physical_path(core.control / name), name, bundle.prepare, bundle.verify))
-    for release in (DESIGN_RELEASE, AUTHORING_RELEASE):
+    for release in (DESIGN_RELEASE, AUTHORING_RELEASE, ISOKIT_RELEASE):
         for name in release["skills"]:
             folder = core.release.parent.parent / f"{name}-{release['revision']}" / name
             populate = partial(write_skill_package, release=release)
             verify = partial(verify_skill_package, release=release)
-            checkout = home / "dev/capabilities/skills/global/skills" / name if release is AUTHORING_RELEASE else None
+            collection = "local" if release is ISOKIT_RELEASE else "global"
+            checkout = None if release is DESIGN_RELEASE else home / "dev/capabilities/skills" / collection / "skills" / name
+            verify_checkout = partial(verify_selected_skill, checkout, release, checkout=True) if checkout else None
             entries.append(SkillEntry(core.slot.with_name(name), folder, physical_path(core.control / name),
                                       name, partial(prepare_release, folder, populate, verify),
-                                      partial(verify, folder), checkout))
+                                      partial(verify, folder), checkout, verify_checkout))
 
     if action == "check":
         return [configure_entry(entry, action) for entry in entries]

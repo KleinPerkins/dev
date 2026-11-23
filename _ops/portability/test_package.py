@@ -250,6 +250,37 @@ class StandardDevSkillTests(unittest.TestCase):
                     responses[source + key] = data
                     skills[name][relative] = [mode, len(data), hashlib.sha256(data).hexdigest()]
             patch.object(personal_core, variable, dict(release, skills=skills)).start()
+        # Model the separate Skills installer and its one locked npm package.
+        iso = personal_core.ISOKIT_RELEASE
+        url = f"https://raw.githubusercontent.com/KleinPerkins/skills/{iso['revision']}/local/skills/isokit/"
+        key = "node_modules/playwright-core"
+        metadata = {"version": "1.64.1", "resolved": "fixture", "integrity": "fixture",
+                    "bin": {"playwright-core": "cli.js"}}
+        lock = json.dumps({"packages": {key: metadata}}).encode()
+        self.iso_source = {"SKILL.md": b"# IsoKit", "install.sh": b"fixture", "package-lock.json": lock}
+        runtime = {"cli.js": b"export const chromium = {launch() {}};",
+                   "package.json": b'{"name":"playwright-core","type":"module","main":"cli.js"}'}
+        def manifest(contents, executable):
+            return {path: ["100755" if path == executable else "100644", len(data), hashlib.sha256(data).hexdigest()]
+                    for path, data in contents.items()}
+        for path, data in self.iso_source.items():
+            responses[url + path] = data
+        patch.object(personal_core, "ISOKIT_RELEASE",
+                     {"revision": iso["revision"], "skills": {"isokit": manifest(self.iso_source, "install.sh")},
+                      "runtime": manifest(runtime, "cli.js")}).start()
+
+        def provision(directory):
+            modules = directory / "node_modules"
+            commands = modules / ".bin"
+            commands.mkdir(parents=True)
+            (commands / "playwright-core").symlink_to("../playwright-core/cli.js")
+            (modules / ".package-lock.json").write_bytes(lock)
+            (modules / "playwright-core").mkdir()
+            for relative, data in runtime.items():
+                path = modules / "playwright-core" / relative
+                path.write_bytes(data)
+                path.chmod(0o755 if relative == "cli.js" else 0o644)
+        self.provision = patch.object(personal_core, "provision_isokit", side_effect=provision).start()
         self.design_read = patch.object(personal_core, "read_url", side_effect=lambda url, length: responses[url]).start()
         self.bundles = {name: dev.DevSkillRelease(name, self.home) for name in releases}
         self.slots = self.codex / "skills"
@@ -260,7 +291,7 @@ class StandardDevSkillTests(unittest.TestCase):
     def test_clean_profile_repeat_withdraw_and_offline_reinstall(self):
         self.configure("install")
         self.assertEqual(sorted(p.name for p in self.slots.iterdir()), [
-            "capability", "dev-doctor", "dev-new-repo", "frontend-design", "prompt-architect",
+            "capability", "dev-doctor", "dev-new-repo", "frontend-design", "isokit", "prompt-architect",
             "verification-before-completion", "web-artifacts-builder"])
         originals = {p.name: p.lstat() for p in self.slots.iterdir()}
         self.configure("check")
@@ -276,6 +307,40 @@ class StandardDevSkillTests(unittest.TestCase):
         self.configure("install")
         self.configure("check")
         self.assertEqual(self.download.call_count, 1)
+        self.assertFalse((self.home / ".cursor").exists())
+
+    def test_isokit_preserves_independent_checkout_and_checks_installed_runtime(self):
+        self.configure("install")
+        slot = self.slots / "isokit"
+        release = slot.resolve()
+        checkout = self.home / "dev/capabilities/skills/local/skills/isokit"
+        checkout.parent.mkdir(parents=True)
+        shutil.copytree(release, checkout, symlinks=True)
+        slot.unlink()
+        slot.symlink_to(checkout)
+        original = slot.lstat()
+        self.configure("check")
+        self.configure("install")
+        library = checkout / "node_modules/playwright-core/cli.js"
+        library.chmod(0o700)
+        library.write_text("changed by its owner")
+        with self.assertRaisesRegex(ValueError, "cli.js"):
+            self.configure("check")
+        self.configure("withdraw")
+        self.assertTrue(os.path.samestat(original, slot.lstat()))
+        self.assertEqual(library.read_text(), "changed by its owner")
+        slot.unlink()
+        self.configure("install")
+        self.configure("check")
+        self.assertEqual(slot.resolve(), release)
+        self.assertEqual(self.provision.call_count, 1)
+
+    def test_isokit_dependency_failure_keeps_new_profile_unexposed(self):
+        self.provision.side_effect = ValueError("dependency unavailable")
+        with self.assertRaisesRegex(ValueError, "dependency unavailable"):
+            self.configure("install")
+        self.assertFalse(self.slots.exists())
+        self.assertFalse((self.home / ".claude").exists())
         self.assertFalse((self.home / ".cursor").exists())
 
     def test_checkout_backed_authoring_skills_are_verified_and_preserved(self):
