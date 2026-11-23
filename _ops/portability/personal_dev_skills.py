@@ -71,9 +71,10 @@ class DevSkillRelease:
             self.verify()
             return
         self.root.parent.mkdir(parents=True, exist_ok=True)
+        # Publish within one directory. macOS permits renaming a sealed sibling
+        # here, while a move from a different parent needs a writable release.
         with tempfile.TemporaryDirectory(prefix=".dev-skill-", dir=self.root.parent) as temporary:
-            stage = Path(temporary) / "release"
-            stage.mkdir()
+            stage = Path(temporary)
             # A normal Dev clone already contains the pinned objects. A shallow
             # clone can fetch just the pinned revision from the public successor.
             local = self.git._run(["--no-lazy-fetch", "--no-replace-objects", "cat-file", "-e",
@@ -98,7 +99,7 @@ class DevSkillRelease:
             for name, (mode, _, _) in self.files.items():
                 (stage / name).chmod(0o500 if mode == "100755" else 0o400)
                 directories.update(Path(name).parents)
-            for directory in directories - {Path(".")}:
+            for directory in directories:
                 (stage / directory).chmod(0o500)
             try:
                 _rename_noreplace(stage, self.root)

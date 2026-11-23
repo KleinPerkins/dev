@@ -254,10 +254,21 @@ class StandardDevSkillTests(unittest.TestCase):
         self.assertEqual(self.download.call_count, 1)
         self.assertFalse((self.home / ".cursor").exists())
 
+    def test_published_runtime_protects_its_top_level_directory(self):
+        self.configure("install")
+        for bundle in self.bundles.values():
+            with self.subTest(skill=bundle.name):
+                self.assertEqual(bundle.root.stat().st_mode & 0o777, 0o500)
+                if os.geteuid() != 0:
+                    with self.assertRaises(PermissionError):
+                        (bundle.root / "_ops").rename(bundle.root / "replaced")
+                bundle.verify()
+
     def test_preexisting_doctor_export_is_checked_and_preserved(self):
         import shutil
         doctor = self.bundles["dev-doctor"]
         doctor.prepare()
+        doctor.root.chmod(0o700)  # Recreate the earlier standalone export.
         shutil.rmtree(doctor.root / ".git")
         self.slots.mkdir(parents=True)
         slot = self.slots / doctor.name
@@ -283,6 +294,7 @@ class StandardDevSkillTests(unittest.TestCase):
         creator = self.bundles["dev-new-repo"]
         creator.prepare()
         metadata = creator.root / ".git"
+        creator.root.chmod(0o700)  # Simulate a separately modified installation.
         metadata.rename(self.home / "saved-metadata")
         with self.assertRaisesRegex(ValueError, "authority"):
             self.configure("install")
