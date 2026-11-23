@@ -63,6 +63,15 @@ class DevSkillRelease:
                     or self.git.head(root) != self.revision
                     or self.git.remote_urls(root) != {"origin": DEV_REMOTE}):
                 raise ValueError(f"{self.name} has a different Dev authority checkout")
+            # A detached HEAD can still name the pin after its objects disappear.
+            # Verify the local object store before accepting a Doc-Warden authority.
+            options = ["--no-lazy-fetch", "--no-replace-objects", "-c", "protocol.allow=never"]
+            for check in (["cat-file", "-e", self.revision + "^{commit}"],
+                          ["fsck", "--full", "--strict", "--no-reflogs", "--no-dangling", self.revision]):
+                result = self.git._run([*options, *check], cwd=root, operation="Dev authority integrity",
+                                       check=False, timeout=120)
+                if result.returncode:
+                    raise ValueError(f"{self.name} is missing a valid Dev authority object store")
 
     def prepare(self):
         if self.root.resolve(strict=False) != self.root:

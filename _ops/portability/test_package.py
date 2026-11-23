@@ -310,6 +310,33 @@ class StandardDevSkillTests(unittest.TestCase):
         file.write_bytes(data)
         self.configure("install")
 
+    def test_check_rejects_missing_and_corrupt_authority_objects(self):
+        self.configure("install")
+        bundle = self.bundles["dev-new-repo"]
+        objects = bundle.root / ".git" / "objects"
+        parked = self.home / "saved-objects"
+        objects.rename(parked)
+        objects.mkdir()
+        self.assertEqual(bundle.git.head(bundle.root), bundle.revision)
+        with self.assertRaisesRegex(ValueError, "authority object"):
+            self.configure("check")
+        objects.rmdir()
+        parked.rename(objects)
+        tree_id = bundle.git._run(["rev-parse", "HEAD^{tree}"], cwd=bundle.root,
+                                  operation="fixture tree identity").stdout.strip()
+        tree = objects / tree_id[:2] / tree_id[2:]
+        tree.parent.mkdir(exist_ok=True)
+        saved = self.home / "saved-tree"
+        if tree.exists():
+            tree.rename(saved)
+        tree.write_bytes(b"invalid fixture tree")
+        with self.assertRaisesRegex(ValueError, "authority object"):
+            self.configure("check")
+        tree.unlink()
+        if saved.exists():
+            saved.rename(tree)
+        self.configure("check")
+
     def test_changed_entry_preserved_while_other_owned_entries_are_withdrawn(self):
         self.configure("install")
         picked = self.slots / "dev-doctor"
