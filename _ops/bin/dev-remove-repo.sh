@@ -3801,7 +3801,12 @@ class Runner(object):
         if kind == "delete-checkout":
             rel = step["params"]["rel"]
             tomb = os.path.join(self.ctx.root, tombstone_rel(rel, self.tombstone(step)))
-            if lexists_nofollow(tomb):
+            marker_present = lexists_nofollow(tomb)
+            if not marker_present and not lexists_under(self.ctx, rel):
+                if step["params"].get("completion_proof") and not self.observe(step):
+                    return False, "the checkout is missing without evidence of removal from its original parent; restore the original location before resuming"
+                return True, ""
+            if marker_present:
                 # Already renamed away under the approval, but finishing the delete still re-proves nothing is using it.
                 # (lsof reports a renamed directory under its new path, so scanning the marker path is what finds users.)
                 if is_under(self.ctx.start_cwd, tomb) or is_under(self.ctx.start_cwd, os.path.join(self.ctx.root, rel)):
@@ -3827,8 +3832,8 @@ class Runner(object):
                 return True, ""
             t = self.fresh_target(rel)
             if t["state"] == "absent":
-                if step["params"].get("completion_proof") and not self.observe(step):
-                    return False, "the checkout is missing without evidence of removal from its original parent; restore the original location before resuming"
+                if step["params"].get("completion_proof"):
+                    return False, "the checkout moved during inspection; resume to check its location again"
                 return True, ""
             if t["blockers"]:
                 return False, "; ".join(b["message"] for b in t["blockers"][:3])
