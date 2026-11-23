@@ -59,7 +59,11 @@ pick_python() {
 
 PY="$(pick_python)" || { printf 'dev-remove-repo: Python 3.9 or newer is required\n' >&2; exit 69; }
 export DRR_ROOT="$ROOT" DRR_SCRIPT_PATH="$SELF" DRR_START_CWD="$PWD"
-exec "$PY" -I -B - "$@" <<'PY_ENGINE'
+# Preserve a caller-supplied Local Jobs report separately from the embedded program.
+if ! { : <&0; } 2>/dev/null; then
+  exec 0</dev/null
+fi
+exec "$PY" -I -B - "$@" 3<&0 <<'PY_ENGINE'
 import argparse
 import errno
 import fcntl
@@ -69,13 +73,14 @@ import json
 import os
 import re
 import secrets
+import select
 import stat
 import subprocess
 import sys
 import tempfile
 import time
 import unicodedata
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timezone
 
 TOOL = "dev-remove-repo"
@@ -1272,21 +1277,203 @@ def registration_paths(records, admin):
             for name, row in records.items()]
 
 
+@contextmanager
+def bound_scaffold(root, parts, name, fixture, supplied_id=None):
+    """Keep the checkout pinned and compare its creator and Git records again on exit."""
+    from personal_scaffold import checkout_binding
+    from personal_scope import absolute_directory, child_directory, read_regular
+
+    checkout = root.joinpath(*parts, name)
+    with ExitStack() as stack:
+        def hold(fd):
+            stack.callback(os.close, fd)
+            return fd
+
+        base = hold(absolute_directory(root))
+        if os.fstat(base).st_uid != os.getuid():
+            raise Refusal("operator-owned root required")
+        selected = hold(child_directory(base, (*parts, name)))
+        fcntl.flock(selected, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        git = hold(child_directory(selected, (".git",)))
+        state_name = "doc-warden-new-repo.json"
+        saved = read_regular(git, state_name)
+        state = json.loads(saved)
+        slug = "KleinPerkins/" + name
+        if (not isinstance(state, dict) or state.get("schema") != "dev-new-repo-operation/v2"
+                or state.get("repository") != slug or state.get("test_sharding_required") is not True
+                or "github_repository_id" not in state):
+            raise Refusal("the creation record does not identify the selected personal product")
+        recorded_id = state.get("github_repository_id")
+        if recorded_id is not None and (type(recorded_id) is not int or recorded_id <= 0):
+            raise Refusal("the creation record has an invalid repository ID")
+        # The creator binds the exact fixture argument before a provider ID is recorded.
+        # A live checkout always binds the empty fixture argument.
+        fixture_id = supplied_id or ""
+        if fixture and recorded_id is not None:
+            if supplied_id is not None and supplied_id.lstrip("0") != str(recorded_id):
+                raise Refusal("the supplied fixture ID differs from the recorded repository ID")
+            fixture_id = supplied_id or str(recorded_id)
+        expected = checkout_binding(checkout, fixture, fixture_id, os.fstat(selected), os.fstat(git))
+        if state.get("personal_checkout") != expected:
+            if fixture and supplied_id is None:
+                raise Refusal("creation binding does not match. Supply the original --fixture-repository-id if one was used")
+            raise Refusal("the creation record does not match this checkout and Git directory")
+        config = read_regular(git, "config")
+        origin = subprocess.run(
+            ["/usr/bin/git", "config", "--no-includes", "--file", "-", "--null", "--get-all", "remote.origin.url"],
+            input=config, capture_output=True, timeout=5, cwd="/",
+            env={"PATH": os.defpath, "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null"},
+        )
+        if origin.returncode or origin.stdout != ("git@github.com:" + slug + ".git\0").encode():
+            raise Refusal("the selected Git config must contain the single original scaffold origin")
+        records = registration_records(selected)
+        yield selected, saved, recorded_id, records
+        current = hold(absolute_directory(checkout))
+        current_git = hold(child_directory(current, (".git",)))
+        if (not os.path.samestat(os.fstat(current), os.fstat(selected))
+                or not os.path.samestat(os.fstat(current_git), os.fstat(git))
+                or read_regular(current_git, state_name) != saved or read_regular(current_git, "config") != config
+                or registration_records(current) != records):
+            raise Refusal("the selected checkout changed during inspection")
+
+
+def checkout_spelling(path, checkout):
+    """A conservative component comparison, including macOS case and Unicode aliases."""
+    if not os.path.isabs(path) or path.startswith("//"):
+        return "unresolved"
+    path = fold_name(os.path.normpath(path))
+    target = fold_name(str(checkout))
+    if path == target or path.startswith(target + "/"):
+        return "selected-path"
+    return "other-spelling"
+
+
+def retained_skill_links(peer, fd, checkout):
+    """Inspect link text within one admitted peer's .agents/skills, without opening link targets."""
+    remaining = 4096
+    rows = []
+    device = os.fstat(fd).st_dev
+
+    def inspect(parent, name, relative, depth):
+        nonlocal remaining
+        remaining -= 1
+        if remaining < 0 or depth > 32:
+            raise Refusal("the retained skill tree exceeds the inspection limit")
+        try:
+            before = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        except FileNotFoundError:
+            if relative in (".agents", ".agents/skills"):
+                return
+            raise
+        if stat.S_ISLNK(before.st_mode):
+            raw = os.readlink(name, dir_fd=parent)
+            path = os.path.join(peer, os.path.dirname(relative), raw)
+            rows.append({"entry": relative, "relation": checkout_spelling(path, checkout)})
+        elif stat.S_ISDIR(before.st_mode):
+            if before.st_dev != device or before.st_uid != os.getuid() or name == ".git":
+                raise Refusal("the selected skill tree contains a separate or unowned directory")
+            child = os.open(name, O_DIR_NOFOLLOW, dir_fd=parent)
+            try:
+                if not os.path.samestat(before, os.fstat(child)):
+                    raise Refusal("the retained skill directory changed during inspection")
+                if relative == ".agents":
+                    inspect(child, "skills", ".agents/skills", depth + 1)
+                else:
+                    # A nested checkout owns its contents independently.
+                    try:
+                        os.stat(".git", dir_fd=child, follow_symlinks=False)
+                    except FileNotFoundError:
+                        pass
+                    else:
+                        raise Refusal("the selected skill tree contains a separate checkout")
+                    with os.scandir(child) as entries:
+                        for entry in entries:
+                            inspect(child, entry.name, relative + "/" + entry.name, depth + 1)
+            finally:
+                os.close(child)
+        elif relative in (".agents", ".agents/skills"):
+            raise Refusal("the retained skill root is neither a directory nor a link")
+        after = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        if not os.path.samestat(before, after) or before.st_ctime_ns != after.st_ctime_ns:
+            raise Refusal("the retained skill tree changed during inspection")
+
+    inspect(fd, ".agents", ".agents", 0)
+    return sorted(rows, key=lambda row: row["entry"])
+
+
+def configured_job_relations(checkout):
+    """Consume the operator's Local Jobs report. Never open paths declared by a job."""
+    if os.isatty(3):
+        raise Refusal("pipe the Local Jobs configuration-only JSON report to --jobs-stdin", EXIT_USAGE)
+    limit = 1024 * 1024
+    deadline = time.monotonic() + 10
+    raw = bytearray()
+    while len(raw) <= limit:
+        if not select.select([3], [], [], max(0, deadline - time.monotonic()))[0]:
+            raise Refusal("timed out waiting for the Local Jobs report")
+        block = os.read(3, min(65536, limit + 1 - len(raw)))
+        if not block:
+            break
+        raw.extend(block)
+    if len(raw) > limit:
+        raise Refusal("the Local Jobs report exceeds the inspection limit")
+    def unique(pairs):
+        result = {}
+        for k, v in pairs:
+            if k in result:
+                raise Refusal("ambiguous Local Jobs report")
+            result[k] = v
+        return result
+
+    try:
+        report = json.loads(raw, object_pairs_hook=unique)
+    except (ValueError, RecursionError):
+        raise Refusal("expected a Local Jobs configuration-only JSON report") from None
+    if (not isinstance(report, dict) or report.get("schema") != "local-jobs/configured-jobs/v1"
+            or report.get("scope") != "base-configured-instances" or report.get("complete") is not True
+            or not isinstance(report.get("instances"), list)):
+        raise Refusal("Local Jobs did not supply a complete base configuration observation")
+    rows = []
+    seen = set()
+    for job in report["instances"]:
+        if not isinstance(job, dict):
+            raise Refusal("invalid Local Jobs instance")
+        name, kind = job.get("id"), job.get("type")
+        if (not isinstance(name, str) or not name or not name.isprintable() or name in seen
+                or not isinstance(kind, str) or not re.fullmatch("[a-z0-9][a-z0-9-]*", kind)):
+            raise Refusal("invalid or duplicate Local Jobs instance")
+        seen.add(name)
+        relation = "unresolved"
+        if kind == "incremental-git-fetch":
+            path, root = job.get("declared_path"), job.get("declared_root")
+            source = job.get("declared_root_source")
+            if not all(isinstance(s, str) and s and s.isprintable() for s in (path, root, source)):
+                raise Refusal("missing fetch checkout declaration")
+            if os.path.isabs(path):
+                relation = checkout_spelling(path, checkout)
+            elif (source in ("global.dev_root", "LOCAL_JOBS_IGF_DEV_ROOT") and os.path.isabs(root)
+                  and not path.startswith("~")):
+                relation = checkout_spelling(os.path.join(root, path), checkout)
+        rows.append({"id": name, "type": kind, "relation": relation})
+    return {"scope": report["scope"], "report_sha256": sha256_hex(bytes(raw)), "instances": rows}
+
+
 def personal_scaffold_view(args):
     """Inspect one canonical creation record without running Git in the selected checkout."""
     from pathlib import Path
     sys.path.insert(0, os.path.join(os.environ["DRR_ROOT"], "_ops", "portability"))
-    from personal_scaffold import LAYOUT, check_product_name, checkout_binding, owner_location
-    from personal_scope import absolute_directory, child_directory, read_regular
+    from personal_scaffold import LAYOUT, check_product_name, owner_location
 
     if (len(args.paths) != 1 or args.operation is not None or args.fixture_root == ""
             or os.environ.get("DEV_REMOVE_REPO_FIXTURE_ROOT")):
         raise Refusal("select one canonical product path and use --fixture-root for a personal scaffold fixture", EXIT_USAGE)
     fixture = args.fixture_root
-    supplied_id = args.fixture_repository_id
-    if supplied_id is not None and (not fixture or not re.fullmatch(r"[0-9]+", supplied_id)
-                                    or not supplied_id.strip("0")):
-        raise Refusal("--fixture-repository-id requires a positive ID and a personal --fixture-root", EXIT_USAGE)
+    def fixture_id(value):
+        if value is not None and (not fixture or not re.fullmatch(r"[0-9]+", value) or not value.strip("0")):
+            raise Refusal("an explicit fixture repository ID requires a positive ID and --fixture-root", EXIT_USAGE)
+        return value
+
+    supplied_id = fixture_id(args.fixture_repository_id)
     raw = args.paths[0]
     name = os.path.basename(raw)
     try:
@@ -1295,56 +1482,29 @@ def personal_scaffold_view(args):
         if raw not in (str(checkout), str(Path(*LAYOUT, name))):
             raise Refusal("expected a canonical personal product path")
         check_product_name(name)
-        with ExitStack() as stack:
-            def hold(fd):
-                stack.callback(os.close, fd)
-                return fd
-
-            base = hold(absolute_directory(root))
-            if os.fstat(base).st_uid != os.getuid():
-                raise Refusal("operator-owned root required")
-            selected = hold(child_directory(base, (*parts, name)))
-            fcntl.flock(selected, fcntl.LOCK_SH | fcntl.LOCK_NB)
-            git = hold(child_directory(selected, (".git",)))
-            state_name = "doc-warden-new-repo.json"
-            saved = read_regular(git, state_name)
-            state = json.loads(saved)
-            slug = "KleinPerkins/" + name
-            if (not isinstance(state, dict) or state.get("schema") != "dev-new-repo-operation/v2"
-                    or state.get("repository") != slug or state.get("test_sharding_required") is not True
-                    or "github_repository_id" not in state):
-                raise Refusal("the creation record does not identify the selected personal product")
-            recorded_id = state.get("github_repository_id")
-            if recorded_id is not None and (type(recorded_id) is not int or recorded_id <= 0):
-                raise Refusal("the creation record has an invalid repository ID")
-            # The creator binds the exact fixture argument before a provider ID is recorded.
-            # A live checkout always binds the empty fixture argument.
-            fixture_id = supplied_id or ""
-            if fixture and recorded_id is not None:
-                if supplied_id is not None and supplied_id.lstrip("0") != str(recorded_id):
-                    raise Refusal("the supplied fixture ID differs from the recorded repository ID")
-                fixture_id = supplied_id or str(recorded_id)
-            expected = checkout_binding(checkout, fixture, fixture_id, os.fstat(selected), os.fstat(git))
-            if state.get("personal_checkout") != expected:
-                if fixture and supplied_id is None:
-                    raise Refusal("creation binding does not match. Supply the original --fixture-repository-id if one was used")
-                raise Refusal("the creation record does not match this checkout and Git directory")
-            config = read_regular(git, "config")
-            origin = subprocess.run(
-                ["/usr/bin/git", "config", "--no-includes", "--file", "-", "--null", "--get-all", "remote.origin.url"],
-                input=config, capture_output=True, timeout=5, cwd="/",
-                env={"PATH": os.defpath, "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null"},
-            )
-            if origin.returncode or origin.stdout != ("git@github.com:" + slug + ".git\0").encode():
-                raise Refusal("the selected Git config must contain the single original scaffold origin")
-            records = registration_records(selected)
-            current = hold(absolute_directory(checkout))
-            current_git = hold(child_directory(current, (".git",)))
-            if (not os.path.samestat(os.fstat(current), os.fstat(selected))
-                    or not os.path.samestat(os.fstat(current_git), os.fstat(git))
-                    or read_regular(current_git, state_name) != saved or read_regular(current_git, "config") != config
-                    or registration_records(current) != records):
-                raise Refusal("the selected checkout changed during inspection")
+        if len(args.retained_scaffold) > 8:
+            raise Refusal("select at most eight retained scaffolds", EXIT_USAGE)
+        peers = []
+        seen = {fold_name(name)}
+        for selector in args.retained_scaffold:
+            peer, separator, value = selector.partition("=")
+            peer_id = fixture_id(value if separator else None)
+            if fold_name(peer) in seen:
+                raise Refusal("select distinct retained scaffold names, separate from the target", EXIT_USAGE)
+            check_product_name(peer)
+            seen.add(fold_name(peer))
+            peers.append((peer, peer_id))
+        peer_skills = {}
+        jobs = None
+        with bound_scaffold(root, parts, name, fixture, supplied_id) as (_, saved, recorded_id, records):
+            for peer, peer_id in peers:
+                peer_path = checkout.with_name(peer)
+                with bound_scaffold(root, parts, peer, fixture, peer_id) as (fd, peer_saved, _, _):
+                    links = retained_skill_links(peer_path, fd, checkout)
+                    peer_skills[peer] = {"creation_record_sha256": sha256_hex(peer_saved), "links": links}
+            if args.jobs_stdin:
+                jobs = configured_job_relations(checkout)
+        slug = "KleinPerkins/" + name
     except (OSError, ValueError, RecursionError, subprocess.SubprocessError):
         raise Refusal("could not read a stable personal scaffold at the selected path") from None
     data = {"ok": True, "scope": "personal-scaffold", "path": str(checkout), "repository": slug,
@@ -1352,9 +1512,21 @@ def personal_scaffold_view(args):
             "creation_record_sha256": sha256_hex(saved), "linked_registrations": len(records),
             "registrations_sha256": digest_of(sorted(registration_binding(k, v) for k, v in records.items())),
             "removal_ready": False}
-    return data, [slug + ": the creation record matches this checkout and Git directory.",
-                  "Linked registrations in the primary checkout: %d." % len(records),
-                  "Preserve the original directories for scaffold resume. Removal readiness is unverified."], EXIT_OK
+    lines = [slug + ": the creation record matches this checkout and Git directory.",
+             "Linked registrations in the primary checkout: %d." % len(records)]
+    if peers:
+        data["retained_scaffold_skills"] = peer_skills
+        for peer, observation in peer_skills.items():
+            lines.append("Skill links in the selected scaffold %s: %d." % (peer, len(observation["links"])))
+            for row in observation["links"]:
+                lines.append("  %s: %s" % (json.dumps(row["entry"], ensure_ascii=True), row["relation"]))
+    if jobs is not None:
+        data["configured_jobs"] = jobs
+        lines.append("Configured Local Jobs instances in the supplied report: %d." % len(jobs["instances"]))
+        for row in jobs["instances"]:
+            lines.append("  %s: %s" % (row["id"], row["relation"]))
+    lines.append("Preserve the original directories for scaffold resume. Removal readiness is unverified.")
+    return data, lines, EXIT_OK
 
 
 def checked_worktree_list(ctx, path):
@@ -4624,6 +4796,9 @@ def build_parser():
     common(v, True)
     v.add_argument("--operation")
     v.add_argument("--personal-codex", action="store_true", help="inspect one canonical personal scaffold")
+    v.add_argument("--retained-scaffold", action="append", default=[], metavar="NAME[=FIXTURE_ID]",
+                   help="inspect .agents/skills links inside an explicitly retained personal scaffold")
+    v.add_argument("--jobs-stdin", action="store_true", help="read a Local Jobs configuration-only JSON report on stdin")
     v.add_argument("--fixture-root", help="personal scaffold fixture under the system temporary directory")
     v.add_argument("--fixture-repository-id", help="exact fixture ID originally passed to the personal creator")
     r = sub.add_parser("remove", help="preview a removal (default) or confirm one")
@@ -4665,8 +4840,9 @@ def main(argv):
     try:
         personal = getattr(args, "personal_codex", False)
         if not personal and (getattr(args, "fixture_root", None) is not None
-                             or getattr(args, "fixture_repository_id", None) is not None):
-            raise Refusal("personal fixture options require view --personal-codex", EXIT_USAGE)
+                             or getattr(args, "fixture_repository_id", None) is not None
+                             or getattr(args, "jobs_stdin", False) or getattr(args, "retained_scaffold", [])):
+            raise Refusal("personal inspection options require view --personal-codex", EXIT_USAGE)
         ctx = None if personal else Ctx()
     except Refusal as exc:
         if getattr(args, "json", False):
