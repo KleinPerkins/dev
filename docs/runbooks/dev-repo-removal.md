@@ -138,6 +138,13 @@ and refuses to proceed until each class is **accepted by name**.
 | Blocker (never waivable) | protected target, malformed or escaping path, symlinked or special-file content, mount point inside, cross-device, wrong owner, the running shell inside the checkout, an active writer, a live editing-session lock, a Git index lock, an AWA lease, unreadable Git, a still-enrolled PR-automation repo, a client config or launchd/shell file that still references it, a symbolic link in another repository that points into it, a shared scheduled job that still lists it, a linked worktree in an unknown place, that is locked, that is not really a linked worktree, or that was not in the preview (section 6), an unfinished-removal marker beside a path that looks already gone (a marker that a recorded operation made for a different checkout does not count against this path; one that no recorded operation made does), more than 25 targets | fix the cause, then preview again |
 | Operator gate (named in `--attest`) | `github-pages` (a Pages site or CNAME is present) | the operator states the external step is done; the tool records that and nothing else |
 
+The `unpushed-commits` waiver counts commits outside this checkout's local
+remote-tracking history. Each commit counts once across branches, tags, the
+selected detached HEAD and other refs, including `refs/migration/`. Stashes
+have a separate waiver. The preview runs offline, so it cannot establish what
+the hosting provider currently retains. Preserve an independently verified copy
+of any history you need before waiving its loss.
+
 Observed in the closed operation: untracked deck files, one unpushed commit, a
 git-ignored environment file, authentication/environment files, and a local-only commit
 in a linked worktree. All of them were destroyed under an explicit, recorded waiver.

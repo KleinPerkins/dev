@@ -885,6 +885,61 @@ class DevRemoveRepoTests(unittest.TestCase):
         detail = [r for r in target["risks"] if r["id"] == "unpushed-commits"][0]["detail"]
         self.assertTrue(detail["no_remote_configured"])
 
+    def test_retirement_counts_migration_refs_and_binds_their_work_to_confirmation(self):
+        fx = self.fx
+        target = "personal/recovered"
+        repo = fx.repo(target)
+        fx.git(repo, "switch", "--detach")
+        fx.commit(repo, "saved.txt", "locally recovered work\n")
+        saved = fx.git(repo, "rev-parse", "HEAD").strip()
+        ref = "refs/migration/source/retained"
+        fx.git(repo, "update-ref", ref, saved)
+        fx.git(repo, "switch", "main")
+        _, data = fx.preview(target)
+        self.assertEqual(data["required_waivers"], ["unpushed-commits"])
+        counts = data["targets"][0]["git"]["unpushed"]
+        self.assertEqual(counts.get("other_ref_commits"), 1)
+        self.assertEqual(sum(counts.values()), 1)
+        self.assertNotEqual(fx.confirm(data, waive=[]).rc, 0)
+        fx.git(repo, "update-ref", ref, "main")
+        self.assertNotEqual(fx.confirm(data).rc, 0)
+        self.assertTrue(repo.is_dir())
+        fx.git(repo, "update-ref", ref, saved)
+        self.assertEqual(fx.git(repo, "show", ref + ":saved.txt"), "locally recovered work\n")
+
+    def test_retirement_counts_shared_branch_tag_detached_and_custom_history_once(self):
+        fx = self.fx
+        target = "personal/shared-history"
+        repo = fx.repo(target)
+        fx.commit(repo, "one.txt")
+        fx.git(repo, "switch", "--detach")
+        fx.commit(repo, "two.txt")
+        fx.git(repo, "tag", "-a", "saved", "-m", "saved work")
+        fx.commit(repo, "three.txt")
+        fx.git(repo, "update-ref", "refs/migration/source/saved", "HEAD")
+        def counts():
+            return fx.run("view", target, "--json").data["targets"][0]["git"]["unpushed"]
+        observed = counts()
+        self.assertEqual((observed["branch_commits"], observed["tag_commits"], observed["detached_commits"]), (1, 1, 1))
+        self.assertEqual(sum(observed.values()), 3)
+        fx.git(repo, "switch", "main")
+        observed = counts()
+        self.assertEqual((observed["branch_commits"], observed["tag_commits"], observed["other_ref_commits"]), (1, 1, 1))
+        self.assertEqual(sum(observed.values()), 3)
+        fx.git(repo, "update-ref", "refs/remotes/origin/backup", "refs/migration/source/saved")
+        self.assertEqual(sum(counts().values()), 0)
+
+    def test_stashes_keep_their_separate_waiver_and_non_commit_tags_add_no_commits(self):
+        fx = self.fx
+        target = "personal/stash-and-blob"
+        repo = fx.repo(target)
+        fx.git(repo, "tag", "saved-blob", "HEAD:README.md")
+        (repo / "README.md").write_text("retained in the stash\n")
+        fx.git(repo, "stash", "push", "-q")
+        _, data = fx.preview(target)
+        self.assertEqual(data["required_waivers"], ["stashes"])
+        self.assertEqual(sum(data["targets"][0]["git"]["unpushed"].values()), 0)
+
     def test_duplicate_origins_are_never_confused(self):
         fx = self.fx
         a = fx.repo("personal/dup-a")

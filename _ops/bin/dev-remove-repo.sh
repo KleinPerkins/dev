@@ -307,12 +307,13 @@ class Result(object):
         return self.err.decode("utf-8", "replace")
 
 
-def run(argv, timeout=SUBPROCESS_TIMEOUT, env=None, cwd=None):
+def run(argv, timeout=SUBPROCESS_TIMEOUT, env=None, cwd=None, input_bytes=None):
     """Run an argv list (never a shell). Missing tools and timeouts are values, not crashes."""
     try:
         proc = subprocess.run(
             argv,
-            stdin=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL if input_bytes is None else None,
+            input=input_bytes,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=timeout,
@@ -539,6 +540,8 @@ def git_env():
     env = scrubbed_env(
         {
             "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_NO_LAZY_FETCH": "1",
+            "GIT_ALLOW_PROTOCOL": "",
             "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_CONFIG_GLOBAL": os.devnull,
             "HOME": os.devnull,
@@ -1786,7 +1789,7 @@ RISK_TEXT = {
     "dirty-tracked": "uncommitted changes to tracked files would be lost",
     "untracked-files": "untracked files that exist nowhere else would be lost",
     "ignored-data": "git-ignored files (local data, secrets, build output) would be lost",
-    "unpushed-commits": "commits that are not on any remote would be lost",
+    "unpushed-commits": "commits outside the locally recorded remote-tracking history would be lost",
     "stashes": "stashed work would be lost",
     "nested-repos": "nested repositories or submodules would be lost; their own state is not assessed here",
     "operation-in-progress": "an unfinished Git operation (merge, rebase, cherry-pick, bisect) would be abandoned",
@@ -1885,10 +1888,43 @@ def parse_worktrees(raw):
     return records
 
 
-def _count_commits(ctx, path, *args):
-    res = _git(ctx, path, "rev-list", "--count", *args)
-    text = res.text.strip()
-    return int(text) if res.ok and text.isdigit() else None
+def local_commit_counts(ctx, path, ref_listing, detached_head):
+    """Count each commit once using the object IDs in this checkout's captured refs."""
+    groups = {"branch_commits": set(), "tag_commits": set(), "detached_commits": set(), "other_ref_commits": set()}
+    accounted = set()
+    for line in ref_listing.splitlines():
+        ref, space, oid = line.partition(b" ")
+        if not space or not ref.startswith(b"refs/") or not re.fullmatch(rb"(?:[0-9a-f]{40}|[0-9a-f]{64})", oid):
+            raise ValueError("invalid ref observation")
+        if ref.startswith(b"refs/remotes/"):
+            accounted.add(oid)
+        elif ref.startswith(b"refs/heads/"):
+            groups["branch_commits"].add(oid)
+        elif ref.startswith(b"refs/tags/"):
+            groups["tag_commits"].add(oid)
+        elif ref != b"refs/stash":  # Stashes have their own count and named waiver.
+            groups["other_ref_commits"].add(oid)
+    if detached_head:
+        if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", detached_head):
+            raise ValueError("invalid detached HEAD observation")
+        groups["detached_commits"].add(detached_head.encode("ascii"))
+    counts = {}
+    for name, tips in groups.items():
+        new_tips = tips - accounted
+        count = 0
+        if new_tips:
+            revisions = sorted(new_tips) + [b"^" + oid for oid in sorted(accounted)]
+            result = run(git_argv(ctx, path, "--no-replace-objects", "rev-list", "--count", "--stdin"),
+                         env=git_env(), input_bytes=b"\n".join(revisions) + b"\n")
+            if not result.ok or not result.out.strip().isdigit():
+                raise ValueError("commit history unavailable")
+            count = int(result.out.strip())
+            accounted.update(new_tips)
+        # Existing journals hash the original three fields. Add a fourth only
+        # when it changes the loss assessment and requires a fresh preview.
+        if name != "other_ref_commits" or count:
+            counts[name] = count
+    return counts
 
 
 GIT_PRIVATE_FILES = ("config", "HEAD", "shallow", "info/exclude", "info/attributes", "info/sparse-checkout")
@@ -1975,16 +2011,12 @@ def collect_git(ctx, path):
     out["remotes"] = remotes
     slugs = sorted({origin_slug(r["url"]).lower() for r in remotes if origin_slug(r["url"])})
     out["slugs"] = slugs
-    branch_unpushed = _count_commits(ctx, path, "--branches", "--not", "--remotes")
-    tag_unpushed = _count_commits(ctx, path, "--tags", "--not", "--branches", "--remotes")
-    detached = 0
-    if out["head"] and not out["branch"]:
-        detached = _count_commits(ctx, path, "HEAD", "--not", "--branches", "--remotes")
-    if None in (branch_unpushed, tag_unpushed, detached):
-        out["error"] = "git could not count unpushed commits"
+    try:
+        out["unpushed"] = local_commit_counts(ctx, path, refs.out, out["head"] if not out["branch"] else None)
+    except ValueError:
+        out["error"] = "git could not count commits outside the local remote-tracking history"
         return out
-    out["unpushed"] = {"branch_commits": branch_unpushed, "tag_commits": tag_unpushed, "detached_commits": detached}
-    out["unpushed_total"] = branch_unpushed + tag_unpushed + detached
+    out["unpushed_total"] = sum(out["unpushed"].values())
     stash = _git(ctx, path, "stash", "list")
     if not stash.ok:
         out["error"] = "git could not list stashes"
