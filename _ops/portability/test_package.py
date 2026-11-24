@@ -332,8 +332,11 @@ class StandardDevSkillTests(unittest.TestCase):
         env = dev.GitRunner()._environment()
         subprocess.run([*git, "commit", "-qm", "Doctor update", "--", name], cwd=self.source, env=env, check=True)
         revision = subprocess.check_output([*git, "rev-parse", "HEAD"], cwd=self.source, env=env, text=True).strip()
-        dev.RELEASES["dev-doctor"] = {"revision": revision, "previous": previous,
-                                      "files": {name: ["100644", len(new), hashlib.sha256(new).hexdigest()]}}
+        release = {"revision": revision, "previous": previous,
+                   "files": {name: ["100644", len(new), hashlib.sha256(new).hexdigest()]}}
+        selected = patch.dict(dev.RELEASES, {"dev-doctor": release})
+        selected.start()
+        self.addCleanup(selected.stop)
         return dev.DevSkillRelease("dev-doctor", self.home)
 
     def test_upgrade_keeps_old_witness_and_can_resume_or_restore(self):
@@ -365,9 +368,9 @@ class StandardDevSkillTests(unittest.TestCase):
         self.assertEqual(slot.readlink(), updated.skill)
         self.assertEqual(others, {p: p.lstat().st_ino for p in self.slots.iterdir() if p != slot})
         self.configure("withdraw")
-        dev.RELEASES["dev-doctor"] = updated.previous
-        self.configure("install")
-        self.configure("check")
+        with patch.dict(dev.RELEASES, {"dev-doctor": updated.previous}):
+            self.configure("install")
+            self.configure("check")
         self.assertTrue(os.path.samestat(original, slot.lstat()))
 
     def test_upgrade_preserves_independently_installed_previous_doctor(self):
