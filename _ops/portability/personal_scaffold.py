@@ -1,5 +1,6 @@
 """Select the destination of a new personal product and bind its replay journal."""
 import fcntl
+from contextlib import contextmanager, ExitStack
 import hashlib
 import json
 import os
@@ -11,16 +12,20 @@ import sys
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from personal_scope import absolute_directory, child_directory, operator_home
+from personal_scope import absolute_directory, child_directory, operator_home, read_regular
 
 LAYOUT = ("personal", "src", "KleinPerkins")
+
+
+class ScaffoldMismatch(ValueError):
+    """The selection is ineligible or its checkout differs from the creation record."""
 
 
 def check_product_name(name):
     if (not re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}", name)
             or name.endswith(".") or name.lower().endswith(".git")
             or name.casefold() in {"repo-platform", "dev-main-sync"}):
-        raise ValueError("expected a new personal product name")
+        raise ScaffoldMismatch("expected a new personal product name")
     # Direct calls to the acquisition helper must honor Dev's excluded and enrolled names.
     policy = Path(__file__).resolve().parents[1] / "baseline/delivery-policy.py"
     disposition = subprocess.check_output(
@@ -28,7 +33,7 @@ def check_product_name(name):
         text=True,
     ).strip()
     if disposition != "unenrolled":
-        raise ValueError("Dev policy allows personal creation only for an unenrolled product")
+        raise ScaffoldMismatch("Dev policy allows personal creation only for an unenrolled product")
 
 
 def owner_location(fixture):
@@ -140,6 +145,82 @@ def checkout_binding(checkout, fixture, repository_id, checkout_info, git_info):
             raise ValueError("expected an operator-owned checkout")
         identity.extend((info.st_dev, info.st_ino))
     return hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+
+
+@contextmanager
+def open_created_checkout(name, fixture=None, supplied_id=None):
+    """Keep the checkout pinned and compare its creator and Git records again on exit."""
+    check_product_name(name)
+    if fixture == "" or (supplied_id is not None and
+            (not fixture or not re.fullmatch(r"[0-9]+", supplied_id) or not supplied_id.strip("0"))):
+        raise ScaffoldMismatch("an explicit fixture repository ID requires a positive ID and --fixture-root")
+    def require(operation, reason, *args):
+        try:
+            return operation(*args)
+        except (OSError, ValueError) as error:
+            raise ScaffoldMismatch(reason) from error
+
+    root, parts = require(owner_location, "the Personal checkout root selection is invalid", fixture)
+    checkout = root.joinpath(*parts, name)
+    with ExitStack() as stack:
+        def hold(fd):
+            stack.callback(os.close, fd)
+            return fd
+
+        base = hold(require(absolute_directory, "the Personal checkout root cannot be opened safely", root))
+        if os.fstat(base).st_uid != os.getuid():
+            raise ScaffoldMismatch("operator-owned root required")
+        selected = hold(require(child_directory, "the selected Personal checkout is missing or cannot be opened safely",
+                                base, (*parts, name)))
+        try:
+            fcntl.flock(selected, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise ScaffoldMismatch("the selected checkout is busy") from error
+        git = hold(require(child_directory, "the selected checkout has no accessible primary Git directory",
+                           selected, (".git",)))
+        state_name = "doc-warden-new-repo.json"
+        saved = require(read_regular, "the creation record is missing or cannot be read safely", git, state_name)
+        try:
+            state = json.loads(saved)
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise ScaffoldMismatch("the creation record is unreadable") from error
+        slug = "KleinPerkins/" + name
+        if (not isinstance(state, dict) or state.get("schema") != "dev-new-repo-operation/v2"
+                or state.get("repository") != slug or state.get("test_sharding_required") is not True
+                or "github_repository_id" not in state):
+            raise ScaffoldMismatch("the creation record does not identify the selected personal product")
+        recorded_id = state.get("github_repository_id")
+        if recorded_id is not None and (type(recorded_id) is not int or recorded_id <= 0):
+            raise ScaffoldMismatch("the creation record has an invalid repository ID")
+        # The creator binds the exact fixture argument before a provider ID is recorded.
+        # A live checkout always binds the empty fixture argument.
+        fixture_id = supplied_id or ""
+        if fixture and recorded_id is not None:
+            if supplied_id is not None and supplied_id.lstrip("0") != str(recorded_id):
+                raise ScaffoldMismatch("the supplied fixture ID differs from the recorded repository ID")
+            fixture_id = supplied_id or str(recorded_id)
+        expected = checkout_binding(checkout, fixture, fixture_id, os.fstat(selected), os.fstat(git))
+        if state.get("personal_checkout") != expected:
+            if fixture and supplied_id is None:
+                raise ScaffoldMismatch("creation binding does not match. Supply the original --fixture-repository-id if one was used")
+            raise ScaffoldMismatch("the creation record does not match this checkout and Git directory")
+        config = require(read_regular, "the selected Git config is missing or cannot be read safely", git, "config")
+        origin = subprocess.run(
+            ["/usr/bin/git", "config", "--no-includes", "--file", "-", "--null", "--get-all", "remote.origin.url"],
+            input=config, capture_output=True, timeout=5, cwd="/",
+            env={"PATH": os.defpath, "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null"},
+        )
+        if origin.returncode or origin.stdout != ("git@github.com:" + slug + ".git\0").encode():
+            raise ScaffoldMismatch("the selected Git config must contain the single original scaffold origin")
+        yield checkout, selected, saved, recorded_id
+        changed = "the selected checkout changed during inspection"
+        current = hold(require(absolute_directory, changed, checkout))
+        current_git = hold(require(child_directory, changed, current, (".git",)))
+        if (not os.path.samestat(os.fstat(current), os.fstat(selected))
+                or not os.path.samestat(os.fstat(current_git), os.fstat(git))
+                or require(read_regular, changed, current_git, state_name) != saved
+                or require(read_regular, changed, current_git, "config") != config):
+            raise ScaffoldMismatch(changed)
 
 
 def stage(checkout, operation, phase):

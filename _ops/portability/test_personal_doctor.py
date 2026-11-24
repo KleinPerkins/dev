@@ -1,12 +1,13 @@
 """Disposable caller composition, final fences and explicit unknown fixtures."""
 from contextlib import redirect_stdout
 import copy
+import fcntl
 import io
 import json
 import os
 import subprocess
 import tempfile
-import os
+import shutil
 from pathlib import Path
 import sys
 import unittest
@@ -14,7 +15,7 @@ from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).parent))
 import personal_doctor as m
-from test_personal_git import fixture
+from test_personal_git import FIXTURE_FLAGS, fixture, qualified_fixture_tool
 from test_personal_controls import active
 from test_personal_baseline import complete as baseline_complete
 from test_personal_documentation import complete as documentation_complete,PLAN,write
@@ -42,6 +43,129 @@ def commit(git):git('add','-A');git('commit','--allow-empty','-m','synthetic doc
 
 
 class Primary(unittest.TestCase):
+    def test_created_checkout_refuses_invalid_selectors_before_checkout_access(self):
+        import personal_scaffold as creator
+
+        cases = {
+            'invalid': 'select the exact KleinPerkins repository name',
+            'Other/example': 'select the exact KleinPerkins repository name',
+            'KleinPerkins/': 'expected a new personal product name',
+            'KleinPerkins/../example': 'expected a new personal product name',
+        }
+        with patch.object(creator, 'owner_location', side_effect=AssertionError('unexpected checkout access')):
+            for repository, reason in cases.items():
+                with self.subTest(repository=repository), redirect_stdout(io.StringIO()) as output:
+                    self.assertEqual(m.main(['inspect-created', '--repository', repository]), 2)
+                    self.assertEqual(json.loads(output.getvalue()), {'status': 'refused', 'reason': reason})
+
+    def test_created_checkout_reports_which_local_selection_input_is_unavailable(self):
+        import personal_scaffold as creator
+
+        with tempfile.TemporaryDirectory(dir='/tmp') as raw:
+            root = Path(raw).resolve()
+            parent = root / 'personal/src/KleinPerkins'
+            parent.mkdir(parents=True)
+            checkout = parent / 'missing-input'
+            args = ['inspect-created', '--repository', 'KleinPerkins/missing-input',
+                    '--fixture-root', str(root)]
+
+            def refused(reason):
+                with redirect_stdout(io.StringIO()) as output:
+                    self.assertEqual(m.main(args), 2)
+                self.assertEqual(json.loads(output.getvalue()), {'status': 'refused', 'reason': reason})
+
+            refused('the selected Personal checkout is missing or cannot be opened safely')
+            checkout.mkdir()
+            git = checkout / '.git'
+            refused('the selected checkout has no accessible primary Git directory')
+            foreign = root / 'foreign'
+            foreign.mkdir()
+            git.symlink_to(foreign, target_is_directory=True)
+            refused('the selected checkout has no accessible primary Git directory')
+            git.unlink()
+            git.mkdir()
+            refused('the creation record is missing or cannot be read safely')
+            foreign_receipt = foreign / 'doc-warden-new-repo.json'
+            foreign_receipt.write_text('do not read this file')
+            receipt = git / foreign_receipt.name
+            receipt.symlink_to(foreign_receipt)
+            refused('the creation record is missing or cannot be read safely')
+            self.assertEqual(foreign_receipt.read_text(), 'do not read this file')
+            receipt.unlink()
+            receipt.write_text(json.dumps({
+                'schema': 'dev-new-repo-operation/v2', 'repository': 'KleinPerkins/missing-input',
+                'test_sharding_required': True, 'github_repository_id': None,
+                'personal_checkout': creator.checkout_binding(checkout, str(root), '',
+                                                               checkout.stat(), git.stat()),
+            }))
+            refused('the selected Git config is missing or cannot be read safely')
+            (git / 'config').write_text('[remote "origin"]\nurl = git@github.com:KleinPerkins/missing-input.git\n')
+            with self.assertRaisesRegex(creator.ScaffoldMismatch, 'the selected checkout changed during inspection'):
+                with creator.open_created_checkout('missing-input', str(root)):
+                    receipt.rename(git / 'retained-receipt.json')
+
+    def test_new_personal_checkout_is_bound_to_the_creator_and_reports_real_local_state(self):
+        source = Path(__file__).resolve().parents[2]
+        name = 'sample.created-doctor'
+        with tempfile.TemporaryDirectory(dir='/tmp') as raw, qualified_fixture_tool(), patch.object(m.g, 'FLAGS', FIXTURE_FLAGS):
+            root = Path(raw).resolve()
+            parent = root / 'personal/src/KleinPerkins'
+            parent.mkdir(parents=True)
+            checkout = parent / name
+            env = {**os.environ, 'DEV_SESSION_ID': 'created-doctor-' + root.name,
+                   'XDG_STATE_HOME': str(root / 'state'), 'GIT_CONFIG_GLOBAL': '/dev/null',
+                   'GIT_CONFIG_NOSYSTEM': '1', 'GIT_ALLOW_PROTOCOL': 'file'}
+            subprocess.run(['bash', str(source / '_ops/bin/dev-new-repo.sh'), '--personal-codex',
+                            name, '--fixture-root', str(root)], cwd=parent, env=env,
+                           capture_output=True, check=True)
+
+            def git(*args):
+                return subprocess.check_output(['git', '--no-optional-locks', *args], cwd=checkout, env=env)
+
+            def inspect(code=0):
+                image = lambda: (git('rev-parse', 'HEAD'), git('for-each-ref'), git('status', '--porcelain', '-z'),
+                                 (checkout / '.git/index').read_bytes(), (checkout / '.git/config').read_bytes(),
+                                 (checkout / '.git/doc-warden-new-repo.json').read_bytes())
+                before = image()
+                with redirect_stdout(io.StringIO()) as output:
+                    actual = m.main(['inspect-created', '--repository', 'KleinPerkins/' + name,
+                                     '--fixture-root', str(root)])
+                result = json.loads(output.getvalue())
+                self.assertEqual(actual, code, result)
+                self.assertEqual(image(), before)
+                return result
+
+            clean = inspect()
+            self.assertEqual(clean['head'], git('rev-parse', 'HEAD').decode().strip())
+            self.assertEqual(clean['branch'], 'main')
+            self.assertEqual(clean['local_git_verdict'], 'OK')
+            self.assertEqual(clean['linked_registrations'], 0)
+            self.assertIsNone(clean['recorded_repository_id'])
+            self.assertFalse(clean['hosted_identity_verified'])
+            self.assertIsNone(clean['upstream'])
+            checkout_fd = os.open(checkout, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                fcntl.flock(checkout_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self.assertEqual(inspect(2), {'status': 'refused', 'reason': 'the selected checkout is busy'})
+            finally:
+                os.close(checkout_fd)
+            receipt = checkout / '.git/doc-warden-new-repo.json'
+            saved = receipt.read_bytes()
+            receipt.write_bytes(b'{')
+            self.assertEqual(inspect(2), {'status': 'refused', 'reason': 'the creation record is unreadable'})
+            receipt.write_bytes(saved)
+            with (checkout / 'README.md').open('a') as stream:
+                stream.write('\nfixture change\n')
+            self.assertEqual(inspect()['codes'], {' M': 1})
+            git('add', 'README.md')
+            self.assertEqual(inspect()['codes'], {'M ': 1})
+            git('config', '--local', 'user.email', 'different@example.invalid')
+            self.assertEqual(inspect(1)['local_git_verdict'], 'VIOLATION')
+            original = root / 'original'
+            checkout.rename(original)
+            shutil.copytree(original, checkout, symlinks=True)
+            self.assertEqual(inspect(2)['status'], 'refused')
+
     def test_detached_primary_preserves_all_exclusions_and_known_hook_advisory(self):
         with fixture() as (root,scope,tool,git):
             git('switch','--detach');result=diagnose(scope,tool);self.assertTrue(result['available'],result)

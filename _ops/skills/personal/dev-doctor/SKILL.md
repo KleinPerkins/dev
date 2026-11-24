@@ -5,7 +5,21 @@ description: Diagnose identity, placement, Git status and local controls for a s
 
 # Personal repository diagnosis
 
-Use the exact owner/repository name for the selected personal checkout. Resolve this installed skill directory to its physical source. From that directory run the owning Dev command with each selected repository named explicitly.
+For a Personal product created by `dev-new-repo --personal-codex`, select the exact owner/repository
+name and run the following command from this skill's physical directory.
+
+```sh
+cd -P ../../../portability && python3 -I -B personal_doctor.py inspect-created --repository KleinPerkins/example-product
+```
+
+Report the local Git verdict, branch, pending changes and linked registration count. Say whether
+the local and effective Git author identities each match the required Personal identity.
+Ahead and behind use local tracking refs. A null upstream leaves remote sync unknown. A recorded
+GitHub repository ID describes the creator's record. Adopting the checkout needs separate live evidence.
+The reader builds a private temporary Git snapshot outside the checkout. Use the standard Codex
+workspace with temporary scratch available. If inspection refuses, report its reason.
+
+For a checkout in the Personal migration manifest, resolve this installed skill directory to its physical source. From that directory run the owning Dev command with each selected repository named explicitly.
 
 ```sh
 cd -P ../../../portability && python3 -I -B personal_doctor.py inspect-codex --repository KleinPerkins/intent-router --quiet

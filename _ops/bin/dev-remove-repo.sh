@@ -1282,62 +1282,18 @@ def registration_paths(records, admin):
 
 @contextmanager
 def bound_scaffold(root, parts, name, fixture, supplied_id=None):
-    """Keep the checkout pinned and compare its creator and Git records again on exit."""
-    from personal_scaffold import checkout_binding
-    from personal_scope import absolute_directory, child_directory, read_regular
+    from personal_scaffold import ScaffoldMismatch, open_created_checkout
 
-    checkout = root.joinpath(*parts, name)
-    with ExitStack() as stack:
-        def hold(fd):
-            stack.callback(os.close, fd)
-            return fd
-
-        base = hold(absolute_directory(root))
-        if os.fstat(base).st_uid != os.getuid():
-            raise Refusal("operator-owned root required")
-        selected = hold(child_directory(base, (*parts, name)))
-        fcntl.flock(selected, fcntl.LOCK_SH | fcntl.LOCK_NB)
-        git = hold(child_directory(selected, (".git",)))
-        state_name = "doc-warden-new-repo.json"
-        saved = read_regular(git, state_name)
-        state = json.loads(saved)
-        slug = "KleinPerkins/" + name
-        if (not isinstance(state, dict) or state.get("schema") != "dev-new-repo-operation/v2"
-                or state.get("repository") != slug or state.get("test_sharding_required") is not True
-                or "github_repository_id" not in state):
-            raise Refusal("the creation record does not identify the selected personal product")
-        recorded_id = state.get("github_repository_id")
-        if recorded_id is not None and (type(recorded_id) is not int or recorded_id <= 0):
-            raise Refusal("the creation record has an invalid repository ID")
-        # The creator binds the exact fixture argument before a provider ID is recorded.
-        # A live checkout always binds the empty fixture argument.
-        fixture_id = supplied_id or ""
-        if fixture and recorded_id is not None:
-            if supplied_id is not None and supplied_id.lstrip("0") != str(recorded_id):
-                raise Refusal("the supplied fixture ID differs from the recorded repository ID")
-            fixture_id = supplied_id or str(recorded_id)
-        expected = checkout_binding(checkout, fixture, fixture_id, os.fstat(selected), os.fstat(git))
-        if state.get("personal_checkout") != expected:
-            if fixture and supplied_id is None:
-                raise Refusal("creation binding does not match. Supply the original --fixture-repository-id if one was used")
-            raise Refusal("the creation record does not match this checkout and Git directory")
-        config = read_regular(git, "config")
-        origin = subprocess.run(
-            ["/usr/bin/git", "config", "--no-includes", "--file", "-", "--null", "--get-all", "remote.origin.url"],
-            input=config, capture_output=True, timeout=5, cwd="/",
-            env={"PATH": os.defpath, "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null"},
-        )
-        if origin.returncode or origin.stdout != ("git@github.com:" + slug + ".git\0").encode():
-            raise Refusal("the selected Git config must contain the single original scaffold origin")
-        records = registration_records(selected)
-        yield selected, saved, recorded_id, records
-        current = hold(absolute_directory(checkout))
-        current_git = hold(child_directory(current, (".git",)))
-        if (not os.path.samestat(os.fstat(current), os.fstat(selected))
-                or not os.path.samestat(os.fstat(current_git), os.fstat(git))
-                or read_regular(current_git, state_name) != saved or read_regular(current_git, "config") != config
-                or registration_records(current) != records):
-            raise Refusal("the selected checkout changed during inspection")
+    try:
+        with open_created_checkout(name, fixture, supplied_id) as (checkout, fd, saved, recorded_id):
+            if checkout != root.joinpath(*parts, name):
+                raise Refusal("the selected checkout location changed")
+            records = registration_records(fd)
+            yield fd, saved, recorded_id, records
+            if registration_records(fd) != records:
+                raise Refusal("the selected checkout changed during inspection")
+    except ScaffoldMismatch as exc:
+        raise Refusal(str(exc)) from None
 
 
 def checkout_spelling(path, checkout):
