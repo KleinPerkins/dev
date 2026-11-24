@@ -12,7 +12,8 @@ name and run the following command from this skill's physical directory.
 cd -P ../../../portability && python3 -I -B personal_doctor.py inspect-created --repository KleinPerkins/example-product
 ```
 
-Report the local Git verdict, branch, pending changes, author identity and linked registration count.
+Report the local Git verdict, branch, pending changes and linked registration count. Say whether
+the local and effective Git author identities each match the required Personal identity.
 Ahead and behind use local tracking refs. A null upstream leaves remote sync unknown. A recorded
 GitHub repository ID describes the creator's record. Adopting the checkout needs separate live evidence.
 The reader builds a private temporary Git snapshot outside the checkout. Use the standard Codex
