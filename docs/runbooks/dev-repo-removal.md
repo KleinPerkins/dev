@@ -50,6 +50,21 @@ scaffold can have an empty ID. For a disposable exercise, pass the same
 `--fixture-root` and, if selected at creation, the same `--fixture-repository-id`.
 This allows inspection even when the creator stopped before recording the provider ID.
 
+Add `--git-state` to inspect the local Git state of the same admitted checkout.
+This option requires the qualified Personal Git runtime used by Dev Doctor on macOS.
+
+```sh
+_ops/bin/dev-remove-repo.sh view --personal-codex --git-state --json personal/src/KleinPerkins/sample.product
+```
+
+The nested `git_state` reports the current branch and HEAD, local and effective
+identity policy results, status codes and counts, and any locally recorded upstream
+comparison. A file with both staged and unstaged modifications contributes one `MM`
+record. The observer uses the selected checkout's binding and checks that its
+registration data stays stable. The checkout's Git index remains unchanged.
+The provider repository ID comes from the creation record and hosted identity
+is unverified. The result leaves `removal_ready` false.
+
 To check whether a retained scaffold uses files in the selected checkout,
 name the retained scaffold explicitly. The same command can compare the
 configuration reported by the installed Local Jobs engine.

@@ -486,6 +486,101 @@ class DevRemoveRepoTests(unittest.TestCase):
             self.assertEqual(view(checkout), observed)
             self.assertFalse((root / "state/dev-repo-removal").exists())
 
+    def test_personal_view_reports_git_state_without_changing_the_checkout(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            owner = root / "personal/src/KleinPerkins"
+            owner.mkdir(parents=True)
+            checkout = owner / "git-state.product"
+            # The production reader must suppress optional Git writes itself.
+            env = {**os.environ, "DEV_SESSION_ID": "retirement-fixture-" + root.name,
+                   "XDG_STATE_HOME": str(root / "state"), "GIT_OPTIONAL_LOCKS": "1"}
+            created = subprocess.run([str(ROOT / "_ops/bin/dev-new-repo.sh"), "--personal-codex",
+                                      checkout.name, "--fixture-root", str(root)],
+                                     env=env, text=True, capture_output=True)
+            self.assertEqual(created.returncode, 0, created.stderr)
+
+            def git(*args):
+                return subprocess.check_output(["git", "--no-optional-locks", "-C", str(checkout), *args], env=env)
+
+            def view(*args):
+                result = subprocess.run([str(SCRIPT), "view", "--personal-codex",
+                                         "--fixture-root", str(root), "--json", str(checkout), *args],
+                                        env=env, text=True, capture_output=True)
+                data = json.loads(result.stdout)
+                self.assertEqual(result.returncode, data["exit"])
+                return data
+
+            self.assertNotIn("git_state", view())
+            readme = checkout / "README.md"
+            readme.write_bytes(readme.read_bytes() + b"\nStaged change.\n")
+            git("add", "README.md")
+            readme.write_bytes(readme.read_bytes() + b"Unstaged change.\n")
+            (checkout / "pending.md").write_text("Untracked fixture work.\n")
+            git("worktree", "add", "--detach", str(root / "linked"))
+            index = checkout / ".git/index"
+            head = git("rev-parse", "HEAD").decode().strip()
+            original_index = index.read_bytes()
+            original_status = git("status", "--porcelain=v1")
+            engine = self.load_engine()
+            args = engine["build_parser"]().parse_args([
+                "view", "--personal-codex", "--git-state", "--fixture-root", str(root), str(checkout),
+            ])
+            portability = str(ROOT / "_ops/portability")
+            with patch.object(sys, "path", [portability, *sys.path]), patch.dict(
+                os.environ, {"DRR_ROOT": str(ROOT), "GIT_OPTIONAL_LOCKS": "1"}
+            ):
+                import personal_git as git_reader
+                from test_personal_git import FIXTURE_FLAGS, qualified_fixture_tool
+
+                # Hosted fixtures exercise the production reader with a verified fixture Git.
+                # Live inspection still uses the pinned Personal runtime only.
+                with qualified_fixture_tool(), patch.object(git_reader, "FLAGS", FIXTURE_FLAGS):
+                    observed, _, code = engine["personal_scaffold_view"](args)
+                self.assertEqual(code, 0)
+
+                with patch.object(git_reader, "GIT_PATH", root / "unavailable-git"), patch.object(
+                    git_reader, "bounded_process", side_effect=AssertionError("Git state probe started")
+                ):
+                    with self.assertRaisesRegex(engine["Refusal"], "qualified Personal Git runtime is unavailable"):
+                        engine["personal_scaffold_view"](args)
+            self.assertFalse(observed["removal_ready"])
+            self.assertEqual(observed["linked_registrations"], 1)
+            state = observed["git_state"]
+            self.assertEqual(state["head"], head)
+            self.assertEqual(state["codes"], {"MM": 1, "??": 1})
+            self.assertEqual(state["local_git_verdict"], "ADVISORY")
+            self.assertFalse(state["hosted_identity_verified"])
+            self.assertEqual(index.read_bytes(), original_index)
+            self.assertEqual(git("status", "--porcelain=v1"), original_status)
+
+            descriptor = os.open(checkout, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                records = engine["registration_records"](descriptor)
+            finally:
+                os.close(descriptor)
+            name, = records
+            changed = {name: dict(records[name], gitdir=str(root / "different/.git"))}
+            diagnostic = SimpleNamespace(observe_bound_checkout=lambda *args: (state, changed))
+            with patch.object(sys, "path", list(sys.path)), patch.dict(os.environ, {"DRR_ROOT": str(ROOT)}):
+                with patch.dict(sys.modules, {"personal_created_doctor": diagnostic}):
+                    with self.assertRaisesRegex(engine["Refusal"], "selected checkout changed during inspection"):
+                        engine["personal_scaffold_view"](args)
+
+            if sys.platform != "darwin":
+                refused = view("--git-state")
+                self.assertFalse(refused["ok"], refused)
+                self.assertIn("qualified Personal Git runtime is unavailable", refused["refused"])
+
+            original = root / "retained-original"
+            checkout.rename(original)
+            shutil.copytree(original, checkout, symlinks=True)
+            self.assertIn("does not match", view("--git-state")["refused"])
+            self.assertFalse((root / "state/dev-repo-removal").exists())
+
     def test_personal_view_observes_open_objects_in_the_selected_checkout(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
