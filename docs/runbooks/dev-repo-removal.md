@@ -51,6 +51,7 @@ scaffold can have an empty ID. For a disposable exercise, pass the same
 This allows inspection even when the creator stopped before recording the provider ID.
 
 Add `--git-state` to inspect the local Git state of the same admitted checkout.
+This option requires the qualified Personal Git runtime used by Dev Doctor on macOS.
 
 ```sh
 _ops/bin/dev-remove-repo.sh view --personal-codex --git-state --json personal/src/KleinPerkins/sample.product

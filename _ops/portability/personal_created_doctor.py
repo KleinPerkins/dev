@@ -101,7 +101,11 @@ def observe_bound_checkout(repository, path, fd, saved, provider_id):
     name = path.name
     row = {'id': repository, 'path': str(Path(*creator.LAYOUT, name)), 'revision': None}
     repo = scope.RepositoryView(fd, row, path)
-    reader = CreatedWorktree(repo, g.GitTool())
+    try:
+        tool = g.GitTool()
+    except FileNotFoundError:
+        raise g.Refusal('the qualified Personal Git runtime is unavailable') from None
+    reader = CreatedWorktree(repo, tool)
     registrations = registration_snapshot(repo)
     git = reader.observe()
     if registration_snapshot(repo) != registrations:
