@@ -10,9 +10,10 @@ from tempfile import TemporaryDirectory
 from threading import Event, Thread
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from bind_retirement_inventory import destruction_roots
+from checkout_git_config import observe_git_config
 from personal_checkout_inventory import Binding, Inventory, Refused
 
 
@@ -47,6 +48,39 @@ class CheckoutInventoryTests(unittest.TestCase):
             version or self.version, binding.checkout, operation, role,
             location or getattr(binding, role), lambda path, _: self.calls.append(path), deadline=deadline(),
         )
+
+    def test_checkout_evidence_requires_origin_as_the_selected_remote(self):
+        origin = b'[remote "origin"]\n url = git@github.com:KleinPerkins/sample.product.git\n'
+        worktree_enabled = b'[extensions]\n worktreeConfig = true\n'
+        selectors = (
+            b'[remote]\n pushDefault = %s\n',
+            b'[branch "feature.with.dots"]\n pushRemote = %s\n',
+            b'[branch "feature.with.dots"]\n remote = %s\n',
+        )
+        reader = Mock()
+        reader.read_file.return_value = origin
+        reader.read_worktree_config.return_value = None
+        self.assertFalse(observe_git_config(self.first, reader, "KleinPerkins/sample.product", deadline()).worktree_enabled)
+        reader.read_worktree_config.assert_not_called()
+        for selector in selectors:
+            for use_worktree in (False, True):
+                for remote in (b"origin", b"other", b"Origin"):
+                    with self.subTest(selector=selector, use_worktree=use_worktree, remote=remote):
+                        setting = selector % remote
+                        reader.read_file.return_value = origin + (worktree_enabled if use_worktree else setting)
+                        reader.read_worktree_config.return_value = setting if use_worktree else None
+                        if remote == b"origin":
+                            proof = observe_git_config(self.first, reader, "KleinPerkins/sample.product", deadline())
+                            self.assertEqual(proof.worktree_enabled, use_worktree)
+                        else:
+                            with self.assertRaisesRegex(Refused, "default remote.*origin"):
+                                observe_git_config(self.first, reader, "KleinPerkins/sample.product", deadline())
+
+    def test_checkout_evidence_does_not_treat_case_variant_as_origin(self):
+        reader = Mock()
+        reader.read_file.return_value = b'[remote "Origin"]\n url = git@github.com:KleinPerkins/sample.product.git\n'
+        with self.assertRaisesRegex(Refused, "fetch or push endpoint"):
+            observe_git_config(self.first, reader, "KleinPerkins/sample.product", deadline())
 
     def test_exact_operation_and_lexical_refusals(self):
         raw, chosen = self.inventory.snapshot()

@@ -71,7 +71,7 @@ def _uses_worktree_config(raw, expires):
     raise Refused("the checkout has an invalid worktree configuration setting")
 
 
-def _origin_settings(raw, expires):
+def _checkout_settings(raw, expires):
     result = _git_config(raw, ["--null", "--list"], expires)
     if result.returncode:
         raise Refused("the declared checkout configuration could not be read safely")
@@ -81,9 +81,14 @@ def _origin_settings(raw, expires):
             if not entry:
                 continue
             key, separator, value = entry.partition("\n")
-            key = key.casefold()
+            # Git normalizes section and variable names but preserves the case
+            # of subsections, including remote names such as "Origin".
             if key.startswith(("url.", "include.", "includeif.")):
                 raise Refused("the checkout has local Git endpoint rewrites or includes")
+            if (key == "remote.pushdefault" or (
+                    key.startswith("branch.") and key.endswith((".pushremote", ".remote")))):
+                if not separator or value != "origin":
+                    raise Refused("the checkout's configured default remote differs from origin")
             settings.setdefault(key, []).append(value if separator else None)
     except UnicodeError as error:
         raise Refused("the declared checkout configuration could not be read safely") from error
@@ -100,12 +105,12 @@ def _worktree_proof(common, enabled, worktree):
 
 
 def observe_git_config(binding, reader, github_name, expires):
-    """Verify configured origin endpoints and capture the common and per-worktree layers."""
+    """Verify local remote selection and origin endpoints for both configuration layers."""
     common = _common_config(binding, reader)
-    shared = _origin_settings(common, expires)
+    shared = _checkout_settings(common, expires)
     enabled = _uses_worktree_config(common, expires) if "extensions.worktreeconfig" in shared else False
     worktree = reader.read_worktree_config(CONFIG_LIMIT) if enabled else None
-    local = _origin_settings(worktree, expires) if worktree is not None else {}
+    local = _checkout_settings(worktree, expires) if worktree is not None else {}
     fetch = shared.get("remote.origin.url", [])
     push = shared.get("remote.origin.pushurl", fetch)
     endpoints = {
