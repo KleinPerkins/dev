@@ -1,0 +1,394 @@
+from dataclasses import replace
+from hashlib import sha256
+import json
+import os
+from pathlib import Path
+import sqlite3
+import subprocess
+import sys
+from tempfile import TemporaryDirectory
+from threading import Event, Thread
+import time
+import unittest
+from unittest.mock import patch
+
+from bind_retirement_inventory import destruction_roots
+from personal_checkout_inventory import Binding, Inventory, Refused
+
+
+def deadline():
+    return time.monotonic() + 3
+
+
+class CheckoutInventoryTests(unittest.TestCase):
+    def setUp(self):
+        work = TemporaryDirectory(prefix="dev-checkout-inventory-")
+        self.addCleanup(work.cleanup)
+        self.root = Path(work.name).resolve()
+        self.private = self.root / "state"
+        self.private.mkdir(mode=0o700)
+        self.inventory = Inventory(self.private)
+        self.first = self.binding("sample.product", 901)
+        self.peer = self.binding("other.product", 902)
+        self.denied = str(self.root / "recovery")
+        self.version = self.inventory.initialize("test-host", "private-policy-1", [self.denied],
+                                                 [self.first, self.peer])
+        self.calls = []
+
+    def binding(self, name, identity):
+        checkout = str(self.root / name)
+        git = checkout + "/.git"
+        return Binding(checkout, git, git, "github", identity, "clone-" + name, "primary",
+                       ("adopt", "enumerate"))
+
+    def probe(self, binding=None, version=None, *, operation="adopt", role="checkout", location=None):
+        binding = binding or self.first
+        return self.inventory.probe(
+            version or self.version, binding.checkout, operation, role,
+            location or getattr(binding, role), lambda path, _: self.calls.append(path), deadline=deadline(),
+        )
+
+    def test_exact_operation_and_lexical_refusals(self):
+        raw, chosen = self.inventory.snapshot()
+        self.assertEqual(chosen, self.version)
+        self.assertEqual(chosen[2], sha256(raw).hexdigest())
+        self.assertEqual(json.loads(raw)["bindings"][self.first.checkout]["repository_id"], 901)
+        self.probe(role="common_directory")
+        self.assertEqual(self.calls, [self.first.git_directory])
+        for location in (self.denied + "/child", self.first.checkout + "/../unknown",
+                         self.first.checkout + "//alias", str(self.root / "unknown-alias")):
+            with self.subTest(location=location), self.assertRaises(Refused):
+                self.probe(location=location)
+        with self.assertRaises(Refused):
+            self.probe(operation="write")
+        self.assertEqual(self.calls, [self.first.git_directory])
+
+    def test_authority_observation_uses_current_repository_id_for_the_exact_path(self):
+        selected = self.inventory.owner_observation_scope(self.version, "read", [self.first.checkout],
+                                                          deadline=deadline())
+        self.assertEqual([item.repository_id for item in selected], [901])
+        self.assertEqual([item.checkout for item in selected], [self.first.checkout])
+        for path in (self.denied + "/child", self.first.checkout + "-other"):
+            with self.subTest(path=path), self.assertRaises(Refused):
+                self.inventory.owner_observation_scope(self.version, "read", [path], deadline=deadline())
+
+    def test_authority_observation_cannot_reuse_an_unrelated_pending_operation(self):
+        reserved = self.inventory.reserve(self.version, "foreign-move", {self.first.checkout: None},
+                                           deadline=deadline())
+        with self.assertRaisesRegex(Refused, "pending"):
+            self.inventory.owner_observation_scope(reserved, "other-operation", [self.first.checkout],
+                                                   deadline=deadline())
+        with self.assertRaisesRegex(Refused, "no active prepared evidence"):
+            self.inventory.owner_observation_scope(reserved, "foreign-move", [self.first.checkout],
+                                                   deadline=deadline())
+
+    def test_prepared_evidence_may_observe_only_its_reserved_checkout(self):
+        operation = "owner-reissue"
+        physical = "c" * 64
+        record = (json.dumps({"schema": "dev-checkout-owner-evidence/v1", "operation": operation,
+                              "physical_binding_digest": physical, "dev_policy_revision": self.version[0]},
+                             sort_keys=True, separators=(",", ":")) + "\n").encode()
+        pending = self.inventory.reserve_evidence_reissue(
+            self.version, operation, {self.first.checkout: self.first}, owner_record=record,
+            physical_binding_digest=physical, deadline=deadline(),
+        )
+        with self.assertRaisesRegex(Refused, "pending"):
+            self.inventory.owner_observation_scope(pending, "different-operation", [self.first.checkout],
+                                                   deadline=deadline())
+        observed, = self.inventory.owner_observation_scope(pending, operation, [self.first.checkout],
+                                                            deadline=deadline())
+        self.assertEqual(observed.repository_id, 901)
+        with self.assertRaisesRegex(Refused, "differs from the explicit checkout selections"):
+            self.inventory.owner_observation_scope(pending, operation, [self.peer.checkout], deadline=deadline())
+
+        complete = self.inventory.finish_evidence_reissue(operation, owner_record=record,
+                                                          physical_binding_digest=physical, deadline=deadline())
+        observed, = self.inventory.owner_observation_scope(complete, operation, [self.first.checkout],
+                                                            deadline=deadline())
+        self.assertEqual(observed.repository_id, 901)
+        proposed = self.inventory.reserve(complete, "independent", {self.peer.checkout: self.peer}, deadline=deadline())
+        self.assertGreater(proposed[1], complete[1])
+        newer = self.inventory.finish("independent", outcome="committed", owner_evidence="verified owner change",
+                                      deadline=deadline())
+        with self.assertRaisesRegex(Refused, "no longer binds current authority"):
+            self.inventory.owner_observation_scope(newer, operation, [self.first.checkout], deadline=deadline())
+
+    def test_move_fences_old_and_new_until_owner_completion(self):
+        new = self.binding("moved.product", 901)
+        changes = {self.first.checkout: None, new.checkout: new}
+        pending = self.inventory.reserve(self.version, "move", changes, deadline=deadline())
+        self.assertEqual(pending[1], self.version[1] + 1)
+        for binding in (self.first, new):
+            with self.assertRaises(Refused):
+                self.probe(binding, pending)
+        self.probe(self.peer, pending)
+        next_version = self.inventory.finish("move", outcome="committed", owner_evidence="verified-source-move",
+                                             deadline=deadline())
+        self.assertEqual(next_version[1], pending[1] + 1)
+        self.probe(new, next_version)
+        with self.assertRaises(Refused):
+            self.probe(self.first, next_version)
+        self.assertEqual(self.calls, [self.peer.checkout, new.checkout])
+        self.assertEqual(pending, self.inventory.reserve(self.version, "move", changes, deadline=deadline()))
+        self.assertEqual(next_version, self.inventory.finish("move", outcome="committed",
+                         owner_evidence="verified-source-move", deadline=deadline()))
+        with self.assertRaises(Refused):
+            self.inventory.finish("move", outcome="rolled-back", owner_evidence="different", deadline=deadline())
+
+    def test_interrupted_process_leaves_durable_reservation(self):
+        script = '''
+from pathlib import Path
+import json, os, sys, time
+from personal_checkout_inventory import Inventory
+inv = Inventory(Path(sys.argv[1]))
+inv.reserve(json.loads(sys.argv[2]), "crashed", {sys.argv[3]: None}, deadline=time.monotonic() + 3)
+os._exit(42)
+'''
+        result = subprocess.run([sys.executable, "-B", "-c", script, str(self.private), json.dumps(self.version),
+                                 self.first.checkout], cwd=Path(__file__).parent, check=False, timeout=8)
+        self.assertEqual(result.returncode, 42)
+        self.inventory = Inventory(self.private)
+        self.assertEqual(self.inventory.operation("crashed")["phase"], "reserved")
+        _, pending = self.inventory.snapshot()
+        with self.assertRaises(Refused):
+            self.probe(self.first, pending)
+        recovered = self.inventory.finish("crashed", outcome="rolled-back", owner_evidence="source-intact",
+                                          deadline=deadline())
+        self.probe(self.first, recovered)
+        self.assertEqual(self.calls, [self.first.checkout])
+
+    def test_recorded_intent_has_priority_and_can_resume_after_a_timeout(self):
+        entered, release = Event(), Event()
+        errors = []
+        def read():
+            def hold(location, expires):
+                entered.set()
+                if not release.wait(2):
+                    raise AssertionError("test did not release its probe")
+            try:
+                self.inventory.probe(self.version, self.first.checkout, "adopt", "checkout",
+                                     self.first.checkout, hold, deadline=deadline())
+            except Exception as error:
+                errors.append(error)
+        current = Thread(target=read)
+        current.start()
+        try:
+            self.assertTrue(entered.wait(1))
+            changes = {self.first.checkout: None}
+            with self.assertRaisesRegex(Refused, "within the budget"):
+                self.inventory.reserve(self.version, "queued", changes, deadline=time.monotonic() + 0.05)
+            self.assertEqual(self.inventory.operation("queued")["phase"], "requested")
+        finally:
+            release.set()
+            current.join(3)
+        self.assertFalse(current.is_alive())
+        self.assertEqual(errors, [])
+        with self.assertRaisesRegex(Refused, "pending"):
+            self.probe()
+        self.probe(self.peer)
+        pending = self.inventory.reserve(self.version, "queued", changes, deadline=deadline())
+        with self.assertRaises(Refused):
+            self.probe(self.first, pending)
+        self.assertEqual(self.calls, [self.peer.checkout])
+
+    def test_stale_queued_request_releases_only_its_uncommitted_claim(self):
+        script = '''
+import json, os, sys, time
+from personal_checkout_inventory import Inventory, Refused
+inventory = Inventory(sys.argv[1])
+try:
+    inventory.reserve(json.loads(sys.argv[2]), "stale", {sys.argv[3]: None},
+                      deadline=time.monotonic() + 0.05)
+except Refused as error:
+    os._exit(42 if "within the budget" in str(error) else 43)
+os._exit(44)
+'''
+        with self.inventory._gate(deadline()):
+            child = subprocess.run([sys.executable, "-B", "-c", script, str(self.private),
+                                    json.dumps(self.version), self.first.checkout],
+                                   cwd=Path(__file__).parent, timeout=8, check=False)
+        self.assertEqual(child.returncode, 42)
+        self.inventory = Inventory(self.private)
+        self.assertEqual(self.inventory.operation("stale")["phase"], "requested")
+        with self.assertRaisesRegex(Refused, "pending"):
+            self.probe()
+        self.assertEqual(self.calls, [])
+
+        third = self.binding("unrelated.product", 903)
+        self.inventory.reserve(self.version, "unrelated", {third.checkout: third}, deadline=deadline())
+        active = self.inventory.finish("unrelated", outcome="committed", owner_evidence="unrelated",
+                                       deadline=deadline())
+        raw, _ = self.inventory.snapshot()
+        self.probe(self.first, active)
+        self.assertEqual(self.calls, [self.first.checkout])
+        self.assertEqual(self.inventory.snapshot(), (raw, active))
+        self.assertEqual(self.inventory.operation("stale")["phase"], "requested")
+
+        changes = {self.first.checkout: None}
+        pending = self.inventory.reserve(active, "new-owner-request", changes, deadline=deadline())
+        with self.assertRaisesRegex(Refused, "changed before reservation"):
+            self.inventory.reserve(self.version, "stale", changes, deadline=deadline())
+        self.assertEqual(self.inventory.operation("stale")["phase"], "superseded")
+        unrelated_pending = self.inventory.reserve(pending, "other-removal", {third.checkout: None},
+                                                   deadline=deadline())
+        with self.assertRaisesRegex(Refused, "pending"):
+            self.probe(self.first, unrelated_pending)
+        self.assertEqual(self.calls, [self.first.checkout])
+        self.assertEqual(self.inventory.operation("new-owner-request")["phase"], "reserved")
+
+    def test_shared_git_location_is_fenced(self):
+        linked = replace(self.first, checkout=str(self.root / "linked"),
+                         git_directory=self.first.git_directory + "/worktrees/linked", worktree_id="linked")
+        self.inventory.reserve(self.version, "add-linked", {linked.checkout: linked}, deadline=deadline())
+        linked_version = self.inventory.finish("add-linked", outcome="committed", owner_evidence="linked-present",
+                                               deadline=deadline())
+        self.probe(linked, linked_version, role="common_directory")
+        pending = self.inventory.reserve(linked_version, "retire-linked", {linked.checkout: None}, deadline=deadline())
+        with self.assertRaisesRegex(Refused, "pending"):
+            self.probe(self.first, pending, role="common_directory")
+        self.probe(self.peer, pending)
+        self.assertEqual(self.calls, [self.first.common_directory, self.peer.checkout])
+
+    def test_conflicting_binding_and_operation_reuse_are_refused(self):
+        duplicate = replace(self.peer, common_directory=self.first.common_directory)
+        with self.assertRaisesRegex(Refused, "ambiguous"):
+            self.inventory.reserve(self.version, "conflict", {self.peer.checkout: duplicate}, deadline=deadline())
+        self.assertEqual(self.inventory.snapshot()[1], self.version)
+        self.inventory.reserve(self.version, "retire", {self.first.checkout: None}, deadline=deadline())
+        with self.assertRaisesRegex(Refused, "different request"):
+            self.inventory.reserve(self.version, "retire", {self.peer.checkout: None}, deadline=deadline())
+        with self.assertRaisesRegex(Refused, "changed"):
+            self.probe(self.peer)
+        self.assertEqual(self.calls, [])
+
+    def test_owner_only_store_and_snapshot_no_auto_create(self):
+        self.assertEqual(self.inventory.database.stat().st_mode & 0o777, 0o600)
+        empty = self.root / "empty"
+        empty.mkdir(mode=0o700)
+        new = Inventory(empty)
+        with self.assertRaisesRegex(Refused, "could not be opened"):
+            new.snapshot()
+        self.assertEqual(list(empty.iterdir()), [])
+
+    def test_database_open_refuses_symlink_substitution(self):
+        database = self.inventory.database
+        saved = self.private / "saved.sqlite"
+        other = self.root / "other.sqlite"
+        original = database.read_bytes()
+        other.write_bytes(original)
+        other.chmod(0o600)
+        open_file = os.open
+
+        def replace_before_open(path, flags, *args, **kwargs):
+            if path == database.name:
+                database.rename(saved)
+                database.symlink_to(other)
+            return open_file(path, flags, *args, **kwargs)
+
+        with patch("personal_checkout_inventory.os.open", side_effect=replace_before_open):
+            with self.assertRaisesRegex(Refused, "could not be opened safely"):
+                self.inventory.snapshot()
+        self.assertTrue(database.is_symlink())
+        self.assertEqual(other.read_bytes(), original)
+        self.assertEqual(saved.read_bytes(), original)
+
+    def test_publication_refuses_a_replaced_database(self):
+        database = self.inventory.database
+        saved = self.private / "saved.sqlite"
+        other = self.root / "other.sqlite"
+        original = database.read_bytes()
+        other.write_bytes(original)
+        other.chmod(0o600)
+        entry = self.inventory._entry
+
+        def replace_before_publication(parent, name):
+            if name == database.name:
+                database.rename(saved)
+                database.symlink_to(other)
+            return entry(parent, name)
+
+        with patch.object(self.inventory, "_entry", side_effect=replace_before_publication):
+            with self.assertRaisesRegex(Refused, "changed before publication"):
+                self.inventory.reserve(self.version, "move", {self.first.checkout: None}, deadline=deadline())
+        self.assertEqual(other.read_bytes(), original)
+        self.assertEqual(saved.read_bytes(), original)
+        self.assertTrue(database.is_symlink())
+        self.assertFalse(list(self.private.glob(".checkout-inventory-*")))
+        database.unlink()
+        saved.rename(database)
+        self.assertEqual(self.inventory.snapshot()[1], self.version)
+        with self.assertRaisesRegex(Refused, "unknown owner lifecycle operation"):
+            self.inventory.operation("move")
+
+    def test_published_snapshot_remains_a_standard_sqlite_database(self):
+        reserved = self.inventory.reserve(self.version, "reserve", {self.first.checkout: None}, deadline=deadline())
+        uri = self.inventory.database.as_uri() + "?mode=ro"
+        connection = sqlite3.connect(uri, uri=True)
+        try:
+            self.assertEqual(connection.execute("PRAGMA integrity_check").fetchone(), ("ok",))
+            self.assertEqual(connection.execute("SELECT phase FROM lifecycle").fetchone(), ("reserved",))
+        finally:
+            connection.close()
+        self.assertEqual(reserved, Inventory(self.private).snapshot()[1])
+
+    def test_guard_open_errors_refuse_without_checkout_access(self):
+        lock = self.private / "checkout-access.lock"
+        lock.unlink()
+        foreign = self.root / "foreign-guard"
+        foreign.write_bytes(b"unrelated")
+        lock.symlink_to(foreign)
+        with self.assertRaisesRegex(Refused, "invalid Dev checkout guard"):
+            self.probe()
+        self.assertEqual(self.calls, [])
+        self.assertEqual(foreign.read_bytes(), b"unrelated")
+
+    def test_malformed_relative_retirement_paths_refuse(self):
+        for invalid in (None, 42, ["checkout"], "", "/abs", "one/../two", "one//two"):
+            with self.subTest(value=invalid), self.assertRaisesRegex(Refused, "not relative and canonical"):
+                destruction_roots(str(self.root), [{"kind": "delete-checkout", "params": {"rel": invalid}}])
+        self.assertEqual(destruction_roots(str(self.root), [
+            {"kind": "delete-checkout", "params": {"rel": "owner/project"}}
+        ]), {str(self.root / "owner/project")})
+
+    def test_policy_reservation_invalidates_old_generations_and_preserves_withdrawn_binding(self):
+        revision = "private-policy-2"
+        denied = [self.denied, self.first.checkout]
+        pending = self.inventory.reserve_policy(self.version, "policy", revision, denied, deadline=deadline())
+        self.assertEqual(pending[0], self.version[0])
+        for binding in (self.first, self.peer):
+            with self.assertRaises(Refused):
+                self.probe(binding, pending)
+        new = self.inventory.finish("policy", outcome="committed", owner_evidence="owner-policy-verified",
+                                    deadline=deadline())
+        self.assertEqual(new[0], revision)
+        with self.assertRaisesRegex(Refused, "excludes"):
+            self.probe(self.first, new)
+        self.probe(self.peer, new)
+        evidence = self.inventory.operation("policy")["result"]
+        self.assertEqual(evidence["previous_policy"]["revision"], self.version[0])
+        self.assertEqual(evidence["withdrawn_bindings"][self.first.checkout]["repository_id"], 901)
+        self.assertEqual(self.calls, [self.peer.checkout])
+        self.assertEqual(pending, self.inventory.reserve_policy(self.version, "policy", revision, denied,
+                                                                  deadline=deadline()))
+
+    def test_policy_rollback_advances_generation_without_replacing_old_authority(self):
+        pending = self.inventory.reserve_policy(self.version, "rollback", "proposed-policy", [self.first.checkout],
+                                                deadline=deadline())
+        with self.assertRaisesRegex(Refused, "pending"):
+            self.probe(self.first, pending)
+        changed = self.inventory.finish("rollback", outcome="rolled-back", owner_evidence="owner-kept-old-policy",
+                                         deadline=deadline())
+        self.assertEqual(changed[0], self.version[0])
+        self.assertEqual(changed[1], pending[1] + 1)
+        self.probe(self.first, changed)
+        self.assertEqual(self.calls, [self.first.checkout])
+
+    def test_pending_policy_prevents_new_bindings_even_with_no_overlap(self):
+        pending = self.inventory.reserve_policy(self.version, "policy", "other-policy", [], deadline=deadline())
+        additional = self.binding("new.product", 903)
+        with self.assertRaisesRegex(Refused, "already claims"):
+            self.inventory.reserve(pending, "add", {additional.checkout: additional}, deadline=deadline())
+
+
+if __name__ == "__main__":
+    unittest.main()

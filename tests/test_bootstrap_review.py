@@ -270,7 +270,10 @@ class SourceChecks(unittest.TestCase):
         with patch.object(b.ci,'policy',return_value=check_policy()):b.validate_checks(ROOT,checks,frozen)
     def test_complete_actual_contract_union_and_no_hosted_identity(self):
         frozen,checks=self.inputs();self.validate(checks,frozen)
-        self.assertEqual(sum(len(s['measurement']['tests']) for s in checks['shards']),105)
+        _,membership,_=check_policy()
+        expected={entry['id']:entry['tests'] for entry in membership['shards']}
+        measured={entry['shard']:entry['measurement']['tests'] for entry in checks['shards']}
+        self.assertEqual(measured,expected)
         self.assertNotIn('\"identity\":',b.canonical(checks))
     def test_nominal_marker_missing_extra_stale_or_duplicate_shards_refuse(self):
         frozen,original=self.inputs()
