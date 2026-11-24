@@ -141,6 +141,46 @@ class GitHubProviderTests(unittest.TestCase):
         sleep.assert_not_called()
         backend.assert_called_once_with("/repositories/902", deadline=12)
 
+    def test_subprocess_timeout_leaves_time_to_retry_the_whole_repository_read(self):
+        def response(value):
+            return SimpleNamespace(stdout=json.dumps(value).encode() + b"200")
+
+        def request(command, *, timeout, **_options):
+            self.assertEqual(timeout, 15)
+            self.assertEqual(command[command.index("--max-time") + 1], "15.000")
+            result = next(responses)
+            if result is None:
+                raise subprocess.TimeoutExpired(command, timeout)
+            return response(result)
+
+        responses = iter([REPO, BRANCH, None, REPO, BRANCH | {"commit": {"sha": "c" * 40}}, REPO])
+        with (patch("github_checkout_provider.time.monotonic", return_value=10),
+              patch("github_checkout_provider.subprocess.run", side_effect=request) as runner,
+              patch("github_checkout_provider.time.sleep") as sleep):
+            result = read_github_repository(902, deadline=100)
+        self.assertEqual(result.default_head, "c" * 40)
+        self.assertEqual([call.args[0][-1] for call in runner.call_args_list],
+                         ["https://api.github.com" + path for path in
+                          ("/repositories/902", "/repositories/902/branches/main", "/repositories/902") * 2])
+        sleep.assert_called_once_with(2)
+
+    def test_subprocess_timeout_at_the_total_deadline_never_retries(self):
+        now = [10.0]
+
+        def request(command, *, timeout, **_options):
+            self.assertEqual(timeout, 1.5)
+            self.assertEqual(command[command.index("--max-time") + 1], "1.500")
+            now[0] += timeout
+            raise subprocess.TimeoutExpired(command, timeout)
+
+        with (patch("github_checkout_provider.time.monotonic", side_effect=lambda: now[0]),
+              patch("github_checkout_provider.subprocess.run", side_effect=request) as runner,
+              patch("github_checkout_provider.time.sleep") as sleep,
+              self.assertRaisesRegex(TransientProviderRead, "timed out")):
+            read_github_repository(902, deadline=11.5)
+        runner.assert_called_once()
+        sleep.assert_not_called()
+
     def test_http_denial_and_changed_identity_stop_without_retry(self):
         for status, code in ((403, 22), (403, 56), (429, 56)):
             http_refusal = subprocess.CalledProcessError(code, "/usr/bin/curl", output=str(status).encode())

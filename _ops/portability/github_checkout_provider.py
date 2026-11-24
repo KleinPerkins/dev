@@ -13,6 +13,7 @@ from personal_checkout_inventory import Refused
 MAX_RESPONSE_BYTES = 256 * 1024
 READ_ROUTE = re.compile(r"/repositories/[1-9][0-9]*(?:/branches/([A-Za-z0-9_.~%-]+))?")
 TRANSPORT_RETRY_DELAYS = (2, 5)
+PUBLIC_REQUEST_TIMEOUT_SECONDS = 15
 # curl: DNS, connect, partial transfer, timeout, empty response, send, receive, and HTTP/2 stream errors.
 TRANSIENT_TRANSPORT_STATUSES = frozenset({6, 7, 18, 28, 52, 55, 56, 92})
 
@@ -61,9 +62,11 @@ def public_github_get(path, *, deadline):
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise Refused("the GitHub repository read exceeded its deadline")
+    # Leave time in the overall budget to retry a stalled exchange.
+    timeout = min(PUBLIC_REQUEST_TIMEOUT_SECONDS, remaining)
     command = [
         "/usr/bin/curl", "-q", "--silent", "--fail", "--noproxy", "*", "--proto", "=https",
-        "--request", "GET", "--max-time", f"{max(0.001, remaining):.3f}",
+        "--request", "GET", "--max-time", f"{max(0.001, timeout):.3f}",
         "--max-filesize", str(MAX_RESPONSE_BYTES), "--write-out", "%{http_code}",
         "--header", "Accept: application/vnd.github+json",
         "--header", "Cache-Control: no-cache",
@@ -73,11 +76,13 @@ def public_github_get(path, *, deadline):
     ]
     try:
         response = subprocess.run(command, env={"PATH": "/usr/bin:/bin"}, capture_output=True,
-                                  timeout=remaining, check=True)
+                                  timeout=timeout, check=True)
         payload, status = response.stdout[:-3], response.stdout[-3:]
         if status != b"200" or len(payload) > MAX_RESPONSE_BYTES:
             raise ValueError("unaccepted GitHub response")
         return json.loads(payload, object_pairs_hook=_unique_object)
+    except subprocess.TimeoutExpired as error:
+        raise TransientProviderRead("the GitHub transport timed out during the repository read") from error
     except subprocess.CalledProcessError as error:
         status = (error.stdout or b"")[-3:]
         if error.returncode in TRANSIENT_TRANSPORT_STATUSES and status in {b"", b"000", b"200"}:
