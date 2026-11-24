@@ -21,9 +21,19 @@ step. Method and observed failure modes: `docs/runbooks/dev-repo-removal.md`.
 | `Did it really work?` / `Is it gone?` | `bash _ops/bin/dev-remove-repo.sh verify --operation <id>` |
 | `Is the removal tool healthy?` | `bash _ops/bin/dev-remove-repo.sh doctor` |
 
-A path is always `affirm/src/<name>`, `affirm/vendor/<name>`, `personal/<name>` or
-`capabilities/<name>`. A repository name alone never authorises anything; if the
-operator gives only a name, find the one matching folder and confirm it with them.
+## Canonical Personal checkout inspection
+
+For an explicitly selected Dev-created checkout at `personal/src/<owner>/<repo>`, use
+`bash _ops/bin/dev-remove-repo.sh view --personal-codex --git-state --json <path>`.
+Report the staged, unstaged and untracked state, linked registrations, local Git verdict,
+and whether the result verifies removal readiness. This command only observes the
+original checkout and cannot authorize removal. If it refuses an identity or path, keep
+the refusal and preserve the checkout. A repository name alone never authorizes any operation. If the caller
+provides only a name, establish the exact selected folder with them. Use the separate
+supported retirement workflow
+for the older one-level `personal/<name>`, `affirm/src/<name>`,
+`affirm/vendor/<name>`, and `capabilities/<name>` paths.
+
 
 ## The approval protocol (never skip)
 

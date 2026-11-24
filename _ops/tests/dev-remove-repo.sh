@@ -486,6 +486,59 @@ class DevRemoveRepoTests(unittest.TestCase):
             self.assertEqual(view(checkout), observed)
             self.assertFalse((root / "state/dev-repo-removal").exists())
 
+    def test_personal_view_reports_git_state_without_changing_the_checkout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            owner = root / "personal/src/KleinPerkins"
+            owner.mkdir(parents=True)
+            checkout = owner / "git-state.product"
+            env = {**os.environ, "DEV_SESSION_ID": "retirement-fixture-" + root.name,
+                   "XDG_STATE_HOME": str(root / "state"), "GIT_OPTIONAL_LOCKS": "0"}
+            created = subprocess.run([str(ROOT / "_ops/bin/dev-new-repo.sh"), "--personal-codex",
+                                      checkout.name, "--fixture-root", str(root)],
+                                     env=env, text=True, capture_output=True)
+            self.assertEqual(created.returncode, 0, created.stderr)
+
+            def git(*args):
+                return subprocess.check_output(["git", "-C", str(checkout), *args], env=env)
+
+            def view(*args):
+                result = subprocess.run([str(SCRIPT), "view", "--personal-codex",
+                                         "--fixture-root", str(root), "--json", str(checkout), *args],
+                                        env=env, text=True, capture_output=True)
+                data = json.loads(result.stdout)
+                self.assertEqual(result.returncode, data["exit"])
+                return data
+
+            self.assertNotIn("git_state", view())
+            readme = checkout / "README.md"
+            readme.write_bytes(readme.read_bytes() + b"\nStaged change.\n")
+            git("add", "README.md")
+            readme.write_bytes(readme.read_bytes() + b"Unstaged change.\n")
+            (checkout / "pending.md").write_text("Untracked fixture work.\n")
+            git("worktree", "add", "--detach", str(root / "linked"))
+            index = checkout / ".git/index"
+            head = git("rev-parse", "HEAD").decode().strip()
+            original_index = index.read_bytes()
+            original_status = git("status", "--porcelain=v1")
+            observed = view("--git-state")
+            self.assertTrue(observed["ok"], observed)
+            self.assertFalse(observed["removal_ready"])
+            self.assertEqual(observed["linked_registrations"], 1)
+            state = observed["git_state"]
+            self.assertEqual(state["head"], head)
+            self.assertEqual(state["codes"], {"MM": 1, "??": 1})
+            self.assertEqual(state["local_git_verdict"], "ADVISORY")
+            self.assertFalse(state["hosted_identity_verified"])
+            self.assertEqual(index.read_bytes(), original_index)
+            self.assertEqual(git("status", "--porcelain=v1"), original_status)
+
+            original = root / "retained-original"
+            checkout.rename(original)
+            shutil.copytree(original, checkout, symlinks=True)
+            self.assertIn("does not match", view("--git-state")["refused"])
+            self.assertFalse((root / "state/dev-repo-removal").exists())
+
     def test_personal_view_observes_open_objects_in_the_selected_checkout(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
