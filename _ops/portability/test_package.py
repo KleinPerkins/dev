@@ -425,7 +425,8 @@ class StandardDevSkillTests(unittest.TestCase):
     def test_clean_profile_repeat_withdraw_and_offline_reinstall(self):
         self.configure("install")
         self.assertEqual(sorted(p.name for p in self.slots.iterdir()), [
-            "capability", "dev-doctor", "dev-new-repo", "frontend-design", "isokit", "local-jobs", "prompt-architect",
+            "capability", "dev-doctor", "dev-new-repo", "frontend-design", "isokit", "local-jobs", "plan-refine",
+            "prompt-architect",
             "save-game", "verification-before-completion", "web-artifacts-builder"])
         originals = {p.name: p.lstat() for p in self.slots.iterdir()}
         with patch.object(personal_core, "FileLock", side_effect=AssertionError("check acquired a write lock")):
