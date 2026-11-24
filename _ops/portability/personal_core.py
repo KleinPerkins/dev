@@ -449,7 +449,7 @@ def configure_profile(home, codex_home, action):
                         recover_withdrawals(prior)
                 if prior and points_to(entry.slot, prior.release):
                     entry = prior
-                if (points_to(entry.slot, entry.release)
+                if (action == "withdraw" and points_to(entry.slot, entry.release)
                         and not os.path.lexists(entry.control / entry.slot.name)):
                     messages.append(f"preserved earlier installation of {entry.slot.name}")
                     continue

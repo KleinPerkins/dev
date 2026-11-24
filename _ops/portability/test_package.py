@@ -384,6 +384,35 @@ class StandardDevSkillTests(unittest.TestCase):
         self.configure("withdraw")
         self.assertTrue(os.path.samestat(identity, slot.lstat()))
 
+    def test_profile_check_verifies_the_independently_installed_current_doctor(self):
+        updated = self.select_new_doctor()
+        updated.prepare()
+        self.slots.mkdir(parents=True)
+        slot = self.slots / "dev-doctor"
+        slot.symlink_to(updated.skill)
+        identity = slot.lstat()
+        self.configure("install")
+        self.configure("check")
+        witness = self.codex / "dev-personal-core/dev-doctor/releases" / updated.revision / "dev-doctor"
+        self.assertFalse(os.path.lexists(witness))
+
+        relative, = updated.files
+        selected = updated.root / relative
+        original = selected.read_bytes()
+        mode = selected.stat().st_mode & 0o777
+        selected.chmod(0o600)
+        selected.write_bytes(original + b"Corruption")
+        with self.assertRaisesRegex(ValueError, "differs from its released file"):
+            self.configure("check")
+        self.assertTrue(os.path.samestat(identity, slot.lstat()))
+
+        selected.write_bytes(original)
+        selected.chmod(mode)
+        self.configure("check")
+        self.configure("withdraw")
+        self.assertTrue(os.path.samestat(identity, slot.lstat()))
+        self.assertFalse(os.path.lexists(witness))
+
     def test_clean_profile_repeat_withdraw_and_offline_reinstall(self):
         self.configure("install")
         self.assertEqual(sorted(p.name for p in self.slots.iterdir()), [
