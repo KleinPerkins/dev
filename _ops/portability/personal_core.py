@@ -453,7 +453,14 @@ def configure_profile(home, codex_home, action):
                                       partial(verify, folder), checkout, verify_checkout))
 
     if action == "check":
-        return [configure_entry(entry, action) for entry in entries]
+        return [configure_entry(entry, "check") for entry in entries]
+    if action == "install":
+        change_profile = install_profile_entries
+    elif action == "withdraw":
+        change_profile = withdraw_profile_entries
+    else:
+        raise ValueError(f"unknown Personal configuration action: {action}")
+
     if action == "withdraw" and not core.control.exists():
         for entry in entries:
             if (os.path.lexists(entry.slot) and not points_to(entry.slot, entry.release)
@@ -464,9 +471,7 @@ def configure_profile(home, codex_home, action):
 
     core.control.mkdir(parents=True, exist_ok=True)
     with FileLock(core.control / "profile.lock"):
-        if action == "install":
-            return install_profile_entries(entries, previous)
-        return withdraw_profile_entries(entries, previous)
+        return change_profile(entries, previous)
 
 
 def main():

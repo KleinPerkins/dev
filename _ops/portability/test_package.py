@@ -428,7 +428,9 @@ class StandardDevSkillTests(unittest.TestCase):
             "capability", "dev-doctor", "dev-new-repo", "frontend-design", "isokit", "local-jobs", "prompt-architect",
             "save-game", "verification-before-completion", "web-artifacts-builder"])
         originals = {p.name: p.lstat() for p in self.slots.iterdir()}
-        self.configure("check")
+        with patch.object(personal_core, "FileLock", side_effect=AssertionError("check acquired a write lock")):
+            self.assertEqual(len(self.configure("check")), len(originals))
+        self.assertTrue(all(os.path.samestat(info, (self.slots / name).lstat()) for name, info in originals.items()))
         self.configure("install")
         self.assertTrue(all(os.path.samestat(info, (self.slots / name).lstat()) for name, info in originals.items()))
         # Each sparse checkout contains its own runtime, even if the commit also contains the other one.
