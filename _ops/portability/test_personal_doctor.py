@@ -58,6 +58,52 @@ class Primary(unittest.TestCase):
                     self.assertEqual(m.main(['inspect-created', '--repository', repository]), 2)
                     self.assertEqual(json.loads(output.getvalue()), {'status': 'refused', 'reason': reason})
 
+    def test_created_checkout_reports_which_local_selection_input_is_unavailable(self):
+        import personal_scaffold as creator
+
+        with tempfile.TemporaryDirectory(dir='/tmp') as raw:
+            root = Path(raw).resolve()
+            parent = root / 'personal/src/KleinPerkins'
+            parent.mkdir(parents=True)
+            checkout = parent / 'missing-input'
+            args = ['inspect-created', '--repository', 'KleinPerkins/missing-input',
+                    '--fixture-root', str(root)]
+
+            def refused(reason):
+                with redirect_stdout(io.StringIO()) as output:
+                    self.assertEqual(m.main(args), 2)
+                self.assertEqual(json.loads(output.getvalue()), {'status': 'refused', 'reason': reason})
+
+            refused('the selected Personal checkout is missing or cannot be opened safely')
+            checkout.mkdir()
+            git = checkout / '.git'
+            refused('the selected checkout has no accessible primary Git directory')
+            foreign = root / 'foreign'
+            foreign.mkdir()
+            git.symlink_to(foreign, target_is_directory=True)
+            refused('the selected checkout has no accessible primary Git directory')
+            git.unlink()
+            git.mkdir()
+            refused('the creation record is missing or cannot be read safely')
+            foreign_receipt = foreign / 'doc-warden-new-repo.json'
+            foreign_receipt.write_text('do not read this file')
+            receipt = git / foreign_receipt.name
+            receipt.symlink_to(foreign_receipt)
+            refused('the creation record is missing or cannot be read safely')
+            self.assertEqual(foreign_receipt.read_text(), 'do not read this file')
+            receipt.unlink()
+            receipt.write_text(json.dumps({
+                'schema': 'dev-new-repo-operation/v2', 'repository': 'KleinPerkins/missing-input',
+                'test_sharding_required': True, 'github_repository_id': None,
+                'personal_checkout': creator.checkout_binding(checkout, str(root), '',
+                                                               checkout.stat(), git.stat()),
+            }))
+            refused('the selected Git config is missing or cannot be read safely')
+            (git / 'config').write_text('[remote "origin"]\nurl = git@github.com:KleinPerkins/missing-input.git\n')
+            with self.assertRaisesRegex(creator.ScaffoldMismatch, 'the selected checkout changed during inspection'):
+                with creator.open_created_checkout('missing-input', str(root)):
+                    receipt.rename(git / 'retained-receipt.json')
+
     def test_new_personal_checkout_is_bound_to_the_creator_and_reports_real_local_state(self):
         source = Path(__file__).resolve().parents[2]
         name = 'sample.created-doctor'
