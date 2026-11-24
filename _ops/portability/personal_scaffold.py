@@ -17,11 +17,15 @@ from personal_scope import absolute_directory, child_directory, operator_home, r
 LAYOUT = ("personal", "src", "KleinPerkins")
 
 
+class ScaffoldMismatch(ValueError):
+    """The selection is ineligible or its checkout differs from the creation record."""
+
+
 def check_product_name(name):
     if (not re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}", name)
             or name.endswith(".") or name.lower().endswith(".git")
             or name.casefold() in {"repo-platform", "dev-main-sync"}):
-        raise ValueError("expected a new personal product name")
+        raise ScaffoldMismatch("expected a new personal product name")
     # Direct calls to the acquisition helper must honor Dev's excluded and enrolled names.
     policy = Path(__file__).resolve().parents[1] / "baseline/delivery-policy.py"
     disposition = subprocess.check_output(
@@ -29,7 +33,7 @@ def check_product_name(name):
         text=True,
     ).strip()
     if disposition != "unenrolled":
-        raise ValueError("Dev policy allows personal creation only for an unenrolled product")
+        raise ScaffoldMismatch("Dev policy allows personal creation only for an unenrolled product")
 
 
 def owner_location(fixture):
@@ -141,10 +145,6 @@ def checkout_binding(checkout, fixture, repository_id, checkout_info, git_info):
             raise ValueError("expected an operator-owned checkout")
         identity.extend((info.st_dev, info.st_ino))
     return hashlib.sha256(json.dumps(identity).encode()).hexdigest()
-
-
-class ScaffoldMismatch(ValueError):
-    """A selected checkout no longer matches the creator’s recorded identity."""
 
 
 @contextmanager

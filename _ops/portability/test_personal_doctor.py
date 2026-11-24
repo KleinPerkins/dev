@@ -43,6 +43,21 @@ def commit(git):git('add','-A');git('commit','--allow-empty','-m','synthetic doc
 
 
 class Primary(unittest.TestCase):
+    def test_created_checkout_refuses_invalid_selectors_before_checkout_access(self):
+        import personal_scaffold as creator
+
+        cases = {
+            'invalid': 'select the exact KleinPerkins repository name',
+            'Other/example': 'select the exact KleinPerkins repository name',
+            'KleinPerkins/': 'expected a new personal product name',
+            'KleinPerkins/../example': 'expected a new personal product name',
+        }
+        with patch.object(creator, 'owner_location', side_effect=AssertionError('unexpected checkout access')):
+            for repository, reason in cases.items():
+                with self.subTest(repository=repository), redirect_stdout(io.StringIO()) as output:
+                    self.assertEqual(m.main(['inspect-created', '--repository', repository]), 2)
+                    self.assertEqual(json.loads(output.getvalue()), {'status': 'refused', 'reason': reason})
+
     def test_new_personal_checkout_is_bound_to_the_creator_and_reports_real_local_state(self):
         source = Path(__file__).resolve().parents[2]
         name = 'sample.created-doctor'

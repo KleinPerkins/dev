@@ -99,7 +99,7 @@ def registration_snapshot(repo):
 def diagnose(repository, fixture=None, fixture_id=None):
     owner, sep, name = repository.partition('/')
     if owner != 'KleinPerkins' or not sep:
-        raise ValueError('select the exact KleinPerkins repository name')
+        raise g.Refusal('select the exact KleinPerkins repository name')
     with creator.open_created_checkout(name, fixture, fixture_id) as (path, fd, saved, provider_id):
         row = {'id': repository, 'path': str(Path(*creator.LAYOUT, name)), 'revision': None}
         repo = scope.RepositoryView(fd, row, path)
