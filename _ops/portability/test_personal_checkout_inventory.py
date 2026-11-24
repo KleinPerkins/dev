@@ -116,12 +116,56 @@ class CheckoutInventoryTests(unittest.TestCase):
             self.inventory.owner_observation_scope(reserved, "foreign-move", [self.first.checkout],
                                                    deadline=deadline())
 
+    def owner_record(self, operation, physical, observations):
+        record = {"schema": "dev-checkout-owner-evidence/v1", "operation": operation,
+                  "physical_binding_digest": physical, "dev_policy_revision": self.version[0]}
+        if observations is not None:
+            record["observations"] = observations
+        return (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+    def test_owner_evidence_requires_one_git_configuration_for_each_selected_checkout(self):
+        operation = "owner-configurations"
+        physical = "c" * 64
+        first = {"checkout": self.first.checkout, "git_config_sha256": "b" * 64}
+        peer = {"checkout": self.peer.checkout, "git_config_sha256": "d" * 64}
+        changes = {binding.checkout: binding for binding in (self.first, self.peer)}
+        for rows in (None, [], [first], [first, first], [first, peer, peer],
+                     [first, peer | {"checkout": self.denied}],
+                     [first, {"checkout": self.peer.checkout}],
+                     [first, peer | {"worktree_git_config_enabled": True}]):
+            with self.subTest(observations=rows), self.assertRaises(Refused):
+                self.inventory.reserve_evidence_reissue(
+                    self.version, operation, changes, owner_record=self.owner_record(operation, physical, rows),
+                    physical_binding_digest=physical, deadline=deadline(),
+                )
+        self.assertIsNone(self.inventory.read_prepared_evidence_reissue(operation, deadline=deadline(),
+                                                                        allow_missing=True))
+        self.assertEqual(self.inventory.snapshot()[1], self.version)
+        record = self.owner_record(operation, physical, [first, peer])
+        self.inventory.reserve_evidence_reissue(self.version, operation, changes, owner_record=record,
+                                                physical_binding_digest=physical, deadline=deadline())
+        self.inventory.finish_evidence_reissue(operation, owner_record=record, physical_binding_digest=physical,
+                                              deadline=deadline())
+        self.assertEqual(self.inventory.current_owner_evidence(operation, deadline=deadline()).record, record)
+        self.assertTrue(self.inventory.finished_refresh_scope(operation).requires_owner_evidence)
+
+    def test_completing_an_owner_record_requires_the_reserved_checkout_configurations(self):
+        operation = "plain-reservation"
+        physical = "c" * 64
+        pending = self.inventory.reserve(self.version, operation, {self.first.checkout: self.first},
+                                         deadline=deadline())
+        for observations in (None, [{"checkout": self.peer.checkout, "git_config_sha256": "d" * 64}]):
+            record = self.owner_record(operation, physical, observations)
+            with self.subTest(observations=observations), self.assertRaises(Refused):
+                self.inventory.finish_evidence_reissue(operation, owner_record=record,
+                                                       physical_binding_digest=physical, deadline=deadline())
+        self.assertEqual(self.inventory.snapshot()[1], pending)
+
     def test_prepared_evidence_may_observe_only_its_reserved_checkout(self):
         operation = "owner-reissue"
         physical = "c" * 64
-        record = (json.dumps({"schema": "dev-checkout-owner-evidence/v1", "operation": operation,
-                              "physical_binding_digest": physical, "dev_policy_revision": self.version[0]},
-                             sort_keys=True, separators=(",", ":")) + "\n").encode()
+        record = self.owner_record(operation, physical,
+                                   [{"checkout": self.first.checkout, "git_config_sha256": "d" * 64}])
         pending = self.inventory.reserve_evidence_reissue(
             self.version, operation, {self.first.checkout: self.first}, owner_record=record,
             physical_binding_digest=physical, deadline=deadline(),
@@ -158,6 +202,7 @@ class CheckoutInventoryTests(unittest.TestCase):
         self.probe(self.peer, pending)
         next_version = self.inventory.finish("move", outcome="committed", owner_evidence="verified-source-move",
                                              deadline=deadline())
+        self.assertFalse(self.inventory.finished_refresh_scope("move").requires_owner_evidence)
         self.assertEqual(next_version[1], pending[1] + 1)
         self.probe(new, next_version)
         with self.assertRaises(Refused):

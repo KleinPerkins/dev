@@ -11,7 +11,7 @@ from lib.contracts import INPUT_MAX, Refusal, json_load
 from lib.deadline import deadline as read_deadline
 from lib.receipt_store import load_qualified_snapshot
 
-from checkout_git_config import config_proof
+from checkout_git_config import owner_config_proofs
 from issue_checkout_evidence import issue_checkout_evidence_reissue
 from personal_checkout_inventory import Refused
 from physical_checkout_binding import OwnerPhysicalBindings
@@ -34,20 +34,31 @@ def read_snapshot_and_receipt(cache, admission):
 
 def refresh_after_lifecycle(
     inventory, operation, trusted_settings, skills_revision, private_state, cache, *,
-    physical, expected_inventory_version: tuple[str, int, str] | None = None, owner_config_digests=None,
-    confirm_owner_evidence=None,
+    physical, expected_inventory_version: tuple[str, int, str] | None = None,
 ):
     """Publish current discovery or reuse its verified publication on recovery.
 
     The caller supplies the exact operation ID retained by its source journal.
     A committed Dev operation and exact Skills receipt survive independently.
     Replaying this step never repeats the source operation or changes Dev authority.
-    A caller that separately validated owner evidence can pin the inventory
-    version from that validation. A changed version requires fresh validation.
+    Callers may pin a previously observed inventory version. Owner-evidence
+    reissues must use their evidence-bound entry point.
     """
+    return _refresh_after_lifecycle(
+        inventory, operation, trusted_settings, skills_revision, private_state, cache, physical=physical,
+        expected_inventory_version=expected_inventory_version,
+    )
+
+
+def _refresh_after_lifecycle(
+    inventory, operation, trusted_settings, skills_revision, private_state, cache, *,
+    physical, expected_inventory_version=None, owner_config_digests=None, confirm_owner_evidence=None,
+):
     if not isinstance(physical, OwnerPhysicalBindings):
         raise Refused('discovery refresh requires owner-supplied physical checkout bindings')
     scope = inventory.finished_refresh_scope(operation)
+    if scope.requires_owner_evidence and not owner_config_digests:
+        raise Refused('use the owner-evidence refresh for the selected reissue')
     current = scope.current
     if expected_inventory_version is not None and current != expected_inventory_version:
         raise Refused('Dev authority changed after proof validation; re-read current owner evidence')
@@ -105,18 +116,8 @@ def refresh_after_evidence_reissue(
     if (not isinstance(record, dict) or record.get("schema") != "dev-checkout-owner-evidence/v1"
             or record.get("operation") != operation or record.get("physical_binding_digest") != selected.digest()):
         raise Refused("the owner evidence does not bind the selected physical checkouts")
-    config_digests = {}
-    if "observations" in record:
-        rows = record["observations"]
-        if not isinstance(rows, list) or len(rows) != len(scope.bindings):
-            raise Refused("the owner record does not cover the selected checkout Git configurations")
-        for row in rows:
-            if not isinstance(row, dict) or not isinstance(row.get("checkout"), str):
-                raise Refused("the owner record does not cover the selected checkout Git configurations")
-            config_digests[row["checkout"]] = config_proof(row)
-        if set(config_digests) != {binding.checkout for binding in scope.bindings}:
-            raise Refused("the owner record does not cover the selected checkout Git configurations")
-    return refresh_after_lifecycle(
+    config_digests = owner_config_proofs(record, (binding.checkout for binding in scope.bindings))
+    return _refresh_after_lifecycle(
         inventory, operation, trusted_settings, skills_revision, private_state, cache, physical=physical,
         expected_inventory_version=scope.current, owner_config_digests=config_digests,
         confirm_owner_evidence=confirm_owner_evidence,

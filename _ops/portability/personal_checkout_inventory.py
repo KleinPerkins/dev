@@ -89,6 +89,7 @@ class FinishedRefreshScope:
     completed: tuple[str, int, str]
     current: tuple[str, int, str]
     required_checkouts: frozenset[str]
+    requires_owner_evidence: bool
 
 
 @dataclass(frozen=True)
@@ -389,14 +390,15 @@ class Inventory:
             if row is None or row[1] != "finished":
                 raise Refused("discovery refresh requires a finished Dev lifecycle operation")
             state = self._read(db)
-        completed = tuple(json.loads(row[2])["version"])
+        result = json.loads(row[2])
+        completed = tuple(result["version"])
         current = self._version(state)
         if current[1] < completed[1] or (current[1] == completed[1] and current != completed):
             raise Refused("the committed Dev operation cannot be reconciled to current inventory")
         changed = json.loads(row[0])["changes"]
         required = frozenset(path for path in changed if path in state["bindings"]
                              and "enumerate" in state["bindings"][path]["operations"])
-        return FinishedRefreshScope(completed, current, required)
+        return FinishedRefreshScope(completed, current, required, "owner_record" in result)
 
     def current_owner_evidence(self, operation, *, deadline):
         """Read the committed evidence reference under the selected Dev admission."""
@@ -522,7 +524,7 @@ class Inventory:
 
     def reserve_evidence_reissue(self, expected, operation, changes, *, owner_record, physical_binding_digest, deadline):
         """Persist vetted evidence before placing the reissue reservation."""
-        text, policy_revision = self._decode_owner_record(operation, owner_record, physical_binding_digest)
+        text, policy_revision = self._decode_owner_record(operation, owner_record, physical_binding_digest, changes)
         changes = {path: asdict(binding) if binding else None for path, binding in changes.items()}
         self._request(expected, operation, changes,
                       prepared_evidence={"record": text, "policy_revision": policy_revision})
@@ -599,7 +601,8 @@ class Inventory:
         prepared = self.read_prepared_evidence_reissue(operation, deadline=deadline)
         if "sha256:" + sha256(prepared.record).hexdigest() != checked_owner_digest:
             raise Refused("the revalidated owner record differs from the preparation")
-        self._decode_owner_record(operation, prepared.record, physical_binding_digest)
+        self._decode_owner_record(operation, prepared.record, physical_binding_digest,
+                                  (binding.checkout for binding in prepared.bindings))
         self._reserve_requested(prepared.expected, operation, deadline)
         return self.finish_evidence_reissue(operation, owner_record=prepared.record,
                                             physical_binding_digest=physical_binding_digest, deadline=deadline)
@@ -676,12 +679,16 @@ class Inventory:
 
     def finish_evidence_reissue(self, operation, *, owner_record, physical_binding_digest, deadline):
         """Commit an owner's reissue for existing bindings and retain its exact bytes."""
-        text, policy_revision = self._decode_owner_record(operation, owner_record, physical_binding_digest)
+        if not isinstance(owner_record, bytes) or not 0 < len(owner_record) <= 65536:
+            raise Refused("a bounded owner evidence record is required")
         digest = "sha256:" + sha256(owner_record).hexdigest()
-        return self._finish(operation, "committed", digest, deadline, owner_record=text, policy_revision=policy_revision)
+        return self._finish(operation, "committed", digest, deadline, owner_record=owner_record,
+                            physical_binding_digest=physical_binding_digest)
 
     @staticmethod
-    def _decode_owner_record(operation, owner_record, physical_binding_digest):
+    def _decode_owner_record(operation, owner_record, physical_binding_digest, checkouts):
+        from checkout_git_config import owner_config_proofs
+
         if not isinstance(owner_record, bytes) or not 0 < len(owner_record) <= 65536:
             raise Refused("a bounded owner evidence record is required")
         try:
@@ -704,6 +711,7 @@ class Inventory:
         policy_revision = record.get("dev_policy_revision")
         if not isinstance(policy_revision, str) or not policy_revision:
             raise Refused("the owner evidence has no current policy revision")
+        owner_config_proofs(record, checkouts)
         return text, policy_revision
 
     @staticmethod
@@ -716,27 +724,32 @@ class Inventory:
                        or "enumerate" not in value["operations"] for path, value in changes.items())):
             raise Refused("evidence renewal requires unchanged admitted checkout bindings")
 
-    def _finish(self, operation, outcome, owner_evidence, deadline, *, owner_record=None, policy_revision=None):
+    def _finish(self, operation, outcome, owner_evidence, deadline, *, owner_record=None, physical_binding_digest=None):
         with self._gate(deadline), self._update(deadline) as (db, commit):
             row = db.execute("SELECT request, phase, result FROM lifecycle WHERE operation = ?",
                              (operation,)).fetchone()
             if not row or row[1] not in {"reserved", "finished"}:
                 raise Refused("the owner operation has no committed reservation")
-            request, phase, raw_result = row
+            raw_request, phase, raw_result = row
+            request = json.loads(raw_request)
+            record_text, policy_revision = None, None
+            if owner_record is not None:
+                record_text, policy_revision = self._decode_owner_record(
+                    operation, owner_record, physical_binding_digest, request["changes"],
+                )
             result = json.loads(raw_result)
             if phase == "finished":
                 if ((result["outcome"], result["owner_evidence"]) != (outcome, owner_evidence)
-                        or (owner_record is not None and result.get("owner_record") != owner_record)):
+                        or (record_text is not None and result.get("owner_record") != record_text)):
                     raise Refused("the operation already has a different observed outcome")
                 return tuple(result["version"])
             state = self._read(db)
-            request = json.loads(request)
             prepared = request.get("prepared_evidence")
-            if prepared is not None and outcome == "committed" and owner_record != prepared["record"]:
+            if prepared is not None and outcome == "committed" and record_text != prepared["record"]:
                 raise Refused("the completed record must match the prepared owner evidence")
-            if owner_record is not None:
+            if record_text is not None:
                 self._validate_reissue_bindings(state, request, policy_revision)
-                result["owner_record"] = owner_record
+                result["owner_record"] = record_text
             if outcome == "committed":
                 self._commit_change(state, request, result)
             del state["pending"][operation]

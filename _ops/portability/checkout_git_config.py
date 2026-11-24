@@ -47,6 +47,22 @@ def config_proof(row):
     return GitConfigProof(common, enabled, digest)
 
 
+def owner_config_proofs(record, checkouts):
+    """Require one valid Git configuration proof for each selected checkout."""
+    selected = set(checkouts)
+    rows = record.get("observations")
+    message = "the owner record does not cover the selected checkout Git configurations"
+    if not selected or not isinstance(rows, list) or len(rows) != len(selected):
+        raise Refused(message)
+    proofs = {}
+    for row in rows:
+        path = row.get("checkout") if isinstance(row, dict) else None
+        if not isinstance(path, str) or path not in selected or path in proofs:
+            raise Refused(message)
+        proofs[path] = config_proof(row)
+    return proofs
+
+
 def _git_config(raw, args, expires):
     remaining = expires - time.monotonic()
     if remaining <= 0:
