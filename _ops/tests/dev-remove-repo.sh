@@ -487,20 +487,24 @@ class DevRemoveRepoTests(unittest.TestCase):
             self.assertFalse((root / "state/dev-repo-removal").exists())
 
     def test_personal_view_reports_git_state_without_changing_the_checkout(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
             owner = root / "personal/src/KleinPerkins"
             owner.mkdir(parents=True)
             checkout = owner / "git-state.product"
+            # The production reader must suppress optional Git writes itself.
             env = {**os.environ, "DEV_SESSION_ID": "retirement-fixture-" + root.name,
-                   "XDG_STATE_HOME": str(root / "state"), "GIT_OPTIONAL_LOCKS": "0"}
+                   "XDG_STATE_HOME": str(root / "state"), "GIT_OPTIONAL_LOCKS": "1"}
             created = subprocess.run([str(ROOT / "_ops/bin/dev-new-repo.sh"), "--personal-codex",
                                       checkout.name, "--fixture-root", str(root)],
                                      env=env, text=True, capture_output=True)
             self.assertEqual(created.returncode, 0, created.stderr)
 
             def git(*args):
-                return subprocess.check_output(["git", "-C", str(checkout), *args], env=env)
+                return subprocess.check_output(["git", "--no-optional-locks", "-C", str(checkout), *args], env=env)
 
             def view(*args):
                 result = subprocess.run([str(SCRIPT), "view", "--personal-codex",
@@ -532,6 +536,23 @@ class DevRemoveRepoTests(unittest.TestCase):
             self.assertFalse(state["hosted_identity_verified"])
             self.assertEqual(index.read_bytes(), original_index)
             self.assertEqual(git("status", "--porcelain=v1"), original_status)
+
+            engine = self.load_engine()
+            descriptor = os.open(checkout, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                records = engine["registration_records"](descriptor)
+            finally:
+                os.close(descriptor)
+            name, = records
+            changed = {name: dict(records[name], gitdir=str(root / "different/.git"))}
+            diagnostic = SimpleNamespace(observe_bound_checkout=lambda *args: (state, changed))
+            args = engine["build_parser"]().parse_args([
+                "view", "--personal-codex", "--git-state", "--fixture-root", str(root), str(checkout),
+            ])
+            with patch.object(sys, "path", list(sys.path)), patch.dict(os.environ, {"DRR_ROOT": str(ROOT)}):
+                with patch.dict(sys.modules, {"personal_created_doctor": diagnostic}):
+                    with self.assertRaisesRegex(engine["Refusal"], "selected checkout changed during inspection"):
+                        engine["personal_scaffold_view"](args)
 
             original = root / "retained-original"
             checkout.rename(original)

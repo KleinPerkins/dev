@@ -97,7 +97,7 @@ def registration_snapshot(repo):
 
 
 def observe_bound_checkout(repository, path, fd, saved, provider_id):
-    # Read through the caller's already admitted descriptor.
+    # CreatedWorktree reads a private Git directory with --no-optional-locks.
     name = path.name
     row = {'id': repository, 'path': str(Path(*creator.LAYOUT, name)), 'revision': None}
     repo = scope.RepositoryView(fd, row, path)
@@ -106,6 +106,11 @@ def observe_bound_checkout(repository, path, fd, saved, provider_id):
     git = reader.observe()
     if registration_snapshot(repo) != registrations:
         raise g.Refusal('created-checkout-registrations-changed')
+    records = {}
+    if registrations is not None:
+        for name, (identity, gitdir) in registrations[1].items():
+            records[name] = {'identity': {'dev': identity['device'], 'ino': identity['inode']},
+                             'gitdir': os.fsdecode(gitdir.removesuffix(b'\n'))}
     if not git['local_identity_canonical'] or not git['effective_personal_identity_canonical']:
         verdict = 'VIOLATION'
     elif not git['clean_under_personal_policy'] or git['ahead'] or git['behind'] or git['detached']:
@@ -117,10 +122,10 @@ def observe_bound_checkout(repository, path, fd, saved, provider_id):
               'reported_change_items', 'reported_untracked_items', 'upstream', 'ahead', 'behind')}
     result.update(schema='dev-personal/created-checkout-diagnosis/v1', repository=repository,
                   path=str(path), creation_record_sha256=hashlib.sha256(saved).hexdigest(),
-                  linked_registrations=len(registrations[1]) if registrations else 0,
+                  linked_registrations=len(records),
                   recorded_repository_id=provider_id, local_git_verdict=verdict,
                   sync_evidence='local tracking refs', hosted_identity_verified=False)
-    return result
+    return result, records
 
 
 def diagnose(repository, fixture=None, fixture_id=None):
@@ -128,4 +133,5 @@ def diagnose(repository, fixture=None, fixture_id=None):
     if owner != 'KleinPerkins' or not sep:
         raise g.Refusal('select the exact KleinPerkins repository name')
     with creator.open_created_checkout(name, fixture, fixture_id) as (path, fd, saved, provider_id):
-        return observe_bound_checkout(repository, path, fd, saved, provider_id)
+        result, _ = observe_bound_checkout(repository, path, fd, saved, provider_id)
+        return result

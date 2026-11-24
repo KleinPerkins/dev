@@ -1464,10 +1464,10 @@ def personal_scaffold_view(args):
                 from personal_git import Refusal as GitRefusal
 
                 try:
-                    git_state = observe_bound_checkout(slug, checkout, target_fd, saved, recorded_id)
+                    git_state, observed_registrations = observe_bound_checkout(slug, checkout, target_fd, saved, recorded_id)
                 except GitRefusal as exc:
                     raise Refusal(str(exc)) from None
-                if git_state["linked_registrations"] != len(records):
+                if observed_registrations != records:
                     raise Refusal("the selected checkout changed during inspection")
             if args.open_files:
                 from personal_checkout_open_files import inspect_open_files
