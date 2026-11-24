@@ -1,6 +1,28 @@
 {
   "revision": "1afae724d8e7d42110d3d9670d85a467c436935c",
   "skills": {
+    "plan-refine": {
+      "SKILL.md": [
+        "100644",
+        15362,
+        "6eaf68a5c0b0321b700b2237374aba5d2307592c7cddda7ccc16410478596623"
+      ],
+      "install.sh": [
+        "100755",
+        1892,
+        "9b887ced2e6e39feaaa099e87adba78e1c898efbf9dee663416475cb2fcadb5f"
+      ],
+      "meta.yml": [
+        "100644",
+        504,
+        "98bdfebcfd56213768764d295e25e28bb6202b007b8ea14454ca809ae6760e30"
+      ],
+      "tests/test_skill_contract.py": [
+        "100644",
+        6194,
+        "f61071d8375c592aba3b8482562ece4e4e5c139eb845689e35fdbd94eb1df7d4"
+      ]
+    },
     "prompt-architect": {
       "MAP.md": [
         "100644",
