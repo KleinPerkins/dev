@@ -165,11 +165,17 @@ def open_created_checkout(name, fixture=None, supplied_id=None):
         if os.fstat(base).st_uid != os.getuid():
             raise ScaffoldMismatch("operator-owned root required")
         selected = hold(child_directory(base, (*parts, name)))
-        fcntl.flock(selected, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        try:
+            fcntl.flock(selected, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise ScaffoldMismatch("the selected checkout is busy") from error
         git = hold(child_directory(selected, (".git",)))
         state_name = "doc-warden-new-repo.json"
         saved = read_regular(git, state_name)
-        state = json.loads(saved)
+        try:
+            state = json.loads(saved)
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise ScaffoldMismatch("the creation record is unreadable") from error
         slug = "KleinPerkins/" + name
         if (not isinstance(state, dict) or state.get("schema") != "dev-new-repo-operation/v2"
                 or state.get("repository") != slug or state.get("test_sharding_required") is not True

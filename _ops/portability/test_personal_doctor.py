@@ -1,6 +1,7 @@
 """Disposable caller composition, final fences and explicit unknown fixtures."""
 from contextlib import redirect_stdout
 import copy
+import fcntl
 import io
 import json
 import os
@@ -81,6 +82,17 @@ class Primary(unittest.TestCase):
             self.assertIsNone(clean['recorded_repository_id'])
             self.assertFalse(clean['hosted_identity_verified'])
             self.assertIsNone(clean['upstream'])
+            checkout_fd = os.open(checkout, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                fcntl.flock(checkout_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self.assertEqual(inspect(2), {'status': 'refused', 'reason': 'the selected checkout is busy'})
+            finally:
+                os.close(checkout_fd)
+            receipt = checkout / '.git/doc-warden-new-repo.json'
+            saved = receipt.read_bytes()
+            receipt.write_bytes(b'{')
+            self.assertEqual(inspect(2), {'status': 'refused', 'reason': 'the creation record is unreadable'})
+            receipt.write_bytes(saved)
             with (checkout / 'README.md').open('a') as stream:
                 stream.write('\nfixture change\n')
             self.assertEqual(inspect()['codes'], {' M': 1})

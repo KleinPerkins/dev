@@ -15,6 +15,8 @@ cd -P ../../../portability && python3 -I -B personal_doctor.py inspect-created -
 Report the local Git verdict, branch, pending changes, author identity and linked registration count.
 Ahead and behind use local tracking refs. A null upstream leaves remote sync unknown. A recorded
 GitHub repository ID describes the creator's record. Adopting the checkout needs separate live evidence.
+The reader builds a private temporary Git snapshot outside the checkout. Use the standard Codex
+workspace with temporary scratch available. If inspection refuses, report its reason.
 
 For a checkout in the Personal migration manifest, resolve this installed skill directory to its physical source. From that directory run the owning Dev command with each selected repository named explicitly.
 
