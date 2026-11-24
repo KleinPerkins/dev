@@ -248,7 +248,8 @@ def guarded_admission(inventory, projection, skills_revision, *, physical=None, 
 
     return CheckoutAdmission(projection.version, projection.config_digest(), projection.manifest_digest(),
                              skills_revision, probe, commit, physical.digest() if physical else None,
-                             commit_current if physical is not None else None)
+                             commit_current if physical is not None else None,
+                             config_bytes=projection.config_bytes)
 
 
 def load_projected_snapshot(cache, inventory, projection, skills_revision):
