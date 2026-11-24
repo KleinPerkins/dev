@@ -346,6 +346,12 @@ class StandardDevSkillTests(unittest.TestCase):
         original = slot.lstat()
         others = {p: p.lstat().st_ino for p in self.slots.iterdir() if p != slot}
         updated = self.select_new_doctor()
+        prior_control = self.codex / "dev-personal-core/dev-doctor"
+        with self.assertRaisesRegex(ValueError, "does not expose the pinned dev-doctor"):
+            self.configure("check")
+        self.assertTrue(os.path.samestat(original, slot.lstat()))
+        self.assertFalse((prior_control / "withdrawals").exists())
+
         with patch.object(dev.DevSkillRelease, "prepare", side_effect=OSError("download interrupted")):
             with self.assertRaisesRegex(OSError, "download interrupted"):
                 self.configure("install")

@@ -358,6 +358,63 @@ def change_entry(entry, action):
     return f"configured {label} for Personal Codex"
 
 
+def install_profile_entries(entries, previous):
+    # Hold the same per-entry locks as standalone installers throughout
+    # recovery, preflight and publication, in stable profile order.
+    with ExitStack() as locks:
+        for entry in (*previous.values(), *entries):
+            physical_path(entry.control).mkdir(parents=True, exist_ok=True)
+            locks.enter_context(FileLock(entry.control / "writer.lock"))
+        upgrades = {}
+        for prior in previous.values():
+            recover_withdrawals(prior)
+            if points_to(prior.slot, prior.release):
+                if not owns_slot(prior.slot, prior.control / prior.slot.name, prior.release):
+                    raise ValueError(f"independently installed earlier {prior.label} preserved at {prior.slot}")
+                prior.verify()
+                upgrades[prior.slot] = prior
+        for entry in entries:
+            recover_withdrawals(entry)
+            if (os.path.lexists(entry.slot) and not points_to(entry.slot, entry.release)
+                    and not checkout_installation(entry, "install")
+                    and entry.slot not in upgrades):
+                raise ValueError(f"the Codex {entry.slot.name} slot is occupied")
+            anchor = entry.control / entry.slot.name
+            if os.path.lexists(anchor) and not points_to(anchor, entry.release):
+                raise ValueError(f"the {entry.label} ownership record changed")
+        for entry in entries:
+            if entry.checkout is None or not points_to(entry.slot, entry.checkout):
+                entry.prepare()
+        # Prepare every release before withdrawing a working old link.
+        # Withdrawal retains its witness and validates the captured inode.
+        for prior in upgrades.values():
+            change_entry(prior, "withdraw")
+        return [change_entry(entry, "install") for entry in entries]
+
+
+def withdraw_profile_entries(entries, previous):
+    messages = []
+    errors = []
+    for entry in entries:
+        try:
+            prior = previous.get(entry.slot)
+            if prior and prior.control.exists():
+                with FileLock(prior.control / "writer.lock"):
+                    recover_withdrawals(prior)
+            if prior and points_to(entry.slot, prior.release):
+                entry = prior
+            if (points_to(entry.slot, entry.release)
+                    and not os.path.lexists(entry.control / entry.slot.name)):
+                messages.append(f"preserved earlier installation of {entry.slot.name}")
+                continue
+            messages.append(configure_entry(entry, "withdraw"))
+        except (OSError, ValueError, PortabilityError) as exc:
+            errors.append(f"{entry.slot.name}: {exc}")
+    if errors:
+        raise ValueError("\n".join([*messages, *errors]))
+    return messages
+
+
 def configure_profile(home, codex_home, action):
     core = core_entry(home, codex_home)
     entries = [core]
@@ -408,59 +465,8 @@ def configure_profile(home, codex_home, action):
     core.control.mkdir(parents=True, exist_ok=True)
     with FileLock(core.control / "profile.lock"):
         if action == "install":
-            # Hold the same per-entry locks as standalone installers throughout
-            # recovery, preflight and publication, in stable profile order.
-            with ExitStack() as locks:
-                for entry in (*previous.values(), *entries):
-                    physical_path(entry.control).mkdir(parents=True, exist_ok=True)
-                    locks.enter_context(FileLock(entry.control / "writer.lock"))
-                upgrades = {}
-                for prior in previous.values():
-                    recover_withdrawals(prior)
-                    if points_to(prior.slot, prior.release):
-                        if not owns_slot(prior.slot, prior.control / prior.slot.name, prior.release):
-                            raise ValueError(f"independently installed earlier {prior.label} preserved at {prior.slot}")
-                        prior.verify()
-                        upgrades[prior.slot] = prior
-                for entry in entries:
-                    recover_withdrawals(entry)
-                    if (os.path.lexists(entry.slot) and not points_to(entry.slot, entry.release)
-                            and not checkout_installation(entry, action)
-                            and entry.slot not in upgrades):
-                        raise ValueError(f"the Codex {entry.slot.name} slot is occupied")
-                    anchor = entry.control / entry.slot.name
-                    if os.path.lexists(anchor) and not points_to(anchor, entry.release):
-                        raise ValueError(f"the {entry.label} ownership record changed")
-                for entry in entries:
-                    if entry.checkout is None or not points_to(entry.slot, entry.checkout):
-                        entry.prepare()
-                # Prepare every selected release before touching a working old link.
-                # Withdrawal retains its witness and validates the captured inode.
-                for prior in upgrades.values():
-                    change_entry(prior, "withdraw")
-                return [change_entry(entry, action) for entry in entries]
-        messages = []
-        errors = []
-        for entry in entries:
-            try:
-                prior = previous.get(entry.slot)
-                if prior and prior.control.exists():
-                    with FileLock(prior.control / "writer.lock"):
-                        recover_withdrawals(prior)
-                if prior and points_to(entry.slot, prior.release):
-                    entry = prior
-                if (action == "withdraw" and points_to(entry.slot, entry.release)
-                        and not os.path.lexists(entry.control / entry.slot.name)):
-                    messages.append(f"preserved earlier installation of {entry.slot.name}")
-                    continue
-                messages.append(configure_entry(entry, action))
-            except (OSError, ValueError, PortabilityError) as exc:
-                if action != "withdraw":
-                    raise
-                errors.append(f"{entry.slot.name}: {exc}")
-        if errors:
-            raise ValueError("\n".join([*messages, *errors]))
-        return messages
+            return install_profile_entries(entries, previous)
+        return withdraw_profile_entries(entries, previous)
 
 
 def main():
