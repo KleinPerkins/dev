@@ -1,0 +1,22 @@
+{
+  "revision": "f60681e5f5c403c4d6a104b976e5a6b3332f379f",
+  "skills": {
+    "pr-steward": {
+      "SKILL.md": [
+        "100644",
+        3718,
+        "6e7cf573a3c31b2d27a965174d47144fd0553d868f5d36c533963fce06ed3c8e"
+      ],
+      "install.sh": [
+        "100755",
+        2163,
+        "144acf1ee80b33776c5e1a4c2735c4995cb47ced28b4ce0b19e57d2a318823af"
+      ],
+      "meta.yml": [
+        "100644",
+        153,
+        "336747c906b9aa7bf432d76b58edd79d276b47f9c1892efb46434670fbbef6ad"
+      ]
+    }
+  }
+}

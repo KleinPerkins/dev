@@ -252,7 +252,8 @@ class StandardDevSkillTests(unittest.TestCase):
         self.notice = published["notice"]["name"]
         responses = {public + self.notice: b"fixture notice"}
         notice = {"name": self.notice, "length": 14, "sha256": hashlib.sha256(b"fixture notice").hexdigest()}
-        for variable in ("DESIGN_RELEASE", "AUTHORING_RELEASE", "SAVE_GAME_RELEASE", "LOCAL_JOBS_RELEASE"):
+        for variable in ("DESIGN_RELEASE", "AUTHORING_RELEASE", "PR_STEWARD_RELEASE",
+                         "SAVE_GAME_RELEASE", "LOCAL_JOBS_RELEASE"):
             release = dict(getattr(personal_core, variable))
             if "notice" in release:
                 release["notice"] = notice
@@ -426,7 +427,7 @@ class StandardDevSkillTests(unittest.TestCase):
         self.configure("install")
         self.assertEqual(sorted(p.name for p in self.slots.iterdir()), [
             "capability", "dev-doctor", "dev-new-repo", "frontend-design", "isokit", "local-jobs", "plan-refine",
-            "prompt-architect",
+            "pr-steward", "prompt-architect",
             "save-game", "verification-before-completion", "web-artifacts-builder"])
         originals = {p.name: p.lstat() for p in self.slots.iterdir()}
         with patch.object(personal_core, "FileLock", side_effect=AssertionError("check acquired a write lock")):
@@ -445,6 +446,22 @@ class StandardDevSkillTests(unittest.TestCase):
         self.configure("check")
         self.assertEqual(self.download.call_count, 1)
         self.assertFalse((self.home / ".cursor").exists())
+
+    def test_profile_preserves_an_independent_pr_steward(self):
+        independent = self.home / "independent-pr-steward"
+        independent.mkdir()
+        descriptor = independent / "SKILL.md"
+        descriptor.write_text("Independent operator package")
+        self.slots.mkdir(parents=True)
+        slot = self.slots / "pr-steward"
+        slot.symlink_to(independent)
+        before = slot.lstat()
+
+        with self.assertRaisesRegex(ValueError, "pr-steward slot is occupied"):
+            self.configure("install")
+        self.assertTrue(os.path.samestat(before, slot.lstat()))
+        self.assertEqual(list(self.slots.iterdir()), [slot])
+        self.assertEqual(descriptor.read_text(), "Independent operator package")
 
     def test_isokit_preserves_independent_checkout_and_checks_installed_runtime(self):
         self.configure("install")

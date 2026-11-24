@@ -33,6 +33,7 @@ FILES = {
 DESIGN_RELEASE = json.loads(Path(__file__).with_name("personal-design-skills.json").read_bytes())
 ISOKIT_RELEASE = json.loads(Path(__file__).with_name("personal-isokit.json").read_bytes())
 AUTHORING_RELEASE = json.loads(Path(__file__).with_name("personal-authoring-skills.json").read_bytes())
+PR_STEWARD_RELEASE = json.loads(Path(__file__).with_name("personal-pr-steward.json").read_bytes())
 LOCAL_JOBS_RELEASE = json.loads(Path(__file__).with_name("personal-local-jobs.json").read_bytes())
 SAVE_GAME_RELEASE = json.loads(Path(__file__).with_name("personal-save-game.json").read_bytes())
 
@@ -438,6 +439,7 @@ def configure_profile(home, codex_home, action):
     for release, existing_root in (
         (DESIGN_RELEASE, None),
         (AUTHORING_RELEASE, skills_checkout / "global/skills"),
+        (PR_STEWARD_RELEASE, None),
         (ISOKIT_RELEASE, skills_checkout / "local/skills"),
         (SAVE_GAME_RELEASE, save_game_source / "global/skills"),
         (LOCAL_JOBS_RELEASE, local_jobs_source / "global/skills"),
