@@ -321,13 +321,116 @@ class StandardDevSkillTests(unittest.TestCase):
     def configure(self, action):
         return personal_core.configure_profile(self.home, self.codex, action)
 
+    def select_new_doctor(self):
+        import personal_dev_skills as dev
+        previous = dev.RELEASES["dev-doctor"]
+        name, = previous["files"]
+        new = (self.source / name).read_bytes() + b"New diagnostic\n"
+        (self.source / name).write_bytes(new)
+        git = ["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+               "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
+        env = dev.GitRunner()._environment()
+        subprocess.run([*git, "commit", "-qm", "Doctor update", "--", name], cwd=self.source, env=env, check=True)
+        revision = subprocess.check_output([*git, "rev-parse", "HEAD"], cwd=self.source, env=env, text=True).strip()
+        release = {"revision": revision, "previous": previous,
+                   "files": {name: ["100644", len(new), hashlib.sha256(new).hexdigest()]}}
+        selected = patch.dict(dev.RELEASES, {"dev-doctor": release})
+        selected.start()
+        self.addCleanup(selected.stop)
+        return dev.DevSkillRelease("dev-doctor", self.home)
+
+    def test_upgrade_keeps_old_witness_and_can_resume_or_restore(self):
+        import personal_dev_skills as dev
+        self.configure("install")
+        slot = self.slots / "dev-doctor"
+        original = slot.lstat()
+        others = {p: p.lstat().st_ino for p in self.slots.iterdir() if p != slot}
+        updated = self.select_new_doctor()
+        prior_control = self.codex / "dev-personal-core/dev-doctor"
+        with self.assertRaisesRegex(ValueError, "does not expose the pinned dev-doctor"):
+            self.configure("check")
+        self.assertTrue(os.path.samestat(original, slot.lstat()))
+        self.assertFalse((prior_control / "withdrawals").exists())
+
+        with patch.object(dev.DevSkillRelease, "prepare", side_effect=OSError("download interrupted")):
+            with self.assertRaisesRegex(OSError, "download interrupted"):
+                self.configure("install")
+        self.assertTrue(os.path.samestat(original, slot.lstat()))
+        apply = personal_core.change_entry
+
+        def interrupted(entry, action):
+            if action == "install" and entry.release == updated.skill:
+                raise OSError("publication interrupted")
+            return apply(entry, action)
+
+        with patch.object(personal_core, "change_entry", side_effect=interrupted):
+            with self.assertRaisesRegex(OSError, "publication interrupted"):
+                self.configure("install")
+        self.assertFalse(os.path.lexists(slot))
+        parked, = (self.codex / "dev-personal-core/dev-doctor/withdrawals").glob("withdraw-*/entry")
+        self.assertTrue(os.path.samestat(original, parked.lstat()))
+        self.configure("install")
+        self.configure("check")
+        self.assertEqual(slot.readlink(), updated.skill)
+        self.assertEqual(others, {p: p.lstat().st_ino for p in self.slots.iterdir() if p != slot})
+        self.configure("withdraw")
+        with patch.dict(dev.RELEASES, {"dev-doctor": updated.previous}):
+            self.configure("install")
+            self.configure("check")
+        self.assertTrue(os.path.samestat(original, slot.lstat()))
+
+    def test_upgrade_preserves_independently_installed_previous_doctor(self):
+        original = self.bundles["dev-doctor"]
+        original.prepare()
+        self.slots.mkdir(parents=True)
+        slot = self.slots / "dev-doctor"
+        slot.symlink_to(original.skill)
+        identity = slot.lstat()
+        self.select_new_doctor()
+        with self.assertRaisesRegex(ValueError, "independently installed earlier dev-doctor preserved"):
+            self.configure("install")
+        self.assertEqual(list(self.slots.iterdir()), [slot])
+        self.configure("withdraw")
+        self.assertTrue(os.path.samestat(identity, slot.lstat()))
+
+    def test_profile_check_verifies_the_independently_installed_current_doctor(self):
+        updated = self.select_new_doctor()
+        updated.prepare()
+        self.slots.mkdir(parents=True)
+        slot = self.slots / "dev-doctor"
+        slot.symlink_to(updated.skill)
+        identity = slot.lstat()
+        self.configure("install")
+        self.configure("check")
+        witness = self.codex / "dev-personal-core/dev-doctor/releases" / updated.revision / "dev-doctor"
+        self.assertFalse(os.path.lexists(witness))
+
+        relative, = updated.files
+        selected = updated.root / relative
+        original = selected.read_bytes()
+        mode = selected.stat().st_mode & 0o777
+        selected.chmod(0o600)
+        selected.write_bytes(original + b"Corruption")
+        with self.assertRaisesRegex(ValueError, "differs from its released file"):
+            self.configure("check")
+        self.assertTrue(os.path.samestat(identity, slot.lstat()))
+
+        selected.write_bytes(original)
+        selected.chmod(mode)
+        self.configure("check")
+        self.configure("withdraw")
+        self.assertTrue(os.path.samestat(identity, slot.lstat()))
+        self.assertFalse(os.path.lexists(witness))
+
     def test_clean_profile_repeat_withdraw_and_offline_reinstall(self):
         self.configure("install")
         self.assertEqual(sorted(p.name for p in self.slots.iterdir()), [
             "capability", "dev-doctor", "dev-new-repo", "frontend-design", "isokit", "local-jobs", "prompt-architect",
             "save-game", "verification-before-completion", "web-artifacts-builder"])
         originals = {p.name: p.lstat() for p in self.slots.iterdir()}
-        self.configure("check")
+        with patch.object(personal_core, "FileLock", side_effect=AssertionError("check acquired a write lock")):
+            self.assertEqual(len(self.configure("check")), len(originals))
+        self.assertTrue(all(os.path.samestat(info, (self.slots / name).lstat()) for name, info in originals.items()))
         self.configure("install")
         self.assertTrue(all(os.path.samestat(info, (self.slots / name).lstat()) for name, info in originals.items()))
         # Each sparse checkout contains its own runtime, even if the commit also contains the other one.

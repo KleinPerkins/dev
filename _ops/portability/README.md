@@ -119,8 +119,9 @@ Setup exposes the Codex skill without scheduling any jobs. Withdrawal preserves
 the private job state and an existing matching independent installation under
 `~/.local/share/local-jobs/releases`. [Local Jobs release manifest](personal-local-jobs.json).
 
-`dev-doctor` uses
-the Dev release from PR 13 and `dev-new-repo` uses the Dev release from PR 15.
+`dev-doctor` uses the Dev release from PR 38. Its `inspect-created` command
+reads local Git state for a Dev-created Personal checkout selected by its exact
+owner and repository name. `dev-new-repo` uses the sealed creator release from PR 31.
 The [release manifest](personal-dev-skills.json) lists each Dev file’s Git
 mode, length and SHA-256. Setup stages only these runtime files in the working
 directory of each release. The creator keeps a read-only Git object store
@@ -134,6 +135,11 @@ the verified releases retain their original ownership. An occupied slot
 pointing elsewhere is reported and preserved. Repeating setup can use the
 verified releases offline. Plugin installation stays with the operator, and
 Ecosystem Orchestrator governs downstream distribution.
+
+Setup verifies the new doctor package before withdrawing any profile-owned
+previous entry. The previous package and ownership record support offline
+rollback using the prior profile. An independently installed previous doctor
+requires a separate replacement through its installing owner's recovery record.
 
 If setup reports that an earlier creator needs a sealed Dev authority directory,
 its discovery link and release stay in place. Use the installing owner's

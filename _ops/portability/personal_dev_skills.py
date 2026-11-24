@@ -18,10 +18,12 @@ AUTHORITY_CONFIG = f'[core]\n\trepositoryformatversion = 0\n\tbare = false\n[rem
 
 
 class DevSkillRelease:
-    def __init__(self, name, home, slot=None):
+    def __init__(self, name, home, slot=None, *, release=None):
         self.name = name
-        self.revision = RELEASES[name]["revision"]
-        self.files = RELEASES[name]["files"]
+        release = RELEASES[name] if release is None else release
+        self.revision = release["revision"]
+        self.files = release["files"]
+        self.previous = release.get("previous")
         store = home / ".local/share/dev-personal-skills"
         self.package = store / "packages" / self.revision
         previous = store / "releases" / self.revision
