@@ -70,9 +70,11 @@ def owner_location(fixture, *, capability=False):
     return root, parts
 
 
-def target(name, fixture, resume, *, acquire=False, capability=False):
+def target(name, fixture, resume, *, acquire=False, capability=False, foundation=False):
     check_new_name(name, capability=capability)
-    if capability and acquire and not fixture:
+    if foundation and name != "repo-platform":
+        raise ScaffoldMismatch("expected the repo-platform foundation")
+    if capability and acquire and not fixture and not foundation:
         raise ScaffoldMismatch("Personal capability creation requires governed capability enrollment")
     root, parts = owner_location(fixture, capability=capability)
     if any(key in os.environ for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
@@ -263,9 +265,10 @@ def stage(checkout, operation, phase):
 if __name__ == "__main__":
     action, name, fixture, option = sys.argv[1:]
     try:
-        if action in {"target", "acquire", "capability-target", "capability-acquire"}:
-            print(target(name, fixture, option == "1", acquire=action.endswith("acquire"),
-                         capability=action.startswith("capability-")))
+        if action in {"target", "acquire", "capability-target", "capability-acquire", "capability-foundation"}:
+            foundation = action == "capability-foundation"
+            print(target(name, fixture, option == "1", acquire=foundation or action.endswith("acquire"),
+                         capability=action.startswith("capability-"), foundation=foundation))
         elif action in {"check", "lock"}:
             check_checkout(Path(name), fixture, lock=action == "lock")
         elif action == "binding":

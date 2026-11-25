@@ -12,6 +12,7 @@
 #   _ops/bin/dev-new-repo.sh <name> [--public|--private] [--desc "text"] [--resume] [--dry-run]
 #   _ops/bin/dev-new-repo.sh --personal-codex <name> [--dry-run | --resume] [--public|--private]
 #   _ops/bin/dev-new-repo.sh --personal-codex --capability <name> --dry-run [--public|--private]
+#   _ops/bin/dev-new-repo.sh --personal-codex --capability repo-platform --kind tool --shape release-descriptor --public --no-push --prepare-foundation [--resume]
 #   _ops/bin/dev-new-repo.sh --capability <name> [--kind skill|rule|sub-agent|tool] [--shape snapshot|release-descriptor|descriptor-only] --dry-run
 #
 # Safe by design: --dry-run prints the exact plan and changes nothing. A real run refuses an
@@ -30,6 +31,7 @@ TEST_SHARDING="$SCRIPT_DIR/test-sharding.py"
 TEST_SHARDING_REQUIRED=1
 
 NAME=""; VIS="private"; VIS_EXPLICIT=0; PUSH=1; DRYRUN=0; DESC=""; DESC_EXPLICIT=0; CAPABILITY=0; KIND="skill"; SHAPE="descriptor-only"; FIXTURE_ROOT=""; FIXTURE_REPOSITORY_ID=""; FIXTURE_INTERRUPT_AFTER=""; RESUME=0; LEGACY_V1=0; PERSONAL_CODEX=0; PERSONAL_BINDING=""
+PREPARE_FOUNDATION=0; FOUNDATION_HEAD=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --personal-codex) PERSONAL_CODEX=1 ;;
@@ -43,6 +45,16 @@ while [ $# -gt 0 ]; do
     --no-pr-automation) : ;; # retained compatibility; enrollment is always disabled
     --dry-run) DRYRUN=1 ;;
     --resume) RESUME=1 ;;
+    --prepare-foundation) PREPARE_FOUNDATION=1 ;;
+    --foundation-head)
+      shift
+      FOUNDATION_HEAD="${1:-}"
+      case "$FOUNDATION_HEAD" in
+        *[!0-9a-f]*|"") printf 'dev-new-repo: --foundation-head requires a full commit SHA\n' >&2; exit 2 ;;
+      esac
+      [ "${#FOUNDATION_HEAD}" -eq 40 ] ||
+        { printf 'dev-new-repo: --foundation-head requires a full commit SHA\n' >&2; exit 2; }
+      ;;
     --legacy-v1) LEGACY_V1=1 ;;
     --fixture-repository-id)
       [ $# -ge 2 ] && case "$2" in -*) false ;; *) true ;; esac ||
@@ -112,6 +124,17 @@ esac
   { printf 'dev-new-repo: fixture controls require --fixture-root\n' >&2; exit 2; }
 [ "$RESUME" -eq 0 ] || [ "$CAPABILITY" -eq 0 ] || [ "$PERSONAL_CODEX" -eq 1 ] ||
   { printf 'dev-new-repo: --resume is not supported for capability scaffolds\n' >&2; exit 2; }
+if [ "$PREPARE_FOUNDATION" -eq 1 ] || [ -n "$FOUNDATION_HEAD" ]; then
+  [ "$PERSONAL_CODEX" -eq 1 ] && [ "$CAPABILITY" -eq 1 ] && [ "$NAME" = repo-platform ] &&
+    [ "$KIND" = tool ] && [ "$SHAPE" = release-descriptor ] && [ "$VIS" = public ] && [ "$PUSH" -eq 0 ] ||
+    { printf 'dev-new-repo: foundation operations require the explicitly selected Personal public repo-platform capability with --no-push\n' >&2; exit 2; }
+fi
+if [ -n "$FOUNDATION_HEAD" ]; then
+  [ "$PREPARE_FOUNDATION" -eq 0 ] && [ "$DRYRUN" -eq 0 ] && [ "$RESUME" -eq 1 ] ||
+    { printf 'dev-new-repo: a foundation head applies only when resuming after preparation\n' >&2; exit 2; }
+  [ -z "$FIXTURE_ROOT" ] || [ -n "$FIXTURE_REPOSITORY_ID" ] ||
+    { printf 'dev-new-repo: a foundation replay needs the original simulated repository ID\n' >&2; exit 2; }
+fi
 
 DELIVERY_CLASS="$(bl_delivery_class "$OM_GH_USER/$NAME")"
 case "$DELIVERY_CLASS" in
@@ -145,14 +168,16 @@ if [ "$PERSONAL_CODEX" -eq 1 ]; then
   PERSONAL_TARGET_ACTION=target
   PERSONAL_ACQUIRE_ACTION=acquire
   if [ "$CAPABILITY" -eq 1 ]; then
-    if [ "$DRYRUN" -eq 0 ]; then
+    if [ "$PREPARE_FOUNDATION" -eq 1 ] || [ -n "$FOUNDATION_HEAD" ]; then
+      PERSONAL_ACQUIRE_ACTION=capability-foundation
+    elif [ "$DRYRUN" -eq 0 ]; then
       [ -n "$FIXTURE_ROOT" ] ||
         { printf 'dev-new-repo: Personal capability creation requires governed capability enrollment\n' >&2; exit 2; }
       [ "$KIND" = tool ] && [ "$SHAPE" = release-descriptor ] && [ -n "$FIXTURE_REPOSITORY_ID" ] ||
         { printf 'dev-new-repo: capability fixtures require the standalone tool shape and a simulated repository ID\n' >&2; exit 2; }
+      PERSONAL_ACQUIRE_ACTION=capability-acquire
     fi
     PERSONAL_TARGET_ACTION=capability-target
-    PERSONAL_ACQUIRE_ACTION=capability-acquire
   fi
   TARGET="$(python3 -I -B "$PERSONAL_TARGET" "$PERSONAL_TARGET_ACTION" "$NAME" "$FIXTURE_ROOT" "$RESUME")"
 elif [ "$CAPABILITY" -eq 1 ]; then
@@ -705,6 +730,17 @@ run_born_v2() {
       qualification_note="governed capability enrollment is required before creation"
       footer_note="the capability owner must qualify enrollment and bootstrap before this preview can be applied."
     fi
+    if [ "$PREPARE_FOUNDATION" -eq 1 ]; then
+      cat <<EOF
+dev-new-repo local foundation preview:
+  destination: $OM_GH_USER/$NAME ($VIS)
+  checkout   : $TARGET
+  local plan : initialize or resume, apply local baseline, verify documentation and required sharding, retain the initial commit
+  review     : report the exact initial commit and tree for the public foundation decision
+  effects    : local checkout and operation journal only
+EOF
+      return
+    fi
     if [ "$DELIVERY_CLASS" = native-github ]; then
       workflow_note="none during bootstrap; native GitHub CI follows verified bootstrap"
       qualification_note="repository-owned native delivery; no controller enrollment"
@@ -790,6 +826,29 @@ EOF
     REMOTE_OPERATION_ID="$(read_operation_state "$state_file" remote_operation_id)"
     GITHUB_REPOSITORY_ID="$(read_operation_state "$state_file" github_repository_id)"
     phase="$(read_operation_state "$state_file" phase)"
+    if [ "$PREPARE_FOUNDATION" -eq 1 ]; then
+      case "$phase" in
+        initialized|baseline-ready|initial-committed) ;;
+        *) printf 'dev-new-repo: foundation preparation cannot resume after provider creation begins\n' >&2; return 2 ;;
+      esac
+    fi
+    if [ -n "$FOUNDATION_HEAD" ]; then
+      case "$phase" in
+        initial-committed|remote-create-attempted|remote-created-marked)
+          [ "$(git rev-parse HEAD)" = "$FOUNDATION_HEAD" ] ||
+            { printf 'dev-new-repo: the exact reviewed foundation head has changed\n' >&2; return 2; }
+          ;;
+        remote-created|second-committed|waiting-external)
+          [ "$(git rev-list --max-parents=0 HEAD)" = "$FOUNDATION_HEAD" ] &&
+            [ "$(git rev-list --count HEAD)" -le 2 ] ||
+            { printf 'dev-new-repo: the exact reviewed foundation head has changed\n' >&2; return 2; }
+          ;;
+        *)
+          printf 'dev-new-repo: prepare and review the initial foundation commit before provider creation\n' >&2
+          return 2
+          ;;
+      esac
+    fi
     if [ "$(read_operation_state "$state_file" test_sharding_required)" != True ]; then
       TEST_SHARDING_REQUIRED=0
     fi
@@ -846,7 +905,7 @@ EOF
     }
   fi
   REMOTE_MARKER="https://doc-warden.invalid/operations/$REMOTE_OPERATION_ID"
-  if [ -n "$FIXTURE_ROOT" ] && [ -n "$FIXTURE_REPOSITORY_ID" ]; then
+  if [ "$PREPARE_FOUNDATION" -eq 0 ] && [ -n "$FIXTURE_ROOT" ] && [ -n "$FIXTURE_REPOSITORY_ID" ]; then
     install_fixture_github_cli
   fi
   XDG_STATE_HOME="$(dirname "$state_file")/doc-warden-operation-state"
@@ -859,6 +918,10 @@ EOF
   }
   trap cleanup_born_v2_temp_state EXIT
 
+  local baseline_options=()
+  if [ "$PREPARE_FOUNDATION" -eq 1 ]; then
+    baseline_options=(--local-only)
+  fi
   if [ "$phase" = "initialized" ]; then
     check_checkout_location
     bash "$INSTALL_GUARD" "$TARGET" >/dev/null
@@ -867,10 +930,10 @@ EOF
         baseline_output="$(
           env -u GH_TOKEN -u GITHUB_TOKEN \
             GH_CONFIG_DIR="$(dirname "$state_file")/doc-warden-gh-config" \
-            bash "$REPO_BASELINE" verify "$TARGET"
+            bash "$REPO_BASELINE" verify "$TARGET" ${baseline_options[@]+"${baseline_options[@]}"}
         )"
       else
-        baseline_output="$(bash "$REPO_BASELINE" verify "$TARGET")"
+        baseline_output="$(bash "$REPO_BASELINE" verify "$TARGET" ${baseline_options[@]+"${baseline_options[@]}"})"
       fi
       printf '%s\n' "$baseline_output" | grep -q 'Overall: COMPLIANT' ||
         {
@@ -882,9 +945,9 @@ EOF
       if [ -n "$FIXTURE_ROOT" ]; then
         env -u GH_TOKEN -u GITHUB_TOKEN \
           GH_CONFIG_DIR="$(dirname "$state_file")/doc-warden-gh-config" \
-          bash "$REPO_BASELINE" apply "$TARGET" >/dev/null
+          bash "$REPO_BASELINE" apply "$TARGET" ${baseline_options[@]+"${baseline_options[@]}"} >/dev/null
       else
-        bash "$REPO_BASELINE" apply "$TARGET" >/dev/null
+        bash "$REPO_BASELINE" apply "$TARGET" ${baseline_options[@]+"${baseline_options[@]}"} >/dev/null
       fi
     fi
     update_operation_state "$state_file" baseline-ready
@@ -929,6 +992,28 @@ EOF
   if [ "$FIXTURE_INTERRUPT_AFTER" = "initial-committed" ] && [ "$phase" = "initial-committed" ]; then
     printf 'dev-new-repo: interrupted before remote creation; the verified local commit is retained for --resume and no remote was created\n' >&2
     return 75
+  fi
+
+  if [ "$PREPARE_FOUNDATION" -eq 1 ]; then
+    verify_initial_commit_recovery
+    python3 - "$PERSONAL_PATH" "$OM_GH_USER/$NAME" "$DESC" "$(git rev-parse HEAD)" "$(git rev-parse 'HEAD^{tree}')" <<'PY'
+import json
+import sys
+
+target, repository, description, head, tree = sys.argv[1:]
+print(json.dumps({
+    "schema": "dev-capability-foundation-prepared/v1",
+    "checkout": target,
+    "repository": repository,
+    "description": description,
+    "visibility": "public",
+    "initial_head": head,
+    "initial_tree": tree,
+    "github_repository_id": None,
+    "next_action": "review_exact_public_foundation",
+}, sort_keys=True))
+PY
+    return
   fi
 
   if [ -n "$FIXTURE_ROOT" ] && [ -z "$FIXTURE_REPOSITORY_ID" ]; then
@@ -1089,6 +1174,13 @@ EOF
     fi
     update_operation_state "$state_file" second-committed "$GITHUB_REPOSITORY_ID"
     phase="second-committed"
+  fi
+
+  if [ -n "$FOUNDATION_HEAD" ] && [ "$phase" = "waiting-external" ]; then
+    [ -n "$GITHUB_REPOSITORY_ID" ] ||
+      { printf 'dev-new-repo: foundation provider identity is unavailable\n' >&2; return 2; }
+    check_checkout_location
+    validate_remote_creation_metadata "$(github_repository_metadata)" "" "$GITHUB_REPOSITORY_ID" >/dev/null
   fi
 
   # DOC_WARDEN_FIXTURE_PUSH_REMOTE is fixture-mode-only: exercising this block without

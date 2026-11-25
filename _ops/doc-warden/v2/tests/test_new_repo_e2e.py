@@ -369,6 +369,66 @@ class NewRepositoryEndToEndTests(unittest.TestCase):
             self.assertEqual([path.name for path in other.iterdir()], ["sample-tool"])
             self.assertFalse((root / ".doc-warden-fixture-remotes").exists())
 
+    def test_personal_capability_foundation_prepares_exact_local_tree_without_provider(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "capabilities").mkdir()
+            provider_fence = root / "provider-fence"
+            provider_fence.mkdir()
+            github = provider_fence / "gh"
+            github.write_text('#!/bin/sh\nprintf invoked > "$FOUNDATION_GH_OBSERVATION"\nexit 1\n')
+            github.chmod(0o700)
+            observation = root / "gh-called"
+            env = {"PATH": f"{provider_fence}:{os.environ['PATH']}",
+                   "FOUNDATION_GH_OBSERVATION": str(observation)}
+            name = "repo-platform"
+            arguments = ("--personal-codex", "--capability", "--kind", "tool",
+                         "--shape", "release-descriptor", "--public", "--no-push",
+                         "--fixture-repository-id", "931885", "--desc", "Disposable foundation")
+            resume = (*arguments, "--prepare-foundation", "--resume")
+
+            preview = self.run_scaffold(root, name, *arguments, "--prepare-foundation", "--dry-run",
+                                        extra_env=env)
+            self.assertIn("local checkout and operation journal only", preview.stdout)
+            target = root / "capabilities" / name
+            self.assertFalse(target.exists())
+            interrupted = self.run_scaffold(root, name, *arguments, "--prepare-foundation",
+                                             "--fixture-interrupt-after", "initial-committed",
+                                             check=False, extra_env=env)
+            self.assertEqual(interrupted.returncode, 75, interrupted.stderr)
+            prepared = self.result(self.run_scaffold(root, name, *resume, extra_env=env))
+            self.assertEqual(prepared["initial_head"], self.git(target, "rev-parse", "HEAD"))
+            self.assertEqual(prepared["initial_tree"], self.git(target, "rev-parse", "HEAD^{tree}"))
+            self.assertIsNone(prepared["github_repository_id"])
+            self.assertEqual(prepared, self.result(self.run_scaffold(root, name, *resume, extra_env=env)))
+            self.assertEqual(self.operation(target)["phase"], "initial-committed")
+            self.assertFalse(observation.exists())
+            self.assertFalse((root / ".doc-warden-fixture-remotes").exists())
+
+            wrong_head = self.run_scaffold(root, name, *arguments, "--resume", "--foundation-head",
+                                           "0" * 40, check=False, extra_env=env)
+            self.assertEqual(wrong_head.returncode, 2, wrong_head.stderr)
+            self.assertIn("the exact reviewed foundation head has changed", wrong_head.stderr)
+            self.assertFalse((root / ".doc-warden-fixture-remotes").exists())
+            observed = (*arguments, "--resume", "--foundation-head", prepared["initial_head"])
+            provider_attempt = self.run_scaffold(root, name, *observed,
+                                                 "--fixture-interrupt-after", "remote-create-attempted",
+                                                 check=False)
+            self.assertEqual(provider_attempt.returncode, 75, provider_attempt.stderr)
+            too_late = self.run_scaffold(root, name, *resume, check=False, extra_env=env)
+            self.assertEqual(too_late.returncode, 2, too_late.stderr)
+            self.assertIn("cannot resume after provider creation begins", too_late.stderr)
+            self.assertFalse(observation.exists())
+            self.assertEqual(self.git(target, "rev-parse", "HEAD"), prepared["initial_head"])
+            result = self.result(self.run_scaffold(root, name, *observed))
+            self.assertEqual(result["github_repository_id"], 931885)
+            self.assertEqual(self.git(target, "rev-parse", "HEAD^"), prepared["initial_head"])
+            self.assertEqual(self.git(target, "status", "--porcelain"), "")
+            repeated = self.result(self.run_scaffold(root, name, *observed))
+            self.assertEqual(repeated["github_repository_id"], 931885)
+            calls = root / f".doc-warden-fixture-remotes/{name}.calls"
+            self.assertEqual(sum(row.startswith("repo create ") for row in calls.read_text().splitlines()), 1)
+
     def test_personal_capability_fixture_replays_both_provider_boundaries(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
