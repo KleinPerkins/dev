@@ -11,6 +11,7 @@
 # Usage:
 #   _ops/bin/dev-new-repo.sh <name> [--public|--private] [--desc "text"] [--resume] [--dry-run]
 #   _ops/bin/dev-new-repo.sh --personal-codex <name> [--dry-run | --resume] [--public|--private]
+#   _ops/bin/dev-new-repo.sh --personal-codex --capability <name> --dry-run [--public|--private]
 #   _ops/bin/dev-new-repo.sh --capability <name> [--kind skill|rule|sub-agent|tool] [--shape snapshot|release-descriptor|descriptor-only] --dry-run
 #
 # Safe by design: --dry-run prints the exact plan and changes nothing. A real run refuses an
@@ -109,7 +110,7 @@ case "$FIXTURE_INTERRUPT_AFTER" in
 esac
 [ -z "$FIXTURE_REPOSITORY_ID$FIXTURE_INTERRUPT_AFTER" ] || [ -n "$FIXTURE_ROOT" ] ||
   { printf 'dev-new-repo: fixture controls require --fixture-root\n' >&2; exit 2; }
-[ "$RESUME" -eq 0 ] || [ "$CAPABILITY" -eq 0 ] ||
+[ "$RESUME" -eq 0 ] || [ "$CAPABILITY" -eq 0 ] || [ "$PERSONAL_CODEX" -eq 1 ] ||
   { printf 'dev-new-repo: --resume is not supported for capability scaffolds\n' >&2; exit 2; }
 
 DELIVERY_CLASS="$(bl_delivery_class "$OM_GH_USER/$NAME")"
@@ -135,13 +136,25 @@ fi
 
 
 if [ "$PERSONAL_CODEX" -eq 1 ]; then
-  [ "$CAPABILITY" -eq 0 ] && [ "$LEGACY_V1" -eq 0 ] && [ "$DELIVERY_CLASS" = unenrolled ] ||
-    { printf 'dev-new-repo: personal creation requires a new product name and born-v2 scaffold\n' >&2; exit 2; }
+  [ "$LEGACY_V1" -eq 0 ] && [ "$DELIVERY_CLASS" = unenrolled ] ||
+    { printf 'dev-new-repo: personal creation requires a new repository name and born-v2 scaffold\n' >&2; exit 2; }
   [ "${GH_HOST:-github.com}" = github.com ] && [ -z "${DOC_WARDEN_FIXTURE_PUSH_REMOTE:-}" ] ||
     { printf 'dev-new-repo: personal creation requires the canonical GitHub destination\n' >&2; exit 2; }
   export GH_HOST=github.com
   PERSONAL_TARGET="$SCRIPT_DIR/../portability/personal_scaffold.py"
-  TARGET="$(python3 -I -B "$PERSONAL_TARGET" target "$NAME" "$FIXTURE_ROOT" "$RESUME")"
+  PERSONAL_TARGET_ACTION=target
+  PERSONAL_ACQUIRE_ACTION=acquire
+  if [ "$CAPABILITY" -eq 1 ]; then
+    if [ "$DRYRUN" -eq 0 ]; then
+      [ -n "$FIXTURE_ROOT" ] ||
+        { printf 'dev-new-repo: Personal capability creation requires governed capability enrollment\n' >&2; exit 2; }
+      [ "$KIND" = tool ] && [ "$SHAPE" = release-descriptor ] && [ -n "$FIXTURE_REPOSITORY_ID" ] ||
+        { printf 'dev-new-repo: capability fixtures require the standalone tool shape and a simulated repository ID\n' >&2; exit 2; }
+    fi
+    PERSONAL_TARGET_ACTION=capability-target
+    PERSONAL_ACQUIRE_ACTION=capability-acquire
+  fi
+  TARGET="$(python3 -I -B "$PERSONAL_TARGET" "$PERSONAL_TARGET_ACTION" "$NAME" "$FIXTURE_ROOT" "$RESUME")"
 elif [ "$CAPABILITY" -eq 1 ]; then
   TARGET="$DEV_ROOT/capabilities/$NAME"
 elif [ -n "$FIXTURE_ROOT" ]; then
@@ -639,7 +652,7 @@ PY
 enter_personal_checkout() {
   PERSONAL_PATH="$TARGET"
   cd -P -- "${PERSONAL_PATH%/*}"
-  PERSONAL_NODE="$(python3 -I -B "$PERSONAL_TARGET" acquire "$NAME" "$FIXTURE_ROOT" "$RESUME")"
+  PERSONAL_NODE="$(python3 -I -B "$PERSONAL_TARGET" "$PERSONAL_ACQUIRE_ACTION" "$NAME" "$FIXTURE_ROOT" "$RESUME")"
   cd -P -- "./$NAME"
   exec 9<.
   python3 -I -B "$PERSONAL_TARGET" lock "$PERSONAL_PATH" "$PERSONAL_NODE" ""
@@ -688,6 +701,10 @@ run_born_v2() {
     local maintenance_note="retain pending repository-owned observation"
     local authority_note="successor delivery disposition"
     local footer_note="no .github/workflows files are created during bootstrap; private/no-CI and unenrolled targets remain without CI."
+    if [ "$CAPABILITY" -eq 1 ]; then
+      qualification_note="governed capability enrollment is required before creation"
+      footer_note="the capability owner must qualify enrollment and bootstrap before this preview can be applied."
+    fi
     if [ "$DELIVERY_CLASS" = native-github ]; then
       workflow_note="none during bootstrap; native GitHub CI follows verified bootstrap"
       qualification_note="repository-owned native delivery; no controller enrollment"
@@ -1111,7 +1128,7 @@ EOF
   emit_born_v2_result "$delivery_json" "$resumed" "$doctor_json"
 }
 
-if [ "$CAPABILITY" -eq 0 ] && [ "$LEGACY_V1" -eq 0 ]; then
+if [ "$LEGACY_V1" -eq 0 ] && { [ "$CAPABILITY" -eq 0 ] || [ "$PERSONAL_CODEX" -eq 1 ]; }; then
   run_born_v2
   exit $?
 fi

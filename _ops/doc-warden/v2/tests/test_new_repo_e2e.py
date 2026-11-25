@@ -326,6 +326,97 @@ class NewRepositoryEndToEndTests(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0)
             self.assertEqual(list(other.iterdir()), [])
 
+    def test_personal_capability_preview_uses_the_born_v2_owner_location(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            capabilities = root / "capabilities"
+            capabilities.mkdir()
+            (root / "personal/src/KleinPerkins").mkdir(parents=True)
+            arguments = ("--personal-codex", "--capability", "--kind", "tool",
+                         "--shape", "release-descriptor", "--public")
+            result = self.run_scaffold(root, "repo-platform", *arguments, "--dry-run")
+            self.assertIn("dev-new-repo born-v2 preview", result.stdout)
+            self.assertIn(str(capabilities / "repo-platform"), result.stdout)
+            self.assertIn("governed capability enrollment is required", result.stdout)
+            self.assertIn("sharding required", result.stdout)
+            self.assertEqual(list(capabilities.iterdir()), [])
+            for options in (arguments, (*arguments, "--resume"),
+                            ("--personal-codex", "--dry-run")):
+                with self.subTest(options=options):
+                    refused = self.run_scaffold(root, "repo-platform", *options, check=False)
+                    self.assertNotEqual(refused.returncode, 0)
+            self.assertFalse((root / ".doc-warden-fixture-remotes").exists())
+
+    def test_personal_capability_preview_refuses_foreign_and_excluded_destinations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            owner = root / "capabilities"
+            owner.mkdir()
+            existing = owner / "sample-tool"
+            existing.mkdir()
+            (existing / "unshared.txt").write_text("preserve this\n")
+            arguments = ("--personal-codex", "--capability", "--dry-run")
+            occupied = self.run_scaffold(root, "sample-tool", *arguments, check=False)
+            self.assertIn("target already occupied", occupied.stderr)
+            excluded = self.run_scaffold(root, "chaos-scheduler", *arguments, check=False)
+            self.assertIn("retired/excluded repository", excluded.stderr)
+            other = root / "other"
+            owner.rename(other)
+            owner.symlink_to(other, target_is_directory=True)
+            linked = self.run_scaffold(root, "repo-platform", *arguments, check=False)
+            self.assertNotEqual(linked.returncode, 0)
+            self.assertEqual((other / "sample-tool/unshared.txt").read_text(), "preserve this\n")
+            self.assertEqual([path.name for path in other.iterdir()], ["sample-tool"])
+            self.assertFalse((root / ".doc-warden-fixture-remotes").exists())
+
+    def test_personal_capability_fixture_replays_both_provider_boundaries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            owner = root / "capabilities"
+            owner.mkdir()
+            name = "repo-platform"
+            repository_id = 901284
+            arguments = ("--personal-codex", "--capability", "--kind", "tool",
+                         "--shape", "release-descriptor", "--public", "--no-push",
+                         "--fixture-repository-id", str(repository_id))
+            before = self.run_scaffold(root, name, *arguments,
+                                       "--fixture-interrupt-after", "remote-create-attempted", check=False)
+            self.assertEqual(before.returncode, 75, before.stderr)
+            target = owner / name
+            first = self.git(target, "rev-parse", "HEAD")
+            self.assertTrue((target / ".git/hooks/pre-commit").is_file())
+            self.assertTrue((target / ".github/test-sharding-required.json").is_file())
+            self.assertEqual(self.git(target, "config", "--local", "user.email"),
+                             "49759187+KleinPerkins@users.noreply.github.com")
+            calls = root / f".doc-warden-fixture-remotes/{name}.calls"
+            self.assertEqual(sum(row.startswith("repo create ") for row in calls.read_text().splitlines()), 0)
+
+            landed = self.run_scaffold(root, name, *arguments, "--resume",
+                                       "--fixture-interrupt-after", "remote-create-landed", check=False)
+            self.assertEqual(landed.returncode, 75, landed.stderr)
+            self.assertEqual(self.operation(target)["phase"], "remote-create-attempted")
+            calls_before = calls.read_bytes()
+            wrong_id = self.run_scaffold(root, name, *arguments[:-1], str(repository_id + 1),
+                                         "--resume", check=False)
+            self.assertNotEqual(wrong_id.returncode, 0)
+            self.assertIn("operation belongs to a different checkout or scaffold profile", wrong_id.stderr)
+            self.assertEqual(calls.read_bytes(), calls_before)
+            self.assertEqual(self.git(target, "rev-parse", "HEAD"), first)
+
+            cleared = self.run_scaffold(root, name, *arguments, "--resume",
+                                        "--fixture-interrupt-after", "remote-marker-cleared", check=False)
+            self.assertEqual(cleared.returncode, 75, cleared.stderr)
+            result = self.result(self.run_scaffold(root, name, *arguments, "--resume"))
+            self.assertEqual(result["github_repository_id"], repository_id)
+            self.assertTrue(result["resumed"])
+            self.assertEqual(self.git(target, "rev-parse", "HEAD^"), first)
+            final = self.git(target, "rev-parse", "HEAD")
+            duplicate = self.result(self.run_scaffold(root, name, *arguments, "--resume"))
+            self.assertEqual(duplicate["github_repository_id"], repository_id)
+            self.assertEqual(self.git(target, "rev-parse", "HEAD"), final)
+            self.assertEqual(self.git(target, "status", "--porcelain"), "")
+            self.assertEqual(sum(row.startswith("repo create ") for row in calls.read_text().splitlines()), 1)
+
     def test_remote_observation_is_second_guarded_commit_and_resume_is_idempotent(self):
         with tempfile.TemporaryDirectory(prefix="doc-warden-m4-remote-") as directory:
             root = Path(directory)
