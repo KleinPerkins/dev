@@ -46,8 +46,7 @@ class GitHubProviderTests(unittest.TestCase):
     def test_invalid_git_branch_is_refused_before_branch_lookup(self):
         for name in ("main..evil", "feature~1", "name.lock", "dir.lock/next", "dir/.private",
                      "main?", "main*", "main[", "main\\", "main^", "main:", "main@{oops}",
-                     "trail.", "space bar", "main//broken", "-option", "HEAD", "refs/heads/main",
-                     "c" * 40, "\ud800", "é" * 513):
+                     "trail.", "space bar", "main//broken", "\ud800", "é" * 513):
             with self.subTest(name=name):
                 backend = self.get(REPO | {"default_branch": name}, BRANCH | {"name": name},
                                    REPO | {"default_branch": name})
@@ -73,6 +72,24 @@ class GitHubProviderTests(unittest.TestCase):
                    return_value=SimpleNamespace(stdout=b'{"name":"@"}200')) as runner:
             self.assertEqual(public_github_get("/repositories/902/branches/%40", deadline=deadline()), {"name": "@"})
         self.assertEqual(runner.call_args.args[0][-1], "https://api.github.com/repositories/902/branches/%40")
+
+    def test_branch_reads_require_literal_identity_even_for_revision_like_names(self):
+        for name in ("HEAD", "Ca" * 20, "-option", "refs/heads/main"):
+            with self.subTest(name=name):
+                subprocess.run(["/usr/bin/git", "check-ref-format", "refs/heads/" + name],
+                               check=True, capture_output=True, timeout=5)
+                repo = REPO | {"default_branch": name}
+                branch = BRANCH | {"name": name}
+                backend = self.get(repo, branch, repo)
+                self.assertEqual(self.observation(backend).default_branch, name)
+                url_path = "/repositories/902/branches/" + quote(name, safe="")
+                self.assertEqual(backend.call_args_list[1].args[0], url_path)
+                response = SimpleNamespace(stdout=json.dumps(branch).encode() + b"200")
+                with patch("github_checkout_provider.subprocess.run", return_value=response) as runner:
+                    self.assertEqual(public_github_get(url_path, deadline=deadline()), branch)
+                self.assertEqual(runner.call_args.args[0][-1], "https://api.github.com" + url_path)
+                with self.assertRaisesRegex(Refused, "did not confirm the selected default branch"):
+                    self.observation(self.get(repo, BRANCH, repo))
 
     def test_same_slug_on_a_different_id_refuses_before_branch_lookup(self):
         backend = self.get(REPO | {"id": 903})
