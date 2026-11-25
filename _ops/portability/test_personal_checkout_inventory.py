@@ -161,6 +161,33 @@ class CheckoutInventoryTests(unittest.TestCase):
                                                        physical_binding_digest=physical, deadline=deadline())
         self.assertEqual(self.inventory.snapshot()[1], pending)
 
+    def test_rolled_back_operation_does_not_supersede_prior_checkout_evidence(self):
+        operation = "owner-configurations"
+        physical = "c" * 64
+        changes = {self.first.checkout: self.first}
+        observations = [{"checkout": self.first.checkout, "git_config_sha256": "b" * 64}]
+        record = self.owner_record(operation, physical, observations)
+        self.inventory.reserve_evidence_reissue(self.version, operation, changes, owner_record=record,
+                                                physical_binding_digest=physical, deadline=deadline())
+        current = self.inventory.finish_evidence_reissue(operation, owner_record=record,
+                                                         physical_binding_digest=physical, deadline=deadline())
+        earlier = self.inventory.current_owner_evidence(operation, deadline=deadline())
+        self.inventory.reserve(current, "interrupted-retirement", {self.first.checkout: None}, deadline=deadline())
+        with self.assertRaisesRegex(Refused, "pending"):
+            self.inventory.current_owner_evidence(operation, deadline=deadline())
+        restored = self.inventory.finish("interrupted-retirement", outcome="rolled-back",
+                                         owner_evidence="owner verified the original checkout", deadline=deadline())
+        self.assertGreater(restored[1], current[1])
+        self.assertEqual(self.inventory.current_owner_evidence(operation, deadline=deadline()),
+                         replace(earlier, current=restored))
+        with self.assertRaisesRegex(Refused, "no committed checkout evidence"):
+            self.inventory.current_owner_evidence("interrupted-retirement", deadline=deadline())
+        self.inventory.reserve(restored, "new-binding-proof", changes, deadline=deadline())
+        self.inventory.finish("new-binding-proof", outcome="committed", owner_evidence="owner verified the renewal",
+                              deadline=deadline())
+        with self.assertRaisesRegex(Refused, "superseded for a selected checkout"):
+            self.inventory.current_owner_evidence(operation, deadline=deadline())
+
     def test_prepared_evidence_may_observe_only_its_reserved_checkout(self):
         operation = "owner-reissue"
         physical = "c" * 64

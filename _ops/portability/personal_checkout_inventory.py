@@ -430,7 +430,8 @@ class Inventory:
             for request, other_result in operations:
                 if time.monotonic() >= deadline:
                     raise Refused("the owner evidence read exceeded its authority budget")
-                if (json.loads(other_result)["version"][1] > completed[1]
+                later = json.loads(other_result)
+                if (later["outcome"] == "committed" and later["version"][1] > completed[1]
                         and not changes.keys().isdisjoint(json.loads(request)["changes"])):
                     raise Refused("the owner evidence was superseded for a selected checkout")
             if time.monotonic() >= deadline:
