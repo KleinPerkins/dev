@@ -15,11 +15,22 @@ MAX_REPLY_BYTES = 256 * 1024
 IDENTIFIER = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 
 
-def selection_digest(project_id, checkout, thread_id=None):
+def _selected_path(project_id, checkout):
+    if not isinstance(project_id, str) or not IDENTIFIER.fullmatch(project_id):
+        raise Refused("the selection needs an explicit Codex project ID")
+    return lexical(checkout)
+
+
+def _selection_identity(project_id, checkout, thread_id):
+    checkout = _selected_path(project_id, checkout)
     if thread_id is not None and (not isinstance(thread_id, str) or not IDENTIFIER.fullmatch(thread_id)):
         raise Refused("the linked checkout needs a valid Codex thread ID")
-    identity = [project_id, checkout] if thread_id is None else [project_id, checkout, thread_id]
-    selected = json.dumps(identity, ensure_ascii=True, separators=(",", ":"))
+    return [project_id, checkout] if thread_id is None else [project_id, checkout, thread_id]
+
+
+def selection_digest(project_id, checkout, thread_id=None):
+    selected = json.dumps(_selection_identity(project_id, checkout, thread_id), ensure_ascii=True,
+                          separators=(",", ":"))
     return sha256(selected.encode()).hexdigest()
 
 
@@ -32,15 +43,12 @@ class NativeProjectBinding:
     observed_at: int
     thread_id: str | None = None
 
+    def __post_init__(self):
+        _selection_identity(self.project_id, self.checkout, self.thread_id)
+
     @property
     def selection_digest(self):
         return selection_digest(self.project_id, self.checkout, self.thread_id)
-
-
-def _selected_path(project_id, checkout):
-    if not isinstance(project_id, str) or not IDENTIFIER.fullmatch(project_id):
-        raise Refused("the selection needs an explicit Codex project ID")
-    return lexical(checkout)
 
 
 def read_desktop_project(catalog, project_id, checkout, *, observed_at):

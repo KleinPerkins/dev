@@ -1,6 +1,8 @@
 import unittest
 
-from native_checkout_project import Refused, read_desktop_linked_project, read_desktop_project, selection_digest
+from native_checkout_project import (
+    NativeProjectBinding, Refused, read_desktop_linked_project, read_desktop_project, selection_digest,
+)
 
 PROJECT = "01b2dd20-ef5c-7dc9-887b-125176aeba52"
 CHECKOUT = "/fixture/personal/src/Fixture/repo"
@@ -17,6 +19,7 @@ class DesktopProjection(unittest.TestCase):
         result = self.observe([ROW])
         self.assertEqual((result.project_id, result.checkout, result.observed_at), (PROJECT, CHECKOUT, 300))
         self.assertEqual(result.selection_digest, selection_digest(PROJECT, CHECKOUT))
+        self.assertEqual(result.selection_digest, "f2f12299e83b4ce6459f1db264c5e82431e5f8cfa6779d65ae66e3be18b4075e")
         self.assertIsNone(result.updated_at)
 
     def test_title_difference_and_absence_do_not_change_the_selection(self):
@@ -49,6 +52,22 @@ class DesktopProjection(unittest.TestCase):
         with self.assertRaisesRegex(Refused, "not a canonical absolute path"):
             self.observe([ROW], path=CHECKOUT + "/../elsewhere")
 
+    def test_alternate_constructors_cannot_digest_an_invalid_project_id(self):
+        for identifier in ("", True, "wrong/project", "?" * 2, "a" * 129):
+            with self.subTest(identifier=identifier):
+                with self.assertRaisesRegex(Refused, "explicit Codex project ID"):
+                    selection_digest(identifier, CHECKOUT)
+                with self.assertRaisesRegex(Refused, "explicit Codex project ID"):
+                    NativeProjectBinding(identifier, CHECKOUT, "Fixture", None, 300)
+
+    def test_alternate_constructors_refuse_noncanonical_checkout_strings(self):
+        for location in ("relative/path", CHECKOUT + "/../elsewhere", CHECKOUT + "//alias", CHECKOUT + "/"):
+            with self.subTest(location=location):
+                with self.assertRaisesRegex(Refused, "not a canonical absolute path"):
+                    selection_digest(PROJECT, location)
+                with self.assertRaisesRegex(Refused, "not a canonical absolute path"):
+                    NativeProjectBinding(PROJECT, location, "Fixture", None, 300)
+
     def test_unrecognized_schema_and_invalid_observation_time_refuse(self):
         for schema, stamp in ((3, 300), (2.0, 300), (2, True), (2, -1)):
             with self.subTest(schema=schema, stamp=stamp), self.assertRaisesRegex(Refused, "current catalog"):
@@ -78,6 +97,7 @@ class DesktopLinkedSelection(unittest.TestCase):
         self.assertEqual((selected.project_id, selected.checkout, selected.thread_id, selected.observed_at),
                          (LINKED_PROJECT, LINKED, THREAD, 1002))
         self.assertEqual(selected.selection_digest, selection_digest(LINKED_PROJECT, LINKED, THREAD))
+        self.assertEqual(selected.selection_digest, "593dc829328eeb6be73550424dae2683935743733cc7cce3c943002e483481e2")
         self.assertNotEqual(selected.selection_digest, selection_digest(LINKED_PROJECT, LINKED))
 
     def test_thread_with_the_same_path_from_another_project_is_held(self):
@@ -110,3 +130,5 @@ class DesktopLinkedSelection(unittest.TestCase):
     def test_invalid_optional_native_thread_id_refuses_before_a_digest(self):
         with self.assertRaisesRegex(Refused, "valid Codex thread ID"):
             selection_digest(LINKED_PROJECT, LINKED, {"unexpected": "structure"})
+        with self.assertRaisesRegex(Refused, "valid Codex thread ID"):
+            NativeProjectBinding(LINKED_PROJECT, LINKED, "Fixture", None, 300, "invalid/thread")
