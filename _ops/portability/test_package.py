@@ -20,6 +20,7 @@ SPEC.loader.exec_module(package)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import personal_core
+import personal_index_package
 
 
 class PersonalCoreTests(unittest.TestCase):
@@ -314,12 +315,49 @@ class StandardDevSkillTests(unittest.TestCase):
                 path.write_bytes(data)
                 path.chmod(0o755 if relative == "cli.js" else 0o644)
         self.provision = patch.object(personal_core, "provision_isokit", side_effect=provision).start()
+        index = personal_index_package.RELEASE
+        index_url = ("https://raw.githubusercontent.com/KleinPerkins/skills/"
+                     f"{index['revision']}/global/tools/ecosystem-index/")
+        index_files = {}
+        for name in index["index_files"]:
+            data = b"# fixture runtime\n"
+            responses[index_url + name] = data
+            index_files[name] = ["100644", len(data), hashlib.sha256(data).hexdigest()]
+        fixture_parser = personal_core.LOCAL_JOBS_RELEASE["pyyaml"]
+        patch.object(personal_index_package, "RELEASE", {
+            "revision": index["revision"], "index_files": index_files, "pyyaml": fixture_parser,
+        }).start()
         self.design_read = patch.object(personal_core, "read_url", side_effect=lambda url, length: responses[url]).start()
         self.bundles = {name: dev.DevSkillRelease(name, self.home) for name in releases}
         self.slots = self.codex / "skills"
 
     def configure(self, action):
         return personal_core.configure_profile(self.home, self.codex, action)
+
+    def test_index_runtime_uses_owned_profile_slot_and_restores_offline(self):
+        entry = personal_core.index_runtime_entry(self.home, self.codex)
+        self.assertFalse(self.codex.exists())
+        self.configure("install")
+        self.configure("check")
+        self.assertNotIn(entry.slot.name, {p.name for p in self.slots.iterdir()})
+        self.assertTrue(personal_core.owns_slot(entry.slot, entry.control / entry.slot.name, entry.release))
+        ordinary_slots = {p.name: p.lstat().st_ino for p in self.slots.iterdir()}
+        entry.slot.unlink()
+        entry.slot.symlink_to(entry.release)
+        foreign = entry.slot.lstat()
+        with self.assertRaisesRegex(ValueError, "belongs to another installer"):
+            self.configure("install")
+        self.assertTrue(os.path.samestat(foreign, entry.slot.lstat()))
+        self.assertEqual(ordinary_slots, {p.name: p.lstat().st_ino for p in self.slots.iterdir()})
+        entry.slot.unlink()
+        os.link(entry.control / entry.slot.name, entry.slot, follow_symlinks=False)
+        self.configure("withdraw")
+        self.assertFalse(os.path.lexists(entry.slot))
+        self.assertTrue(entry.release.is_dir())
+        self.design_read.side_effect = AssertionError("offline restore attempted to download")
+        self.configure("install")
+        self.configure("check")
+        self.assertTrue(personal_core.owns_slot(entry.slot, entry.control / entry.slot.name, entry.release))
 
     def select_new_doctor(self):
         import personal_dev_skills as dev
@@ -429,8 +467,10 @@ class StandardDevSkillTests(unittest.TestCase):
             "prompt-architect",
             "save-game", "verification-before-completion", "web-artifacts-builder"])
         originals = {p.name: p.lstat() for p in self.slots.iterdir()}
+        index = personal_core.index_runtime_entry(self.home, self.codex)
         with patch.object(personal_core, "FileLock", side_effect=AssertionError("check acquired a write lock")):
-            self.assertEqual(len(self.configure("check")), len(originals))
+            self.assertEqual(len(self.configure("check")), len(originals) + 1)
+        self.assertTrue(index.slot.is_symlink())
         self.assertTrue(all(os.path.samestat(info, (self.slots / name).lstat()) for name, info in originals.items()))
         self.configure("install")
         self.assertTrue(all(os.path.samestat(info, (self.slots / name).lstat()) for name, info in originals.items()))

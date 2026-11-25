@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from engine import FileLock, PortabilityError, SafetyError, _rename_noreplace
 from personal_dev_skills import DevSkillRelease
 from personal_package_files import physical_path, seal_directories, verify_file, verify_skill_tree
+import personal_index_package
 import personal_local_jobs
 
 
@@ -246,6 +247,12 @@ class SkillEntry:
     verify: Callable[[], None]
     checkout: Path | None = None
     verify_checkout: Callable[[], None] | None = None
+    requires_ownership: bool = False
+
+
+def verify_entry_ownership(entry):
+    if entry.requires_ownership and not owns_slot(entry.slot, entry.control / entry.slot.name, entry.release):
+        raise ValueError(f"the {entry.label} reference belongs to another installer")
 
 
 def checkout_installation(entry, action):
@@ -279,6 +286,30 @@ def core_entry(home, codex_home):
                       "core capability", partial(prepare_release, release), partial(verify_release, release))
 
 
+def index_runtime_entry(home, codex_home):
+    name = "ecosystem-index"
+    revision = personal_index_package.RELEASE["revision"]
+    root = physical_path(codex_home / "dev-personal-core" / name)
+    control = physical_path(root / "releases" / revision)
+    slot = physical_path(root / "runtime") / name
+    releases = physical_path(home / ".local/share/personal-portability/releases")
+    release = releases / f"{name}-{revision}" / name
+    populate = partial(personal_index_package.stage, read_url=read_url)
+    return SkillEntry(slot, release, control, "Skills index runtime",
+                      partial(prepare_release, release, populate, personal_index_package.verify),
+                      partial(personal_index_package.verify, release), requires_ownership=True)
+
+
+def bind_personal_index(home, codex_home):
+    """Load the configured runtime in an isolated worker without starting a refresh."""
+    from skills_index_runtime import bind_index_runtime
+
+    entry = index_runtime_entry(home, codex_home)
+    configure_entry(entry, "check")
+    bind_index_runtime(entry.release, personal_index_package.index_digests(),
+                       parser_digests=personal_index_package.parser_digests())
+
+
 def configure(home, codex_home, action):
     return configure_entry(core_entry(home, codex_home), action)
 
@@ -294,6 +325,7 @@ def configure_entry(entry, action):
             return existing
         if not points_to(slot, release):
             raise ValueError(f"the selected Codex home does not expose the pinned {label}")
+        verify_entry_ownership(entry)
         entry.verify()
         return f"verified {label} files and Codex entry"
 
@@ -342,6 +374,7 @@ def change_entry(entry, action):
     if os.path.lexists(slot):
         if not points_to(slot, release):
             raise ValueError(f"the Codex {slot.name} slot is occupied")
+        verify_entry_ownership(entry)
         entry.verify()
         return f"{label} files and Codex entry already present"
     entry.prepare()
@@ -375,6 +408,8 @@ def install_profile_entries(entries, previous):
                 upgrades[prior.slot] = prior
         for entry in entries:
             recover_withdrawals(entry)
+            if points_to(entry.slot, entry.release):
+                verify_entry_ownership(entry)
             if (os.path.lexists(entry.slot) and not points_to(entry.slot, entry.release)
                     and not checkout_installation(entry, "install")
                     and entry.slot not in upgrades):
@@ -417,7 +452,7 @@ def withdraw_profile_entries(entries, previous):
 
 def configure_profile(home, codex_home, action):
     core = core_entry(home, codex_home)
-    entries = [core]
+    entries = [core, index_runtime_entry(home, codex_home)]
     previous = {}
     for name in ("dev-doctor", "dev-new-repo"):
         slot = core.slot.with_name(name)
