@@ -21,6 +21,10 @@ import time
 from personal_scope import FILE_FLAGS, absolute_directory
 
 
+# Snapshots include the current bindings and the retained lifecycle receipts.
+MAX_INVENTORY_BYTES = 32 * 1024 * 1024
+
+
 class Refused(ValueError):
     """The requested authority or state is unavailable."""
 
@@ -224,6 +228,8 @@ class Inventory:
                 if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
                         or info.st_nlink > 1 or stat.S_IMODE(info.st_mode) != 0o600):
                     raise Refused("invalid Dev inventory database")
+                if info.st_size > MAX_INVENTORY_BYTES:
+                    raise Refused("Dev inventory database exceeds its size limit")
                 before = self._database_identity(info)
                 raw = source.read(info.st_size + 1)
                 after = os.fstat(source.fileno())
@@ -274,6 +280,10 @@ class Inventory:
             yield db, commit
 
     def _publish(self, parent, db, stage, *, previous):
+        page_count, = db.execute("PRAGMA page_count").fetchone()
+        page_size, = db.execute("PRAGMA page_size").fetchone()
+        if page_count * page_size > MAX_INVENTORY_BYTES:
+            raise Refused("Dev inventory database exceeds its size limit")
         name = self.database.name
         created = False
         try:

@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from dataclasses import asdict, replace
 from hashlib import sha256
 import json
@@ -448,6 +449,42 @@ os._exit(44)
         with self.assertRaisesRegex(Refused, "could not be opened"):
             new.snapshot()
         self.assertEqual(list(empty.iterdir()), [])
+
+    def test_inventory_refuses_oversized_file_before_reading_it(self):
+        size = self.inventory.database.stat().st_size
+        with patch("personal_checkout_inventory.MAX_INVENTORY_BYTES", size, create=True):
+            self.assertEqual(self.inventory.snapshot()[1], self.version)
+            with self.inventory.database.open("ab") as file:
+                file.truncate(size + 1)
+            real_fdopen = os.fdopen
+            observed = []
+
+            @contextmanager
+            def watch_read(*args, **kwargs):
+                with real_fdopen(*args, **kwargs) as file:
+                    reader = Mock(wraps=file)
+                    observed.append(reader)
+                    yield reader
+
+            with patch("personal_checkout_inventory.os.fdopen", side_effect=watch_read):
+                with self.assertRaisesRegex(Refused, "exceeds its size limit"):
+                    self.inventory.snapshot()
+            reader, = observed
+            reader.read.assert_not_called()
+
+    def test_oversized_update_preserves_the_last_readable_inventory(self):
+        previous = self.inventory.database.read_bytes()
+        with patch("personal_checkout_inventory.MAX_INVENTORY_BYTES", len(previous), create=True):
+            with self.assertRaisesRegex(Refused, "exceeds its size limit"):
+                with self.inventory._update(deadline()) as (db, commit):
+                    db.execute("INSERT INTO lifecycle VALUES (?, ?, ?, ?)",
+                               ("large-fixture", "x" * len(previous), "requested", None))
+                    commit()
+            self.assertEqual(self.inventory.database.read_bytes(), previous)
+            self.assertEqual(self.inventory.snapshot()[1], self.version)
+            with self.assertRaisesRegex(Refused, "unknown owner lifecycle operation"):
+                self.inventory.operation("large-fixture")
+        self.assertFalse(any(self.private.glob(".checkout-inventory-*")))
 
     def test_database_open_refuses_symlink_substitution(self):
         database = self.inventory.database
