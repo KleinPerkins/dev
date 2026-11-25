@@ -12,6 +12,7 @@ from personal_checkout_inventory import Refused
 
 MAX_RESPONSE_BYTES = 256 * 1024
 READ_ROUTE = re.compile(r"/repositories/[1-9][0-9]*(?:/branches/([A-Za-z0-9_.~%-]+))?")
+FORBIDDEN_REF_CHARACTERS = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]")
 TRANSPORT_RETRY_DELAYS = (2, 5)
 PUBLIC_REQUEST_TIMEOUT_SECONDS = 15
 # curl: DNS, connect, partial transfer, timeout, empty response, send, receive, and HTTP/2 stream errors.
@@ -43,10 +44,18 @@ def _unique_object(pairs):
     return obj
 
 
-def _branch_name(value):
+def validate_branch_name(value):
+    """Validate a literal Git branch name without resolving local revision shorthand."""
     if (not isinstance(value, str) or not value or len(value) > 1024
-            or any(ord(char) < 33 or ord(char) == 127 for char in value)
-            or any(part in {"", ".", ".."} for part in value.split("/"))):
+            or value == "HEAD" or value.startswith("-") or value.endswith(".")
+            or ".." in value or "@{" in value or FORBIDDEN_REF_CHARACTERS.search(value)
+            or any(not part or part.startswith(".") or part.endswith(".lock") for part in value.split("/"))):
+        raise Refused("GitHub returned an invalid default branch")
+    try:
+        length = len(value.encode("utf-8"))
+    except UnicodeError as error:
+        raise Refused("GitHub returned an invalid default branch") from error
+    if length > 1024:
         raise Refused("GitHub returned an invalid default branch")
     return value
 
@@ -57,7 +66,7 @@ def public_github_get(path, *, deadline):
     if route is None:
         raise Refused("the GitHub request is outside the repository read interface")
     encoded_branch = route[1]
-    if encoded_branch and quote(_branch_name(unquote(encoded_branch)), safe="") != encoded_branch:
+    if encoded_branch and quote(validate_branch_name(unquote(encoded_branch)), safe="") != encoded_branch:
         raise Refused("the GitHub branch request is outside the repository read interface")
     remaining = deadline - time.monotonic()
     if remaining <= 0:
@@ -101,7 +110,7 @@ def _identity(reply, repository_id):
     if (not isinstance(full_name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", full_name)
             or any(part in {".", ".."} for part in full_name.split("/"))):
         raise Refused("GitHub returned an invalid repository name")
-    default = _branch_name(reply.get("default_branch"))
+    default = validate_branch_name(reply.get("default_branch"))
     private = reply.get("private")
     if type(private) is not bool:
         raise Refused("GitHub did not report the repository visibility")
@@ -140,10 +149,7 @@ def _read_repository_once(repository_id, deadline, get):
 
     root = f"/repositories/{repository_id}"
     full_name, default, private = _identity(fetch(root), repository_id)
-    try:
-        branch_path = f"{root}/branches/{quote(default, safe='')}"
-    except UnicodeError as error:
-        raise Refused("GitHub returned an invalid default branch") from error
+    branch_path = f"{root}/branches/{quote(default, safe='')}"
     branch = fetch(branch_path)
     ref_time = int(time.time())
     if not isinstance(branch, dict) or branch.get("name") != default:

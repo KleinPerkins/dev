@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import time
 import unittest
 from unittest.mock import Mock, patch
+from urllib.parse import quote
 
 from github_checkout_provider import (
     Refused, TransientProviderRead, public_github_get, read_github_repository,
@@ -41,6 +42,25 @@ class GitHubProviderTests(unittest.TestCase):
         backend = self.get(repo, BRANCH | {"name": "release/next", "protected": False}, repo)
         self.assertFalse(self.observation(backend).branch_protected)
         self.assertEqual(backend.call_args_list[1].args[0], "/repositories/902/branches/release%2Fnext")
+
+    def test_invalid_git_branch_is_refused_before_branch_lookup(self):
+        for name in ("main..evil", "feature~1", "name.lock", "dir.lock/next", "dir/.private",
+                     "main?", "main*", "main[", "main\\", "main^", "main:", "main@{oops}",
+                     "trail.", "space bar", "main//broken", "-option", "HEAD", "\ud800", "é" * 513):
+            with self.subTest(name=name):
+                backend = self.get(REPO | {"default_branch": name}, BRANCH | {"name": name},
+                                   REPO | {"default_branch": name})
+                with self.assertRaisesRegex(Refused, "invalid default branch"):
+                    self.observation(backend)
+                backend.assert_called_once()
+
+    def test_valid_git_branch_characters_are_encoded_once_and_preserved(self):
+        for name in ("café/next", "release/-pilot", "topic/HEAD", "topic/v1.+@preview", "percent%20literal"):
+            with self.subTest(name=name):
+                repo = REPO | {"default_branch": name}
+                backend = self.get(repo, BRANCH | {"name": name}, repo)
+                self.assertEqual(self.observation(backend).default_branch, name)
+                self.assertEqual(backend.call_args_list[1].args[0], "/repositories/902/branches/" + quote(name, safe=""))
 
     def test_same_slug_on_a_different_id_refuses_before_branch_lookup(self):
         backend = self.get(REPO | {"id": 903})
@@ -96,7 +116,8 @@ class GitHubProviderTests(unittest.TestCase):
     def test_public_transport_rejects_other_routes_before_starting_a_process(self):
         with patch("github_checkout_provider.subprocess.run") as runner:
             for path in ("https://example.invalid/", "/repos/FixtureOwner/same.name",
-                         "/repositories/902/branches/%2E%2E", "/repositories/902/branches/x?y", None):
+                         "/repositories/902/branches/%2E%2E", "/repositories/902/branches/x?y",
+                         "/repositories/902/branches/x..y", "/repositories/902/branches/release%2Fname.lock", None):
                 with self.subTest(path=path), self.assertRaises(Refused):
                     public_github_get(path, deadline=deadline())
             runner.assert_not_called()

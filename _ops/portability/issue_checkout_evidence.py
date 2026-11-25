@@ -7,7 +7,7 @@ import time
 
 from lib.contracts import INPUT_MAX, encode, json_load
 from checkout_git_config import CONFIG_PROOF_FIELDS, config_proof, observe_git_config
-from github_checkout_provider import GitHubRepositoryObservation
+from github_checkout_provider import GitHubRepositoryObservation, validate_branch_name
 from native_checkout_project import NativeProjectBinding, selection_digest
 from personal_checkout_inventory import Refused, lexical
 from physical_checkout_binding import OwnerPhysicalBindings, ROLES, pin_checkout
@@ -96,10 +96,10 @@ def issue_checkout_evidence_reissue(inventory, expected, operation, selections, 
                     or observation.repository_id != binding.repository_id
                     or not isinstance(observation.github_name, str)
                     or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", observation.github_name)
-                    or not isinstance(observation.default_branch, str) or not observation.default_branch
                     or not isinstance(observation.default_head, str)
                     or not re.fullmatch(r"[0-9a-f]{40}", observation.default_head)):
                 raise Refused("the current GitHub identity differs from the admitted checkout")
+            validate_branch_name(observation.default_branch)
             for field, source in SOURCE_READ_TIMES.items():
                 observed_at = getattr(observation, field)
                 if type(observed_at) is not int or not 0 <= now - observed_at <= 86400:
