@@ -274,6 +274,9 @@ class SourceChecks(unittest.TestCase):
         expected={entry['id']:entry['tests'] for entry in membership['shards']}
         measured={entry['shard']:entry['measurement']['tests'] for entry in checks['shards']}
         self.assertEqual(measured,expected)
+        # Keep an independent floor when the membership and measurements
+        # are generated from the same contract.
+        self.assertEqual(sum(len(tests) for tests in measured.values()),108)
         self.assertNotIn('\"identity\":',b.canonical(checks))
     def test_nominal_marker_missing_extra_stale_or_duplicate_shards_refuse(self):
         frozen,original=self.inputs()

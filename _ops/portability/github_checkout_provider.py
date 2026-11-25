@@ -45,9 +45,12 @@ def _unique_object(pairs):
 
 
 def validate_branch_name(value):
-    """Validate a literal Git branch name without resolving local revision shorthand."""
+    """Validate a literal GitHub branch name without resolving revision syntax."""
+    # Git's standalone "@" restriction applies to the full ref name.
+    # "refs/heads/@" is a valid branch ref and is requested as "%40".
     if (not isinstance(value, str) or not value or len(value) > 1024
-            or value == "HEAD" or value.startswith("-") or value.endswith(".")
+            or value == "HEAD" or value.startswith(("-", "refs/")) or value.endswith(".")
+            or re.fullmatch(r"[0-9a-fA-F]{40}", value)
             or ".." in value or "@{" in value or FORBIDDEN_REF_CHARACTERS.search(value)
             or any(not part or part.startswith(".") or part.endswith(".lock") for part in value.split("/"))):
         raise Refused("GitHub returned an invalid default branch")

@@ -46,7 +46,8 @@ class GitHubProviderTests(unittest.TestCase):
     def test_invalid_git_branch_is_refused_before_branch_lookup(self):
         for name in ("main..evil", "feature~1", "name.lock", "dir.lock/next", "dir/.private",
                      "main?", "main*", "main[", "main\\", "main^", "main:", "main@{oops}",
-                     "trail.", "space bar", "main//broken", "-option", "HEAD", "\ud800", "é" * 513):
+                     "trail.", "space bar", "main//broken", "-option", "HEAD", "refs/heads/main",
+                     "c" * 40, "\ud800", "é" * 513):
             with self.subTest(name=name):
                 backend = self.get(REPO | {"default_branch": name}, BRANCH | {"name": name},
                                    REPO | {"default_branch": name})
@@ -55,12 +56,23 @@ class GitHubProviderTests(unittest.TestCase):
                 backend.assert_called_once()
 
     def test_valid_git_branch_characters_are_encoded_once_and_preserved(self):
-        for name in ("café/next", "release/-pilot", "topic/HEAD", "topic/v1.+@preview", "percent%20literal"):
+        for name in ("@", "café/next", "release/-pilot", "topic/HEAD", "topic/v1.+@preview", "percent%20literal"):
             with self.subTest(name=name):
                 repo = REPO | {"default_branch": name}
                 backend = self.get(repo, BRANCH | {"name": name}, repo)
                 self.assertEqual(self.observation(backend).default_branch, name)
                 self.assertEqual(backend.call_args_list[1].args[0], "/repositories/902/branches/" + quote(name, safe=""))
+
+    def test_literal_at_sign_branch_is_valid_as_a_fully_qualified_git_ref(self):
+        subprocess.run(["/usr/bin/git", "check-ref-format", "refs/heads/@"],
+                       check=True, capture_output=True, timeout=5)
+        with self.assertRaises(subprocess.CalledProcessError):
+            subprocess.run(["/usr/bin/git", "check-ref-format", "--allow-onelevel", "@"],
+                           check=True, capture_output=True, timeout=5)
+        with patch("github_checkout_provider.subprocess.run",
+                   return_value=SimpleNamespace(stdout=b'{"name":"@"}200')) as runner:
+            self.assertEqual(public_github_get("/repositories/902/branches/%40", deadline=deadline()), {"name": "@"})
+        self.assertEqual(runner.call_args.args[0][-1], "https://api.github.com/repositories/902/branches/%40")
 
     def test_same_slug_on_a_different_id_refuses_before_branch_lookup(self):
         backend = self.get(REPO | {"id": 903})
