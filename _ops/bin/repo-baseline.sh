@@ -23,8 +23,8 @@ usage() {
   cat <<'EOF'
 usage:
   repo-baseline.sh list
-  repo-baseline.sh verify <repo-path>
-  repo-baseline.sh apply <repo-path> [--dry-run]
+  repo-baseline.sh verify <repo-path> [--local-only]
+  repo-baseline.sh apply <repo-path> [--dry-run] [--local-only]
   repo-baseline.sh native-activation-preflight <repo-path>
   repo-baseline.sh profile pr-automation verify|status <repo-path>
   repo-baseline.sh profile pr-automation phase-b inventory|verify|status|credential-status [repo-path]
@@ -109,8 +109,17 @@ cmd_list() {
 
 # ---------------------------------------------------------------------------
 cmd_verify() {
-  local repo_arg="${1:-}"
-  [ -n "$repo_arg" ] || { printf 'usage: repo-baseline.sh verify <repo-path>\n' >&2; exit 2; }
+  local repo_arg="" local_only=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --local-only) local_only=1 ;;
+      -*) printf 'repo-baseline verify: unknown flag: %s\n' "$1" >&2; exit 2 ;;
+      *) [ -z "$repo_arg" ] || { printf 'repo-baseline verify: expected one repository\n' >&2; exit 2; }
+         repo_arg="$1" ;;
+    esac
+    shift
+  done
+  [ -n "$repo_arg" ] || { printf 'usage: repo-baseline.sh verify <repo-path> [--local-only]\n' >&2; exit 2; }
   local repo; repo="$(resolve_repo "$repo_arg")"
   local delivery_class
   delivery_class="$(bl_repo_delivery_class "$repo")"
@@ -147,7 +156,12 @@ cmd_verify() {
   echo
   echo "== GitHub ruleset controls (read-only) =="
   local gh_status gh_detail
-  IFS=$'\t' read -r gh_status gh_detail <<<"$(bl_github_controls "${ownerrepo:-}")"
+  if [ "$local_only" -eq 1 ]; then
+    gh_status=NOT_OBSERVED
+    gh_detail="local baseline only"
+  else
+    IFS=$'\t' read -r gh_status gh_detail <<<"$(bl_github_controls "${ownerrepo:-}")"
+  fi
   printf '  %s — %s\n' "$gh_status" "$gh_detail"
   : # Repository-owned successor settings admission is separate from this observation.
 
@@ -163,10 +177,11 @@ cmd_verify() {
 
 # ---------------------------------------------------------------------------
 cmd_apply() {
-  local repo_arg="" dry=0
+  local repo_arg="" dry=0 local_only=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --dry-run) dry=1 ;;
+      --local-only) local_only=1 ;;
       -h|--help) usage; exit 0 ;;
       -*) printf 'repo-baseline apply: unknown flag: %s\n' "$1" >&2; exit 2 ;;
       *) repo_arg="$1" ;;
@@ -253,7 +268,12 @@ cmd_apply() {
 
   echo
   local gh_status gh_detail
-  IFS=$'\t' read -r gh_status gh_detail <<<"$(bl_github_controls "${ownerrepo:-}")"
+  if [ "$local_only" -eq 1 ]; then
+    gh_status=NOT_OBSERVED
+    gh_detail="local baseline only"
+  else
+    IFS=$'\t' read -r gh_status gh_detail <<<"$(bl_github_controls "${ownerrepo:-}")"
+  fi
   printf 'GitHub ruleset controls: %s — %s\n' "$gh_status" "$gh_detail"
   printf '(this is a LOCAL-FILE-ONLY apply — it never mutates GitHub settings; repository-owned settings admission remains pending)\n'
 

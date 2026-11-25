@@ -1,4 +1,4 @@
-"""Select the destination of a new personal product and bind its replay journal."""
+"""Select a personal scaffold's destination and bind its replay journal."""
 import fcntl
 from contextlib import contextmanager, ExitStack
 import hashlib
@@ -15,17 +15,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from personal_scope import absolute_directory, child_directory, operator_home, read_regular
 
 LAYOUT = ("personal", "src", "KleinPerkins")
+CAPABILITY_LAYOUT = ("capabilities",)
 
 
 class ScaffoldMismatch(ValueError):
     """The selection is ineligible or its checkout differs from the creation record."""
 
 
-def check_product_name(name):
+def check_new_name(name, *, capability=False):
+    reserved_platform = name.casefold() == "repo-platform" and (not capability or name != "repo-platform")
+    role = "capability" if capability else "product"
     if (not re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}", name)
             or name.endswith(".") or name.lower().endswith(".git")
-            or name.casefold() in {"repo-platform", "dev-main-sync"}):
-        raise ScaffoldMismatch("expected a new personal product name")
+            or reserved_platform or name.casefold() == "dev-main-sync"):
+        raise ScaffoldMismatch(f"expected a new personal {role} name")
     # Direct calls to the acquisition helper must honor Dev's excluded and enrolled names.
     policy = Path(__file__).resolve().parents[1] / "baseline/delivery-policy.py"
     disposition = subprocess.check_output(
@@ -33,11 +36,16 @@ def check_product_name(name):
         text=True,
     ).strip()
     if disposition != "unenrolled":
-        raise ScaffoldMismatch("Dev policy allows personal creation only for an unenrolled product")
+        raise ScaffoldMismatch(f"Dev policy allows personal creation only for an unenrolled {role}")
 
 
-def owner_location(fixture):
+def check_product_name(name):
+    check_new_name(name)
+
+
+def owner_location(fixture, *, capability=False):
     # Resolve only the system temp alias. Never follow a fixture child link.
+    layout = CAPABILITY_LAYOUT if capability else LAYOUT
     if fixture:
         bases = [Path("/tmp")]
         if sys.platform == "darwin":
@@ -55,16 +63,20 @@ def owner_location(fixture):
             break
         else:
             raise ValueError("expected a disposable child of the system temporary directory")
-        parts = LAYOUT
+        parts = layout
     else:
         root = operator_home()
-        parts = ("dev", *LAYOUT)
+        parts = ("dev", *layout)
     return root, parts
 
 
-def target(name, fixture, resume, *, acquire=False):
-    check_product_name(name)
-    root, parts = owner_location(fixture)
+def target(name, fixture, resume, *, acquire=False, capability=False, foundation=False):
+    check_new_name(name, capability=capability)
+    if foundation and name != "repo-platform":
+        raise ScaffoldMismatch("expected the repo-platform foundation")
+    if capability and acquire and not fixture and not foundation:
+        raise ScaffoldMismatch("Personal capability creation requires governed capability enrollment")
+    root, parts = owner_location(fixture, capability=capability)
     if any(key in os.environ for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
             "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
             "GIT_NAMESPACE", "GIT_QUARANTINE_PATH")):
@@ -253,8 +265,10 @@ def stage(checkout, operation, phase):
 if __name__ == "__main__":
     action, name, fixture, option = sys.argv[1:]
     try:
-        if action in {"target", "acquire"}:
-            print(target(name, fixture, option == "1", acquire=action == "acquire"))
+        if action in {"target", "acquire", "capability-target", "capability-acquire", "capability-foundation"}:
+            foundation = action == "capability-foundation"
+            print(target(name, fixture, option == "1", acquire=foundation or action.endswith("acquire"),
+                         capability=action.startswith("capability-"), foundation=foundation))
         elif action in {"check", "lock"}:
             check_checkout(Path(name), fixture, lock=action == "lock")
         elif action == "binding":
