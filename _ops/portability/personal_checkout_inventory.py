@@ -84,6 +84,37 @@ class Binding:
             raise Refused("the owner binding has an invalid operation grant")
 
 
+def _shared_git_location(path, common):
+    if path == common:
+        return True
+    worktree = path.removeprefix(common + "/worktrees/")
+    return worktree != path and bool(worktree) and "/" not in worktree
+
+
+def _bindings_overlap(first, second):
+    if first.git_directory == second.git_directory or intersects((first.checkout,), (second.checkout,)):
+        return True
+    common = first.common_directory
+    shared = (first.provider, first.repository_id, first.clone_id, common) == (
+        second.provider, second.repository_id, second.clone_id, second.common_directory,
+    )
+    for owner, other in ((first, second), (second, first)):
+        for path in (other.git_directory, other.common_directory):
+            if intersects((owner.checkout,), (path,)):
+                # A primary checkout may contain its clone's common Git
+                # directory and its registered linked-worktree metadata.
+                if not (shared and owner.git_directory == common and common.startswith(owner.checkout + "/")
+                        and _shared_git_location(path, common)):
+                    return True
+    for left in (first.git_directory, first.common_directory):
+        for right in (second.git_directory, second.common_directory):
+            if intersects((left,), (right,)):
+                if not (shared and ((left == common and _shared_git_location(right, common))
+                                    or (right == common and _shared_git_location(left, common)))):
+                    return True
+    return False
+
+
 @dataclass(frozen=True)
 class FinishedRefreshScope:
     completed: tuple[str, int, str]
@@ -336,6 +367,7 @@ class Inventory:
 
     def _validate_bindings(self, rows, roots):
         identities, git_directories, common = set(), set(), {}
+        checked = []
         for checkout, record in rows.items():
             binding = Binding(**record)
             binding.validate()
@@ -346,6 +378,9 @@ class Inventory:
             if (binding.checkout != checkout or key in identities or binding.git_directory in git_directories
                     or common.setdefault(binding.common_directory, identity) != identity):
                 raise Refused("a checkout identity is ambiguous")
+            if any(_bindings_overlap(binding, other) for other in checked):
+                raise Refused("checkout or Git locations overlap")
+            checked.append(binding)
             identities.add(key)
             git_directories.add(binding.git_directory)
 
@@ -776,6 +811,9 @@ class Inventory:
         if record is None or operation not in record["operations"]:
             raise Excluded("Dev has no approval for the selected checkout operation", "operation-not-admitted")
         binding = Binding(**record)
+        if any(_bindings_overlap(binding, Binding(**other)) for path, other in state["bindings"].items()
+               if path != checkout):
+            raise Excluded("checkout or Git locations overlap", "binding-overlap")
         if self._blocked(db, state, binding.locations(), resuming=resuming):
             raise Excluded("an owner lifecycle change is pending for the selected location", "lifecycle-pending")
         return binding
@@ -817,6 +855,9 @@ class Inventory:
                 if role == "source":
                     if operation != "enumerate" or not location.startswith(binding.checkout + "/"):
                         raise Excluded("the declared source is outside the permitted checkout")
+                    if intersects((location,), (binding.checkout + "/.git", binding.git_directory,
+                                                binding.common_directory)):
+                        raise Excluded("Git metadata is outside the checkout source scope")
                 elif (role, location) in binding.linked_metadata():
                     continue
                 elif role not in {"checkout", "git_directory", "common_directory"} or getattr(binding, role) != location:

@@ -1,4 +1,4 @@
-from dataclasses import replace
+from dataclasses import asdict, replace
 from hashlib import sha256
 import json
 import os
@@ -354,6 +354,79 @@ os._exit(44)
             self.probe(self.first, pending, role="common_directory")
         self.probe(self.peer, pending)
         self.assertEqual(self.calls, [self.first.common_directory, self.peer.checkout])
+
+    def test_overlapping_checkout_and_git_locations_are_refused_before_reservation(self):
+        checkout = self.first.checkout
+        git = self.first.git_directory
+        separate = self.peer.checkout + "-sibling"
+        competing = (
+            self.binding("sample.product/nested", 903),
+            self.binding("sample.product/.git/nested", 904),
+            replace(self.peer, git_directory=checkout + "/foreign-metadata",
+                    common_directory=checkout + "/foreign-metadata"),
+            replace(self.peer, git_directory=git + "/foreign-git", common_directory=git + "/foreign-git"),
+            replace(self.peer, common_directory=git + "/foreign-common"),
+            replace(self.first, checkout=separate, git_directory=git + "/private", worktree_id="invalid-link"),
+        )
+        for row in competing:
+            with self.subTest(row=row):
+                with self.assertRaisesRegex(Refused, "overlap"):
+                    self.inventory.reserve(self.version, "overlapping", {row.checkout: row}, deadline=deadline())
+                self.assertEqual(self.inventory.snapshot()[1], self.version)
+        (self.root / "other-inventory").mkdir(mode=0o700)
+        with self.assertRaisesRegex(Refused, "overlap"):
+            Inventory(self.root / "other-inventory").initialize("test-host", "policy", [], [competing[0], self.first])
+
+    def test_linked_git_regions_share_only_the_modeled_common_directory(self):
+        common = self.first.common_directory
+        worktrees = common + "/worktrees"
+        first = replace(self.first, checkout=self.first.checkout + "-link", git_directory=worktrees + "/first",
+                        worktree_id="first-linked")
+        second = replace(first, checkout=self.first.checkout + "-second-link", git_directory=worktrees + "/second",
+                         worktree_id="second-linked")
+        version = self.inventory.reserve(self.version, "linked-family",
+                                         {row.checkout: row for row in (first, second)}, deadline=deadline())
+        version = self.inventory.finish("linked-family", outcome="committed", owner_evidence="two verified links",
+                                        deadline=deadline())
+        self.probe(first, version, role="common_directory")
+        self.probe(second, version, role="git_directory")
+        self.assertEqual(self.calls, [common, second.git_directory])
+        nested = replace(second, git_directory=first.git_directory + "/nested")
+        with self.assertRaisesRegex(Refused, "overlap"):
+            self.inventory.reserve(version, "nested-link", {nested.checkout: nested}, deadline=deadline())
+
+    def test_shared_git_metadata_cannot_be_read_as_checkout_source(self):
+        source = self.first.checkout + "/meta.yml"
+        git = self.first.git_directory
+        collect = Mock()
+        for location in (git, git + "/config", git + "/worktrees/other/config.worktree"):
+            with self.subTest(location=location), self.assertRaisesRegex(Refused, "checkout source"):
+                self.inventory.authorized_read(self.version, self.first.checkout, "enumerate",
+                                               (("source", location),), collect, deadline=deadline())
+        collect.assert_not_called()
+        for role, location in (("source", source), ("common_directory", git)):
+            self.inventory.authorized_read(self.version, self.first.checkout, "enumerate",
+                                           ((role, location),), collect, deadline=deadline())
+        self.assertEqual(collect.call_count, 2)
+
+    def test_legacy_overlapping_checkout_cannot_open_targets(self):
+        nested = self.binding("sample.product/nested", 903)
+        with self.inventory._update(deadline()) as (db, commit):
+            state = self.inventory._read(db)
+            state["bindings"][nested.checkout] = asdict(nested)
+            self.inventory._write(db, state)
+            commit()
+        _, older_version = self.inventory.snapshot()
+        collect = Mock()
+        with self.assertRaisesRegex(Refused, "overlap"):
+            self.inventory.authorized_read(older_version, self.first.checkout, "enumerate",
+                                           (("source", nested.checkout + "/meta.yml"),), collect,
+                                           deadline=deadline())
+        with self.assertRaisesRegex(Refused, "overlap"):
+            self.probe(nested, older_version)
+        collect.assert_not_called()
+        self.probe(self.peer, older_version)
+        self.assertEqual(self.calls, [self.peer.checkout])
 
     def test_conflicting_binding_and_operation_reuse_are_refused(self):
         duplicate = replace(self.peer, common_directory=self.first.common_directory)
