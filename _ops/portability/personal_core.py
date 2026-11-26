@@ -2,7 +2,7 @@
 
 import argparse
 from contextlib import ExitStack
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 import hashlib
 import json
@@ -249,6 +249,7 @@ class SkillEntry:
     checkout: Path | None = None
     verify_checkout: Callable[[], None] | None = None
     requires_ownership: bool = False
+    checkout_notice: str | None = None
 
 
 def verify_entry_ownership(entry):
@@ -274,6 +275,8 @@ def checkout_installation(entry, action):
     entry.verify_checkout()
     if not points_to(entry.slot, entry.checkout) or not os.path.samestat(before, entry.slot.lstat()):
         raise ValueError(f"the {entry.label} checkout entry changed during verification")
+    if entry.checkout_notice is not None:
+        return entry.checkout_notice
     if entry.label in ("save-game", "local-jobs"):
         return f"verified {entry.label} from the existing Skills release"
     return f"verified {entry.label} from the existing Skills checkout"
@@ -462,6 +465,18 @@ def withdraw_profile_entries(entries, previous):
     return messages
 
 
+def public_skill_entry(core, release, name, existing_root, control):
+    slot = core.slot.with_name(name)
+    folder = core.release.parent.parent / f"{name}-{release['revision']}" / name
+    populate = partial(write_skill_package, release=release)
+    verify = partial(verify_skill_package, release=release)
+    checkout = existing_root / name if existing_root is not None else None
+    verify_checkout = partial(verify_selected_skill, checkout, release, checkout=True) if checkout else None
+    return SkillEntry(slot, folder, physical_path(control), name,
+                      partial(prepare_release, folder, populate, verify),
+                      partial(verify, folder), checkout, verify_checkout)
+
+
 def configure_profile(home, codex_home, action):
     core = core_entry(home, codex_home)
     entries = [core, index_runtime_entry(home, codex_home)]
@@ -492,7 +507,8 @@ def configure_profile(home, codex_home, action):
         entries.append(SkillEntry(slot, bundle.skill, control, name, bundle.prepare, bundle.verify))
     skills_checkout = home / "dev/capabilities/skills"
     save_game_source = home / ".local/share/save-game/source" / SAVE_GAME_RELEASE["revision"]
-    local_jobs_source = home / ".local/share/local-jobs/releases" / LOCAL_JOBS_RELEASE["revision"]
+    local_jobs_releases = home / ".local/share/local-jobs/releases"
+    local_jobs_source = local_jobs_releases / LOCAL_JOBS_RELEASE["revision"]
     for release, existing_root in (
         (DESIGN_RELEASE, None),
         (AUTHORING_RELEASE, skills_checkout / "global/skills"),
@@ -502,14 +518,26 @@ def configure_profile(home, codex_home, action):
         (LOCAL_JOBS_RELEASE, local_jobs_source / "global/skills"),
     ):
         for name in release["skills"]:
-            folder = core.release.parent.parent / f"{name}-{release['revision']}" / name
-            populate = partial(write_skill_package, release=release)
-            verify = partial(verify_skill_package, release=release)
-            checkout = existing_root / name if existing_root is not None else None
-            verify_checkout = partial(verify_selected_skill, checkout, release, checkout=True) if checkout else None
-            entries.append(SkillEntry(core.slot.with_name(name), folder, physical_path(core.control / name),
-                                      name, partial(prepare_release, folder, populate, verify),
-                                      partial(verify, folder), checkout, verify_checkout))
+            control = core.control / name
+            prior = release.get("previous") if name == "local-jobs" else None
+            if prior is None:
+                entries.append(public_skill_entry(core, release, name, existing_root, control))
+                continue
+
+            if prior["revision"] == release["revision"]:
+                raise ValueError("Local Jobs predecessor and current release must differ")
+            earlier_root = local_jobs_releases / prior["revision"] / "global/skills"
+            prior_control = physical_path(control / "releases" / prior["revision"])
+            if not os.path.lexists(prior_control / name):
+                prior_control = control
+            earlier = public_skill_entry(core, prior, name, earlier_root, prior_control)
+            previous[earlier.slot] = earlier
+            entry = public_skill_entry(core, release, name, existing_root, control / "releases" / release["revision"])
+            if points_to(entry.slot, earlier.checkout):
+                entry = replace(entry, checkout=earlier.checkout, verify_checkout=earlier.verify_checkout,
+                                checkout_notice=f"verified independently installed local-jobs {prior['revision'][:12]} (update pending)")
+            entries.append(entry)
+
 
     if action == "check":
         return [configure_entry(entry, "check") for entry in entries]

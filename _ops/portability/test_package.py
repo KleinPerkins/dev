@@ -643,6 +643,82 @@ class StandardDevSkillTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "__init__.py"):
             self.configure("check")
 
+    def configure_local_jobs_predecessor(self):
+        current = personal_core.LOCAL_JOBS_RELEASE
+        prior = dict(current["previous"], skills=current["skills"], pyyaml=current["pyyaml"])
+        read = self.design_read.side_effect
+        old_prefix = f"https://raw.githubusercontent.com/KleinPerkins/skills/{prior['revision']}/global/skills/local-jobs/"
+        new_prefix = f"https://raw.githubusercontent.com/KleinPerkins/skills/{current['revision']}/global/skills/local-jobs/"
+
+        def package_read(url, length):
+            if url.startswith(old_prefix):
+                url = new_prefix + url.removeprefix(old_prefix)
+            return read(url, length)
+
+        self.design_read.side_effect = package_read
+        with patch.object(personal_core, "LOCAL_JOBS_RELEASE", prior):
+            self.configure("install")
+        return prior, dict(current, previous=prior)
+
+    def test_local_jobs_upgrade_resumes_and_restores_the_owned_predecessor(self):
+        prior, current = self.configure_local_jobs_predecessor()
+        slot = self.slots / "local-jobs"
+        original = slot.lstat()
+        prior_target = slot.readlink()
+        canvas = prior_target / personal_core.personal_local_jobs.CANVAS
+        canvas.write_bytes(b"existing generated presentation")
+        state = self.home / ".local-jobs/jobs/fixture.yml"
+        state.parent.mkdir(parents=True)
+        state.write_bytes(b"independent job state")
+        previous = {p: p.lstat().st_ino for p in self.slots.iterdir() if p != slot}
+        apply = personal_core.change_entry
+
+        def interrupted(entry, action):
+            if entry.slot == slot and action == "install":
+                raise OSError("local-jobs publication interrupted")
+            return apply(entry, action)
+
+        with patch.object(personal_core, "LOCAL_JOBS_RELEASE", current):
+            with patch.object(personal_core, "change_entry", side_effect=interrupted):
+                with self.assertRaisesRegex(OSError, "local-jobs publication interrupted"):
+                    self.configure("install")
+            self.assertFalse(os.path.lexists(slot))
+            self.configure("install")
+            self.configure("check")
+            self.assertIn(current["revision"], str(slot.readlink()))
+            self.assertEqual(previous, {p: p.lstat().st_ino for p in self.slots.iterdir() if p != slot})
+            self.assertEqual(canvas.read_bytes(), b"existing generated presentation")
+            self.configure("withdraw")
+        with patch.object(personal_core, "LOCAL_JOBS_RELEASE", prior):
+            self.configure("install")
+            self.configure("check")
+        self.assertTrue(os.path.samestat(original, slot.lstat()))
+        self.assertEqual(slot.readlink(), prior_target)
+        self.assertEqual(canvas.read_bytes(), b"existing generated presentation")
+        self.assertEqual(state.read_bytes(), b"independent job state")
+
+    def test_local_jobs_profile_verifies_and_keeps_earlier_independent_release(self):
+        prior, current = self.configure_local_jobs_predecessor()
+        slot = self.slots / "local-jobs"
+        location = self.home / ".local/share/local-jobs/releases" / prior["revision"] / "global/skills/local-jobs"
+        location.parent.mkdir(parents=True)
+        shutil.copytree(slot.resolve(), location, symlinks=True)
+        slot.unlink()
+        slot.symlink_to(location)
+        original = slot.lstat()
+        canvas = location / personal_core.personal_local_jobs.CANVAS
+        canvas.write_bytes(b"operator's dashboard")
+        with patch.object(personal_core, "LOCAL_JOBS_RELEASE", current):
+            self.design_read.side_effect = AssertionError("existing release tried to download")
+            for action in ("install", "check"):
+                notice = "verified independently installed local-jobs " + prior["revision"][:12] + " (update pending)"
+                self.assertIn(notice, self.configure(action))
+                self.assertTrue(os.path.samestat(original, slot.lstat()))
+            self.assertIn("preserved independently installed local-jobs", self.configure("withdraw"))
+        self.assertTrue(os.path.samestat(original, slot.lstat()))
+        self.assertEqual(slot.readlink(), location)
+        self.assertEqual(canvas.read_bytes(), b"operator's dashboard")
+
     def test_local_jobs_refuses_a_linked_output_and_preserves_an_independent_install(self):
         self.configure("install")
         slot = self.slots / "local-jobs"
