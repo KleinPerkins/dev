@@ -1200,12 +1200,30 @@ PY
       validate_remote_creation_metadata "$(github_repository_metadata)" "" "$GITHUB_REPOSITORY_ID" >/dev/null
     fi
     check_checkout_location
-    # Idempotent push: skip when origin/main already matches HEAD so --resume does not
-    # re-push after interruption left phase at second-committed.
-    if ! git -C "$TARGET" rev-parse --verify refs/remotes/origin/main >/dev/null 2>&1 || \
-        [ "$(git -C "$TARGET" rev-parse HEAD)" != \
-          "$(git -C "$TARGET" rev-parse refs/remotes/origin/main)" ]; then
-      git -C "$TARGET" push -u origin main
+    local main_ref=refs/heads/main selected_main expected_main observed_main
+    selected_main="$(git -C "$TARGET" rev-parse --verify "$main_ref")" || return 1
+    if [ "$(git -C "$TARGET" rev-parse --verify HEAD)" != "$selected_main" ]; then
+      printf 'dev-new-repo: local HEAD does not match main; refusing publication\n' >&2
+      return 1
+    fi
+    expected_main="$selected_main"$'\t'"$main_ref"
+    observed_main="$(git -C "$TARGET" ls-remote --quiet --refs origin "$main_ref")" ||
+      { printf 'dev-new-repo: unable to read destination main; publication remains pending\n' >&2; return 75; }
+    if [ -z "$observed_main" ]; then
+      # The destination must still have no main when the push is accepted.
+      if ! git -C "$TARGET" push --no-follow-tags --force-with-lease="$main_ref:" -u origin "$main_ref:$main_ref"; then
+        printf 'dev-new-repo: push reported an error; checking the live destination\n' >&2
+      fi
+      observed_main="$(git -C "$TARGET" ls-remote --quiet --refs origin "$main_ref")" ||
+        { printf 'dev-new-repo: unable to read destination main; publication remains pending\n' >&2; return 75; }
+    fi
+    if [ -z "$observed_main" ]; then
+      printf 'dev-new-repo: source publication could not be verified; retry with --resume\n' >&2
+      return 75
+    fi
+    if [ "$observed_main" != "$expected_main" ]; then
+      printf 'dev-new-repo: destination main differs from the selected local commit; publication remains pending\n' >&2
+      return 1
     fi
     # Publishing source never grants settings or controller enrollment authority.
     printf 'dev-new-repo: source pushed; repository-owned delivery admission remains pending\n' >&2

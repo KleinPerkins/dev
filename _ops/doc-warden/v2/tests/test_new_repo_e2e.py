@@ -911,6 +911,79 @@ class NewRepositoryEndToEndTests(unittest.TestCase):
                 "",
             )
 
+    def test_publication_resume_requires_the_live_destination_ref(self):
+        import shutil
+
+        real_git = shutil.which("git")
+        for case in ("empty", "different", "completed"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory(
+                prefix="doc-warden-live-publication-"
+            ) as directory:
+                root = Path(directory)
+                name = "born-v2-push"
+                target = root / name
+                remote = root / "destination.git"
+                self.git(root, "init", "--bare", str(remote))
+                spy_bin = root / "bin"
+                spy_bin.mkdir()
+                calls = root / "push-calls"
+                interrupt = root / "interrupt-before-transfer"
+                interrupt.touch()
+                spy = spy_bin / "git"
+                spy.write_text(
+                    "#!/usr/bin/env python3\n"
+                    "from pathlib import Path\n"
+                    "import os, sys\n"
+                    f"real_git = {real_git!r}\n"
+                    "args = sys.argv[1:]\n"
+                    f"if args[:3] == ['-C', {str(target)!r}, 'push']:\n"
+                    f"    with Path({str(calls)!r}).open('a') as log:\n"
+                    "        log.write('push\\n')\n"
+                    f"    if Path({str(interrupt)!r}).exists():\n"
+                    "        raise SystemExit(75)\n"
+                    "if len(args) >= 3 and args[0] == '-C' and args[2] in {'push', 'ls-remote'}:\n"
+                    "    os.environ['GIT_ALLOW_PROTOCOL'] = 'file'\n"
+                    "os.execv(real_git, [real_git, *args])\n"
+                )
+                spy.chmod(0o700)
+                env = {
+                    "DOC_WARDEN_FIXTURE_PUSH_REMOTE": str(remote),
+                    "PATH": f"{spy_bin}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+                }
+                flags = ("--fixture-repository-id", "98765")
+                first = self.run_scaffold(root, name, *flags, check=False, extra_env=env)
+                self.assertNotEqual(first.returncode, 0)
+                self.assertEqual(self.operation(target)["phase"], "second-committed", first.stderr)
+                self.assertEqual(calls.read_text().splitlines(), ["push"])
+                local_main = self.git(target, "rev-parse", "HEAD")
+                branch = "refs/heads/main"
+                index = Path(self.git(target, "rev-parse", "--absolute-git-dir")) / "index"
+                index_before = index.read_bytes()
+
+                if case != "empty":
+                    remote_main = (self.git(target, "rev-parse", "HEAD^") if case == "different"
+                                   else local_main)
+                    self.git(target, "push", str(remote), f"{remote_main}:{branch}")
+                self.git(target, "update-ref", "refs/remotes/origin/main", local_main)
+                interrupt.unlink()
+                resumed = self.run_scaffold(
+                    root, name, *flags, "--resume", check=False, extra_env=env
+                )
+
+                if case == "different":
+                    self.assertNotEqual(resumed.returncode, 0)
+                    self.assertIn("destination main differs", resumed.stderr)
+                    self.assertEqual(self.git(remote, "rev-parse", branch), remote_main)
+                    self.assertEqual(self.operation(target)["phase"], "second-committed")
+                else:
+                    self.assertEqual(resumed.returncode, 0, resumed.stderr)
+                    self.assertEqual(self.git(remote, "rev-parse", branch), local_main)
+                    self.assertEqual(self.operation(target)["phase"], "waiting-external")
+                push_count = 2 if case == "empty" else 1
+                self.assertEqual(calls.read_text().splitlines(), ["push"] * push_count)
+                self.assertEqual(self.git(target, "rev-parse", "HEAD"), local_main)
+                self.assertEqual(index.read_bytes(), index_before)
+
     def test_unenrolled_post_push_and_resume_never_apply_retired_settings(self):
         """Source push is idempotent; settings admission remains pending on resume."""
         with tempfile.TemporaryDirectory(
