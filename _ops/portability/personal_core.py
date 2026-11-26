@@ -455,7 +455,7 @@ def configure_profile(home, codex_home, action):
     core = core_entry(home, codex_home)
     entries = [core, index_runtime_entry(home, codex_home)]
     previous = {}
-    for name in ("dev-doctor", "dev-new-repo"):
+    for name in ("dev-doctor", "dev-new-repo", "dev-remove-repo"):
         slot = core.slot.with_name(name)
         bundle = DevSkillRelease(name, home, slot)
         control = physical_path(core.control / name)

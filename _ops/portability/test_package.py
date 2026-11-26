@@ -232,7 +232,7 @@ class StandardDevSkillTests(unittest.TestCase):
 
         run("init", "--quiet", "--template=")
         releases = {}
-        for name in ("dev-doctor", "dev-new-repo"):
+        for name in ("dev-doctor", "dev-new-repo", "dev-remove-repo"):
             key = f"_ops/skills/personal/{name}/SKILL.md"
             file = self.source / key
             file.parent.mkdir(parents=True)
@@ -334,6 +334,18 @@ class StandardDevSkillTests(unittest.TestCase):
 
     def configure(self, action):
         return personal_core.configure_profile(self.home, self.codex, action)
+
+    def test_retirement_inspection_keeps_a_sealed_release(self):
+        self.configure("install")
+        self.configure("check")
+        retirement = self.bundles["dev-remove-repo"]
+        slot = self.slots / "dev-remove-repo"
+        before = slot.lstat()
+        self.assertEqual(slot.readlink(), retirement.skill)
+        retirement.root.chmod(0o700)
+        with self.assertRaisesRegex(ValueError, "dev-remove-repo requires sealed runtime directories"):
+            self.configure("check")
+        self.assertTrue(os.path.samestat(slot.lstat(), before))
 
     def test_index_runtime_uses_owned_profile_slot_and_restores_offline(self):
         entry = personal_core.index_runtime_entry(self.home, self.codex)
@@ -464,7 +476,8 @@ class StandardDevSkillTests(unittest.TestCase):
     def test_clean_profile_repeat_withdraw_and_offline_reinstall(self):
         self.configure("install")
         self.assertEqual(sorted(p.name for p in self.slots.iterdir()), [
-            "capability", "dev-doctor", "dev-new-repo", "frontend-design", "isokit", "local-jobs", "plan-refine",
+            "capability", "dev-doctor", "dev-new-repo", "dev-remove-repo", "frontend-design",
+            "isokit", "local-jobs", "plan-refine",
             "pr-steward", "prompt-architect",
             "save-game", "verification-before-completion", "web-artifacts-builder"])
         originals = {p.name: p.lstat() for p in self.slots.iterdir()}
