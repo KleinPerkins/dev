@@ -162,7 +162,7 @@
     }
   },
   "dev-new-repo": {
-    "revision": "f48c715378792ba23e05f09b1b9bc0d02fa01fc9",
+    "revision": "771c8352c5f6ce73b1b687b9ac639d00eaf4b553",
     "files": {
       "_ops/baseline/delivery-policy.json": ["100644", 3059, "4497b913d1069dbdfb82f96a59b8e0779969c2b9133b82e69e64924736dd6f40"],
       "_ops/baseline/delivery-policy.py": ["100644", 6406, "cfe515e421899e5ac33fcba8405a05315d6ad6a6db3afb55615b6c346fa69a93"],
@@ -174,7 +174,7 @@
       "_ops/baseline/template/github/ruleset-tag.json.tmpl": ["100644", 347, "371934669e9769ac5838b4ce6663662b5decac7120f0e25212532e8d9fb9f9c6"],
       "_ops/baseline/template/gitignore-block.txt": ["100644", 374, "82c9825c9bc39a36b98a9f2a6578d272e4381fea603714c4b86d1818599f075a"],
       "_ops/bin/baseline-lib.sh": ["100755", 59463, "72dc35fc69a318c92c77a9fd64c24dd2d550cad678fbe46aba559ad572273ea2"],
-      "_ops/bin/dev-new-repo.sh": ["100755", 59953, "273a6db0b892150d4b3380b8ed80e895197715d839b87539a159fec467d926af"],
+      "_ops/bin/dev-new-repo.sh": ["100755", 61031, "93e4b33a4c9d20522ea2174f175fec6766d3e0b4c1b1d0b172e6d95b2fecd691"],
       "_ops/bin/doc-warden.sh": ["100755", 37928, "97328352d912970ff6a5db2725acb4f38457c6fcfed1b3c07cd69e6cb7dc970b"],
       "_ops/bin/install-identity-guard.sh": ["100755", 8001, "b0388f16cb09e2f0e0d2c13bcab6862a08469333f7919f5dac5ae573c5b1e377"],
       "_ops/bin/install-skills.sh": ["100755", 2994, "045e93bb57ece527a4b528a64c2056dc1e7df70af36a4a439667a9bc117e9fb7"],
@@ -263,13 +263,13 @@
       "_ops/hooks/pre-commit-dispatcher": ["100755", 1013, "c3e4ff1530f10fe42b401dbb6fcd88c3361fb4305e40a189c430aa3d5c77175e"],
       "_ops/hooks/registration-guard": ["100644", 2091, "5c0f9780cc6a2f7e198e563e2afe96eb9e7e7e78a37731038b0a5d80897b0069"],
       "_ops/hooks/session-lock": ["100755", 6314, "469c28538f339f57c4e8ea5624232f5eca5bb337061c575e2deed5b5b9d41143"],
-      "_ops/policy/dev-successor.json": ["100644", 10132, "877b43a508d9779f36976980579a143b06d2b2238af892e30c9f0fab7cf2a444"],
+      "_ops/policy/dev-successor.json": ["100644", 10132, "eecc1c79ed80d5a4a93aa8c62aba8584527c209c6783d87badd1857663c31cba"],
       "_ops/portability/personal_scaffold.py": ["100644", 14275, "9311b3fdd9af4c9fc3cb7a42ccbf7a7bbf8100cee5d03e1a0bec219e94c18889"],
       "_ops/portability/personal_scope.py": ["100644", 12402, "f00252220fbeb4ff1784af22407354a0e5a60aa645427b8c27eb1412098f1c69"],
       "_ops/skills/personal/dev-new-repo/SKILL.md": ["100644", 2272, "2a980b30e6ed11fe119d03de69c21c43f6a3aa326c0b99b9ab7c0c663190ac46"]
     },
     "previous": {
-      "revision": "139e63a31e372ca4264e523e65f599005d2ce49f",
+      "revision": "f48c715378792ba23e05f09b1b9bc0d02fa01fc9",
       "files": {
         "_ops/baseline/delivery-policy.json": ["100644", 3059, "4497b913d1069dbdfb82f96a59b8e0779969c2b9133b82e69e64924736dd6f40"],
         "_ops/baseline/delivery-policy.py": ["100644", 6406, "cfe515e421899e5ac33fcba8405a05315d6ad6a6db3afb55615b6c346fa69a93"],
@@ -281,13 +281,13 @@
         "_ops/baseline/template/github/ruleset-tag.json.tmpl": ["100644", 347, "371934669e9769ac5838b4ce6663662b5decac7120f0e25212532e8d9fb9f9c6"],
         "_ops/baseline/template/gitignore-block.txt": ["100644", 374, "82c9825c9bc39a36b98a9f2a6578d272e4381fea603714c4b86d1818599f075a"],
         "_ops/bin/baseline-lib.sh": ["100755", 59463, "72dc35fc69a318c92c77a9fd64c24dd2d550cad678fbe46aba559ad572273ea2"],
-        "_ops/bin/dev-new-repo.sh": ["100755", 54469, "a32e735370b23ba6b59963164ffdad1ce991f53d57adf20c55eae73a2c9f452a"],
+        "_ops/bin/dev-new-repo.sh": ["100755", 59953, "273a6db0b892150d4b3380b8ed80e895197715d839b87539a159fec467d926af"],
         "_ops/bin/doc-warden.sh": ["100755", 37928, "97328352d912970ff6a5db2725acb4f38457c6fcfed1b3c07cd69e6cb7dc970b"],
         "_ops/bin/install-identity-guard.sh": ["100755", 8001, "b0388f16cb09e2f0e0d2c13bcab6862a08469333f7919f5dac5ae573c5b1e377"],
         "_ops/bin/install-skills.sh": ["100755", 2994, "045e93bb57ece527a4b528a64c2056dc1e7df70af36a4a439667a9bc117e9fb7"],
         "_ops/bin/lib.sh": ["100755", 10552, "96dc4c48107ca36c6d0134a5e2abbdd2a583b2eee688ec28fd2b9360939b9ba3"],
         "_ops/bin/link-personal-codex-skill.py": ["100644", 824, "a49d625acb4bf7f2203af6da3355719ad820b9aaa65880163ec26cbd7053c080"],
-        "_ops/bin/repo-baseline.sh": ["100755", 13725, "0c5cdb54b08b0cfc61d3be07d4c74ce28d7845bfbc4e93bbd612a33abab37f0f"],
+        "_ops/bin/repo-baseline.sh": ["100755", 14365, "f248c2720c0e170dab3f8745df676e898eceb40788e8fe2cbe8bc926c85f2831"],
         "_ops/bin/test-sharding.py": ["100755", 16942, "62623057aef4779817cbfac80c56a1204361dd318cc7052acbc92270be9cb28b"],
         "_ops/doc-warden/POLICY.md": ["100644", 7452, "8167358de878bbce675e0cc679f05056c544c2d4be2bdf86208d0f9bc8527082"],
         "_ops/doc-warden/runtime/gsd-core/gsd-core-pin.json": ["100644", 1787, "e2a48370da54adbf333a71b5e1b78e27abcfaf7302574c9356d133ba6f934517"],
@@ -319,7 +319,7 @@
         "_ops/doc-warden/v2/doc_warden/__init__.py": ["100644", 281, "be7a8e46a987355af9855c11a200838632157dfdfe25748ad3cae388b32bc079"],
         "_ops/doc-warden/v2/doc_warden/activation.py": ["100644", 4417, "bd5cf5896a5682fbb3c98d57400e23221d69a11086e41eab959361ce183b3b02"],
         "_ops/doc-warden/v2/doc_warden/adrs.py": ["100644", 21994, "267c2f099bd38ef152e9d28540aef59f6b679ea4a6e145522eb127cbc97b95b9"],
-        "_ops/doc-warden/v2/doc_warden/artifact_authority.py": ["100644", 13124, "426ae5da193c8fcb70dc94547aaa5a9a6d88519a88f402bbbedfc952ac989edf"],
+        "_ops/doc-warden/v2/doc_warden/artifact_authority.py": ["100644", 13668, "4232266138f989139e0420d5106023f484cfa1fc41d2a894b2eb31b61e5a9b92"],
         "_ops/doc-warden/v2/doc_warden/artifact_discovery.py": ["100644", 3173, "e2476dbcfc1b8aba9e319746feab4d3094f82bd90aff93fd4b358983ec1b9550"],
         "_ops/doc-warden/v2/doc_warden/artifacts.py": ["100644", 40252, "9c301c751aba71aa97c18d0f2a050abdd0cd58d3192c00fd52176554c159c88d"],
         "_ops/doc-warden/v2/doc_warden/bootstrap.py": ["100644", 6814, "4c89897f79d77ed1f80518c1c166fc132f25b12a22a397444b4a210075e0298c"],
@@ -371,9 +371,9 @@
         "_ops/hooks/registration-guard": ["100644", 2091, "5c0f9780cc6a2f7e198e563e2afe96eb9e7e7e78a37731038b0a5d80897b0069"],
         "_ops/hooks/session-lock": ["100755", 6314, "469c28538f339f57c4e8ea5624232f5eca5bb337061c575e2deed5b5b9d41143"],
         "_ops/policy/dev-successor.json": ["100644", 10132, "877b43a508d9779f36976980579a143b06d2b2238af892e30c9f0fab7cf2a444"],
-        "_ops/portability/personal_scaffold.py": ["100644", 7822, "4db21a159a3598878b2e79e557235c20f66aac91d1593ae6d0da2a1b8f4658ba"],
+        "_ops/portability/personal_scaffold.py": ["100644", 14275, "9311b3fdd9af4c9fc3cb7a42ccbf7a7bbf8100cee5d03e1a0bec219e94c18889"],
         "_ops/portability/personal_scope.py": ["100644", 12402, "f00252220fbeb4ff1784af22407354a0e5a60aa645427b8c27eb1412098f1c69"],
-        "_ops/skills/personal/dev-new-repo/SKILL.md": ["100644", 1367, "f14abdbae1dfca95516b85b88bb278429bd108a7146b4a03285565ad0ea8c9dd"]
+        "_ops/skills/personal/dev-new-repo/SKILL.md": ["100644", 2272, "2a980b30e6ed11fe119d03de69c21c43f6a3aa326c0b99b9ab7c0c663190ac46"]
       }
     }
   },

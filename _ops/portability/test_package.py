@@ -430,6 +430,60 @@ class StandardDevSkillTests(unittest.TestCase):
             self.configure("check")
         self.assertTrue(os.path.samestat(original, slot.lstat()))
 
+    def test_successive_upgrade_uses_the_owned_versioned_witness(self):
+        import personal_dev_skills as dev
+
+        self.configure("install")
+        previous = self.select_new_doctor()
+        self.configure("install")
+        slot = self.slots / "dev-doctor"
+        prior_stat = slot.lstat()
+        other_slots = {path: path.lstat().st_ino for path in self.slots.iterdir() if path != slot}
+        prior_control = self.codex / "dev-personal-core/dev-doctor/releases" / previous.revision
+        self.assertTrue(personal_core.owns_slot(slot, prior_control / slot.name, previous.skill))
+
+        current = self.select_new_doctor()
+        anchor = prior_control / slot.name
+        slot.unlink()
+        slot.symlink_to(previous.skill)
+        foreign = slot.lstat()
+        with patch.object(personal_core, "recover_withdrawals", wraps=personal_core.recover_withdrawals) as recovery:
+            with self.assertRaisesRegex(ValueError, "independently installed earlier"):
+                self.configure("install")
+        self.assertNotIn(prior_control, [call.args[0].control for call in recovery.call_args_list])
+        self.assertTrue(os.path.samestat(foreign, slot.lstat()))
+        slot.unlink()
+        os.link(anchor, slot, follow_symlinks=False)
+
+        complete = personal_core.finish_withdrawal
+
+        def interrupted(operation, *arguments):
+            if operation.parent == prior_control / "withdrawals":
+                raise OSError("interrupted after moving the versioned link")
+            return complete(operation, *arguments)
+
+        with patch.object(personal_core, "finish_withdrawal", side_effect=interrupted):
+            with self.assertRaisesRegex(OSError, "interrupted after moving"):
+                self.configure("install")
+        self.assertFalse(os.path.lexists(slot))
+        operation, = (prior_control / "withdrawals").glob("withdraw-*")
+        self.assertFalse((operation / "completed").exists())
+        self.configure("install")
+        self.assertTrue((operation / "completed").is_file())
+        self.configure("check")
+        self.assertEqual(slot.readlink(), current.skill)
+        parked, = (prior_control / "withdrawals").glob("withdraw-*/entry")
+        self.assertTrue(os.path.samestat(prior_stat, parked.lstat()))
+        self.assertEqual(other_slots, {
+            path: path.lstat().st_ino for path in self.slots.iterdir() if path != slot
+        })
+
+        self.configure("withdraw")
+        with patch.dict(dev.RELEASES, {"dev-doctor": current.previous}):
+            self.configure("install")
+            self.configure("check")
+        self.assertTrue(os.path.samestat(prior_stat, slot.lstat()))
+
     def test_upgrade_preserves_independently_installed_previous_doctor(self):
         original = self.bundles["dev-doctor"]
         original.prepare()
