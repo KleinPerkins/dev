@@ -13,9 +13,9 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-from bind_retirement_inventory import destruction_roots
+from bind_retirement_inventory import bind_retirement, destruction_roots
 from checkout_git_config import observe_git_config
-from personal_checkout_inventory import Binding, Inventory, Refused
+from personal_checkout_inventory import Binding, Inventory, Refused, check_retirement_dependencies, lexical
 
 
 def deadline():
@@ -343,18 +343,91 @@ os._exit(44)
         self.assertEqual(self.calls, [self.first.checkout])
         self.assertEqual(self.inventory.operation("new-owner-request")["phase"], "reserved")
 
-    def test_shared_git_location_is_fenced(self):
+    def admit_linked_checkout(self):
         linked = replace(self.first, checkout=str(self.root / "linked"),
                          git_directory=self.first.git_directory + "/worktrees/linked", worktree_id="linked")
         self.inventory.reserve(self.version, "add-linked", {linked.checkout: linked}, deadline=deadline())
         linked_version = self.inventory.finish("add-linked", outcome="committed", owner_evidence="linked-present",
                                                deadline=deadline())
+        return linked, linked_version
+
+    def test_shared_git_location_is_fenced(self):
+        linked, linked_version = self.admit_linked_checkout()
         self.probe(linked, linked_version, role="common_directory")
         pending = self.inventory.reserve(linked_version, "retire-linked", {linked.checkout: None}, deadline=deadline())
         with self.assertRaisesRegex(Refused, "pending"):
             self.probe(self.first, pending, role="common_directory")
         self.probe(self.peer, pending)
         self.assertEqual(self.calls, [self.first.common_directory, self.peer.checkout])
+
+    def test_retiring_primary_requires_removing_or_rebinding_dependent_checkouts(self):
+        linked, version = self.admit_linked_checkout()
+        with self.assertRaisesRegex(Refused, "another admitted checkout depends"):
+            self.inventory.reserve(version, "incomplete-retirement", {self.first.checkout: None}, deadline=deadline())
+        self.assertEqual(self.inventory.snapshot()[1], version)
+        with self.assertRaisesRegex(Refused, "unknown owner lifecycle operation"):
+            self.inventory.operation("incomplete-retirement")
+
+        checkout = str(self.root / "relocated.product")
+        common = checkout + "/.git"
+        relocated = replace(self.first, checkout=checkout, git_directory=common, common_directory=common)
+        rebound = replace(linked, git_directory=common + "/worktrees/linked", common_directory=common)
+        changes = {self.first.checkout: None, relocated.checkout: relocated, rebound.checkout: rebound}
+        pending = self.inventory.reserve(version, "complete-move", changes, deadline=deadline())
+        for binding in (self.first, linked, relocated):
+            with self.assertRaises(Refused):
+                self.probe(binding, pending)
+        self.probe(self.peer, pending)
+        moved = self.inventory.finish("complete-move", outcome="committed",
+                                      owner_evidence="verified move", deadline=deadline())
+        self.probe(rebound, moved, role="git_directory")
+
+        self.inventory.reserve(moved, "complete-retirement", {relocated.checkout: None, rebound.checkout: None},
+                               deadline=deadline())
+        retired = self.inventory.finish("complete-retirement", outcome="committed",
+                                         owner_evidence="verified retirement", deadline=deadline())
+        for binding in (relocated, rebound):
+            with self.assertRaisesRegex(Refused, "no approval"):
+                self.probe(binding, retired)
+        self.probe(self.peer, retired)
+        self.assertEqual(self.calls, [self.peer.checkout, rebound.git_directory, self.peer.checkout])
+
+    def test_retirement_dependency_contains_root_without_matching_a_similar_sibling(self):
+        with self.assertRaisesRegex(Refused, "not a canonical absolute path"):
+            lexical("/")
+        with self.assertRaisesRegex(Refused, "another admitted checkout depends"):
+            check_retirement_dependencies({"/"}, (self.first,))
+        check_retirement_dependencies({self.first.checkout}, (self.binding("sample.product-sibling", 903),))
+
+    def test_incomplete_legacy_retirement_stays_fenced_until_recovered(self):
+        linked, version = self.admit_linked_checkout()
+        changes = {self.first.checkout: None}
+        with patch("personal_checkout_inventory.check_retirement_dependencies", create=True):
+            with patch.object(self.inventory, "_reserve_requested", side_effect=Refused("fixture interruption")):
+                with self.assertRaisesRegex(Refused, "fixture interruption"):
+                    self.inventory.reserve(version, "old-queue", changes, deadline=deadline())
+        self.assertEqual(self.inventory.operation("old-queue")["phase"], "requested")
+        with self.assertRaisesRegex(Refused, "another admitted checkout depends"):
+            self.inventory.reserve(version, "old-queue", changes, deadline=deadline())
+        self.assertEqual(self.inventory.operation("old-queue")["phase"], "superseded")
+        self.assertEqual(self.inventory.snapshot()[1], version)
+
+        with patch("personal_checkout_inventory.check_retirement_dependencies", create=True):
+            reserved = self.inventory.reserve(version, "old-reservation", changes, deadline=deadline())
+        with self.assertRaisesRegex(Refused, "another admitted checkout depends"):
+            self.inventory.finish("old-reservation", outcome="committed",
+                                  owner_evidence="incomplete legacy plan", deadline=deadline())
+        self.assertEqual(self.inventory.operation("old-reservation")["phase"], "reserved")
+        self.assertEqual(self.inventory.snapshot()[1], reserved)
+        for binding in (self.first, linked):
+            with self.assertRaisesRegex(Refused, "pending"):
+                self.probe(binding, reserved)
+        self.probe(self.peer, reserved)
+
+        recovered = self.inventory.finish("old-reservation", outcome="rolled-back",
+                                          owner_evidence="verified original bindings", deadline=deadline())
+        self.probe(linked, recovered)
+        self.assertEqual(self.calls, [self.peer.checkout, linked.checkout])
 
     def test_overlapping_checkout_and_git_locations_are_refused_before_reservation(self):
         checkout = self.first.checkout
@@ -565,6 +638,33 @@ os._exit(44)
         self.assertEqual(destruction_roots(str(self.root), [
             {"kind": "delete-checkout", "params": {"rel": "owner/project"}}
         ]), {str(self.root / "owner/project")})
+
+    def test_retirement_plan_requires_valid_bindings_even_when_all_rows_are_selected(self):
+        source, version = self.inventory.snapshot()
+        steps = [{"kind": "delete-checkout", "params": {"rel": Path(row.checkout).name}}
+                 for row in (self.first, self.peer)]
+        expected = {self.first.checkout: None, self.peer.checkout: None}
+        self.assertEqual(bind_retirement(str(self.root), steps, source, version), expected)
+        for invalid in ({}, asdict(replace(self.first, repository_id=0)), asdict(self.peer)):
+            with self.subTest(binding=invalid):
+                state = json.loads(source)
+                state["bindings"][self.first.checkout] = invalid
+                raw = json.dumps(state, sort_keys=True, separators=(",", ":")).encode()
+                malformed = (*version[:2], sha256(raw).hexdigest())
+                with self.assertRaisesRegex(Refused, "malformed Dev admission"):
+                    bind_retirement(str(self.root), steps, raw, malformed)
+        for invalid in (None, [], "unreadable", 42):
+            with self.subTest(binding_table=invalid):
+                state = json.loads(source)
+                state["bindings"] = invalid
+                raw = json.dumps(state, sort_keys=True, separators=(",", ":")).encode()
+                malformed = (*version[:2], sha256(raw).hexdigest())
+                with self.assertRaisesRegex(Refused, "malformed Dev admission"):
+                    bind_retirement(str(self.root), steps, raw, malformed)
+        for raw in (b"{", b"null", b"[]", b"{}"):
+            with self.subTest(invalid_inventory=raw), self.assertRaisesRegex(Refused, "malformed Dev admission"):
+                bind_retirement(str(self.root), steps, raw, version)
+        self.assertEqual(self.inventory.snapshot()[1], version)
 
     def test_policy_reservation_invalidates_old_generations_and_preserves_withdrawn_binding(self):
         revision = "private-policy-2"
