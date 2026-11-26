@@ -1,7 +1,11 @@
+import json
+import socket
+import time
 import unittest
+from unittest.mock import call, patch
 
 from native_checkout_project import (
-    NativeProjectBinding, Refused, read_desktop_linked_project, read_desktop_project, selection_digest,
+    NativeProjectBinding, NativeProjectReader, Refused, read_desktop_linked_project, read_desktop_project, selection_digest,
 )
 
 PROJECT = "01b2dd20-ef5c-7dc9-887b-125176aeba52"
@@ -132,3 +136,89 @@ class DesktopLinkedSelection(unittest.TestCase):
             selection_digest(LINKED_PROJECT, LINKED, {"unexpected": "structure"})
         with self.assertRaisesRegex(Refused, "valid Codex thread ID"):
             NativeProjectBinding(LINKED_PROJECT, LINKED, "Fixture", None, 300, "invalid/thread")
+
+
+class NativeCatalogLinkedProject(unittest.TestCase):
+    def setUp(self):
+        self.reader = NativeProjectReader(None, None)
+        self.reader.initialized = True
+        self.project = {"project": {"id": LINKED_PROJECT, "roots": [{"path": PRIMARY}],
+                                    "name": "Fixture", "updatedAt": 10}}
+        self.thread = {"id": THREAD, "projectId": LINKED_PROJECT, "cwd": LINKED, "ephemeral": False}
+        self.membership = {"data": [self.thread], "nextCursor": None}
+
+    def read_linked(self, **options):
+        return self.reader.read(LINKED_PROJECT, LINKED, **(
+            {"deadline": 100, "thread_id": THREAD, "primary_checkout": PRIMARY} | options
+        ))
+
+    def test_primary_preserves_the_single_project_read(self):
+        with patch.object(self.reader, "_call", return_value=self.project) as native:
+            selected = self.reader.read(LINKED_PROJECT, PRIMARY, deadline=100)
+        self.assertEqual(selected.selection_digest, selection_digest(LINKED_PROJECT, PRIMARY))
+        native.assert_called_once_with("project/read", {"projectId": LINKED_PROJECT}, 100)
+
+    def test_linked_checkout_checks_owner_root_and_two_independent_thread_reads(self):
+        with patch.object(self.reader, "_call",
+                          side_effect=[self.project, self.membership, {"thread": self.thread}]) as native:
+            selected = self.read_linked()
+        self.assertEqual(selected.selection_digest, selection_digest(LINKED_PROJECT, LINKED, THREAD))
+        self.assertEqual(selected.thread_id, THREAD)
+        self.assertEqual(native.call_args_list, [
+            call("project/read", {"projectId": LINKED_PROJECT}, 100),
+            call("thread/list", {"projectId": LINKED_PROJECT, "includedThreadIds": [THREAD], "limit": 2,
+                                 "useStateDbOnly": True, "modelProviders": []}, 100),
+            call("thread/read", {"threadId": THREAD, "includeTurns": False}, 100),
+        ])
+
+    def test_missing_owner_root_or_bad_thread_id_refuses_without_native_access(self):
+        for options in ({"primary_checkout": None}, {"primary_checkout": LINKED},
+                        {"primary_checkout": PRIMARY + "/../sample"}, {"thread_id": "a/b"}):
+            with self.subTest(options=options), patch.object(self.reader, "_call") as native:
+                with self.assertRaises(Refused):
+                    self.read_linked(**options)
+                native.assert_not_called()
+
+    def test_changed_primary_refuses_before_thread_access(self):
+        with patch.object(self.reader, "_call", return_value=self.project) as native:
+            with self.assertRaisesRegex(Refused, "admitted primary project root"):
+                self.read_linked(primary_checkout=PRIMARY + "-other")
+            native.assert_called_once()
+
+    def test_empty_duplicate_or_incomplete_membership_cannot_substitute_for_an_exact_match(self):
+        for result in ({"data": [], "nextCursor": None}, {"data": [self.thread, self.thread], "nextCursor": None},
+                       {"data": [self.thread], "nextCursor": "next-page"}, {"data": [self.thread]}):
+            with self.subTest(result=result), patch.object(self.reader, "_call",
+                                                           side_effect=[self.project, result]) as native:
+                with self.assertRaisesRegex(Refused, "one current thread member"):
+                    self.read_linked()
+                self.assertEqual(native.call_count, 2)
+
+    def test_thread_with_changed_project_directory_or_lifetime_refuses_on_either_read(self):
+        changes = ({"projectId": "other-project"}, {"cwd": PRIMARY}, {"id": "other-thread"}, {"ephemeral": True})
+        for changeset in changes:
+            for bad in ("membership", "detail"):
+                with self.subTest(changes=changeset, source=bad):
+                    records = {"membership": self.thread, "detail": self.thread}
+                    records[bad] = self.thread | changeset
+                    with patch.object(self.reader, "_call", side_effect=[
+                        self.project, {"data": [records["membership"]], "nextCursor": None},
+                        {"thread": records["detail"]},
+                    ]):
+                        with self.assertRaises(Refused):
+                            self.read_linked()
+
+    def test_malformed_thread_results_refuse_through_the_wire_reader(self):
+        for index in (1, 2):
+            for malformed in (None, [], "not an object"):
+                client, peer = socket.socketpair()
+                with self.subTest(reply=index, malformed=malformed), client, peer:
+                    replies = [self.project, self.membership, {"thread": self.thread}]
+                    replies[index] = malformed
+                    peer.sendall(b"".join((json.dumps({"id": i, "result": response}) + "\n").encode()
+                                         for i, response in enumerate(replies, 1)))
+                    reader = NativeProjectReader(client.fileno(), client.fileno())
+                    reader.initialized = True
+                    with self.assertRaisesRegex(Refused, "non-object result"):
+                        reader.read(LINKED_PROJECT, LINKED, deadline=time.monotonic() + 2,
+                                    thread_id=THREAD, primary_checkout=PRIMARY)

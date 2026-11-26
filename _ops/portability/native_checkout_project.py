@@ -135,7 +135,7 @@ class NativeProjectReader:
                 raise Refused("the Codex project connection closed before the request")
             data = data[written:]
 
-    def _receive(self, request_id, deadline):
+    def _receive(self, request_id, deadline) -> dict:
         received = len(self.buffer)
         while time.monotonic() < deadline:
             if b"\n" not in self.buffer:
@@ -160,19 +160,31 @@ class NativeProjectReader:
                 continue
             if type(record.get("id")) is not int or record["id"] != request_id or "method" in record:
                 raise Refused("the Codex project connection returned an unexpected reply")
-            if "error" in record or not isinstance(record.get("result"), dict):
+            if "error" in record:
                 raise Refused("Codex could not supply the selected project")
-            return record["result"]
+            result = record.get("result")
+            if not isinstance(result, dict):
+                raise Refused("the Codex project connection returned a non-object result")
+            return result
         raise Refused("the Codex project read exceeded its deadline")
 
-    def _call(self, method, params, deadline):
+    def _call(self, method, params, deadline) -> dict:
         request_id = self.next_id
         self.next_id += 1
         self._send({"id": request_id, "method": method, "params": params}, deadline)
         return self._receive(request_id, deadline)
 
-    def read(self, project_id, checkout, *, deadline):
-        checkout = _selected_path(project_id, checkout)
+    def read(self, project_id, checkout, *, deadline, thread_id=None, primary_checkout=None):
+        """Read a primary or a linked checkout using the owner's admitted primary path."""
+        checkout = _selection_identity(project_id, checkout, thread_id)[1]
+        if thread_id is not None:
+            if primary_checkout is None:
+                raise Refused("the linked checkout needs its separately admitted primary project root")
+            primary_checkout = lexical(primary_checkout)
+            if primary_checkout == checkout:
+                raise Refused("the linked checkout must differ from the admitted primary project root")
+        elif primary_checkout is not None:
+            raise Refused("a primary checkout must be selected directly")
         try:
             if not self.initialized:
                 params = {"clientInfo": {"name": "dev-checkout-authority", "version": "1"},
@@ -180,12 +192,18 @@ class NativeProjectReader:
                 self._call("initialize", params, deadline)
                 self._send({"method": "initialized", "params": {}}, deadline)
                 self.initialized = True
-            result = self._call("project/read", {"projectId": project_id}, deadline)
+            title, updated = self._project(project_id, checkout, primary_checkout, deadline)
+            if thread_id is not None:
+                self._verify_linked_thread(project_id, checkout, thread_id, deadline)
         except Refused:
             raise
         except (OSError, ValueError) as error:
             raise Refused("the owner-provided Codex project connection is unavailable") from error
 
+        return NativeProjectBinding(project_id, checkout, title, updated, int(time.time()), thread_id)
+
+    def _project(self, project_id, checkout, primary_checkout, deadline):
+        result = self._call("project/read", {"projectId": project_id}, deadline)
         project = result.get("project")
         if not isinstance(project, dict) or project.get("id") != project_id:
             raise Refused("the Codex reply differs from the selected project ID")
@@ -193,9 +211,28 @@ class NativeProjectReader:
         if not isinstance(roots, list) or any(not isinstance(root, dict) for root in roots):
             raise Refused("the Codex project has invalid root evidence")
         paths = [lexical(root.get("path")) for root in roots]
-        if paths.count(checkout) != 1:
+        if primary_checkout is not None and paths != [primary_checkout]:
+            raise Refused("Codex no longer binds the linked checkout's admitted primary project root")
+        if primary_checkout is None and paths.count(checkout) != 1:
             raise Refused("Codex does not bind the selected checkout exactly once")
         title, updated = project.get("name"), project.get("updatedAt")
         if not isinstance(title, str) or type(updated) is not int or updated < 0:
             raise Refused("the Codex project has invalid display or revision evidence")
-        return NativeProjectBinding(project_id, checkout, title, updated, int(time.time()))
+        return title, updated
+
+    def _verify_linked_thread(self, project_id, checkout, thread_id, deadline):
+        result = self._call("thread/list", {
+            "projectId": project_id, "includedThreadIds": [thread_id], "limit": 2,
+            "useStateDbOnly": True, "modelProviders": [],
+        }, deadline)
+        rows = result.get("data")
+        if not isinstance(rows, list) or len(rows) != 1 or result.get("nextCursor", "") is not None:
+            raise Refused("Codex did not report one current thread member of the selected project")
+        membership, = rows
+        detail = self._call("thread/read", {"threadId": thread_id, "includeTurns": False}, deadline)
+        for row in (membership, detail.get("thread")):
+            if (not isinstance(row, dict) or row.get("id") != thread_id or row.get("ephemeral") is not False
+                    or row.get("projectId") != project_id):
+                raise Refused("Codex did not confirm the same durable thread in the selected project")
+            if lexical(row.get("cwd")) != checkout:
+                raise Refused("Codex did not confirm the selected linked checkout on both thread reads")
