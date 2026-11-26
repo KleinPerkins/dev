@@ -110,7 +110,15 @@ Save-Game saves a private checkpoint and resumes it in a fresh session. Dev
 installs the complete Skills release pinned by Doc-Warden. If the Codex entry
 already points to that release under `~/.local/share/save-game/source`, Dev
 verifies its contents in place. Withdrawing the profile preserves that
-independent entry and the private checkpoint data. [Save-Game release manifest](personal-save-game.json).
+independent entry and the private checkpoint data. The standard profile can
+upgrade its owned predecessor after it verifies the new package. If publication
+is interrupted, repeat the same configuration command. Dev retains the old
+release and its ownership witness. To revert a managed profile, withdraw it
+from the new source and configure it from the earlier source. Coordinate the
+Save-Game package change and any rollback with the matching Doc-Warden release
+before using governed authoring. An independently installed matching predecessor is verified in place and
+reported as an update pending until the coordinated owner upgrade.
+[Save-Game release manifest](personal-save-game.json).
 
 Local Jobs runs on-demand commands and schedules explicitly configured jobs.
 Setup installs the global Skills release and a private Python fallback with

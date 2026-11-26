@@ -621,6 +621,110 @@ class StandardDevSkillTests(unittest.TestCase):
         self.assertEqual(engine.read_bytes(), b"independent edit")
         self.assertEqual(checkpoint.read_bytes(), b"private saved state")
 
+    def configure_save_game_predecessor(self):
+        current = personal_core.SAVE_GAME_RELEASE
+        previous = dict(current["previous"], skills=current["skills"])
+        read = self.design_read.side_effect
+        self.design_read.side_effect = lambda url, length: read(
+            url.replace(previous["revision"], current["revision"]), length)
+        with patch.object(personal_core, "SAVE_GAME_RELEASE", previous):
+            self.configure("install")
+        return previous, dict(current, previous=previous)
+
+    def test_save_game_owned_upgrade_recovers_after_withdrawal_and_rolls_back(self):
+        previous, current = self.configure_save_game_predecessor()
+        slot = self.slots / "save-game"
+        control = self.codex / "dev-personal-core/save-game"
+        original = slot.lstat()
+        original_target = slot.readlink()
+        neighbors = {p: p.lstat().st_ino for p in self.slots.iterdir() if p != slot}
+        checkpoint = self.home / ".local/state/save-game/checkpoint.json"
+        checkpoint.parent.mkdir(parents=True)
+        checkpoint.write_bytes(b"saved work in the prior release")
+        apply = personal_core.change_entry
+
+        def interrupt(entry, action):
+            if entry.slot == slot and action == "install":
+                raise OSError("Save-Game publication interrupted")
+            return apply(entry, action)
+
+        with patch.object(personal_core, "SAVE_GAME_RELEASE", current):
+            with patch.object(personal_core, "read_url", side_effect=OSError("download interrupted")):
+                with self.assertRaisesRegex(OSError, "download interrupted"):
+                    self.configure("install")
+            self.assertTrue(os.path.samestat(original, slot.lstat()))
+            with patch.object(personal_core, "change_entry", side_effect=interrupt):
+                with self.assertRaisesRegex(OSError, "Save-Game publication interrupted"):
+                    self.configure("install")
+            self.assertFalse(os.path.lexists(slot))
+            parked, = (control / "withdrawals").glob("withdraw-*/entry")
+            self.assertTrue(os.path.samestat(original, parked.lstat()))
+            slot.symlink_to(original_target)
+            foreign = slot.lstat()
+            with self.assertRaisesRegex(ValueError, "independently installed earlier save-game"):
+                self.configure("install")
+            self.assertTrue(os.path.samestat(foreign, slot.lstat()))
+            self.assertTrue(os.path.samestat(original, parked.lstat()))
+            slot.unlink()
+            self.configure("install")
+            self.configure("check")
+            successor_witness = control / "releases" / current["revision"] / "save-game"
+            self.assertTrue(personal_core.owns_slot(slot, successor_witness, slot.readlink()))
+            installed = slot.lstat()
+            self.configure("install")
+            self.assertTrue(os.path.samestat(installed, slot.lstat()))
+            self.assertEqual(neighbors, {p: p.lstat().st_ino for p in self.slots.iterdir() if p != slot})
+            self.configure("withdraw")
+        with patch.object(personal_core, "SAVE_GAME_RELEASE", previous):
+            self.configure("install")
+            self.configure("check")
+        self.assertEqual(slot.readlink(), original_target)
+        self.assertTrue(os.path.samestat(original, slot.lstat()))
+        self.assertEqual(checkpoint.read_bytes(), b"saved work in the prior release")
+
+    def test_save_game_verifies_its_separately_installed_predecessor_until_owner_upgrade(self):
+        previous, current = self.configure_save_game_predecessor()
+        slot = self.slots / "save-game"
+        source = self.home / ".local/share/save-game/source" / previous["revision"] / "global/skills/save-game"
+        source.parent.mkdir(parents=True)
+        shutil.copytree(slot.resolve(), source)
+        # The Mini was installed by the package owner before the Dev profile enrolled it.
+        slot.unlink()
+        anchor = self.codex / "dev-personal-core/save-game/save-game"
+        anchor.unlink()
+        slot.symlink_to(source)
+        original = slot.lstat()
+        checkpoint = self.home / ".local/state/save-game/v1/checkpoints/private.json"
+        checkpoint.parent.mkdir(parents=True)
+        checkpoint.write_bytes(b"the last good checkpoint")
+        self.design_read.side_effect = AssertionError("independent Save-Game inspection attempted to download")
+        notice = f"verified independently installed save-game {previous['revision'][:12]} (update pending)"
+        with patch.object(personal_core, "SAVE_GAME_RELEASE", current):
+            self.assertIn(notice, self.configure("check"))
+            self.assertIn(notice, self.configure("install"))
+            self.assertTrue(os.path.samestat(original, slot.lstat()))
+            engine = source / "engine/index.py"
+            engine.chmod(0o600)
+            engine.write_bytes(b"changed by someone else")
+            with self.assertRaisesRegex(ValueError, "index.py"):
+                self.configure("check")
+            self.configure("withdraw")
+        self.assertTrue(os.path.samestat(original, slot.lstat()))
+        self.assertEqual(checkpoint.read_bytes(), b"the last good checkpoint")
+
+    def test_save_game_refuses_an_independent_predecessor_with_the_same_target(self):
+        _, current = self.configure_save_game_predecessor()
+        slot = self.slots / "save-game"
+        target = slot.readlink()
+        slot.unlink()
+        slot.symlink_to(target)
+        substituted = slot.lstat()
+        with patch.object(personal_core, "SAVE_GAME_RELEASE", current):
+            with self.assertRaisesRegex(ValueError, "independently installed earlier save-game"):
+                self.configure("install")
+        self.assertTrue(os.path.samestat(substituted, slot.lstat()))
+        self.assertEqual(slot.readlink(), target)
+
     def test_local_jobs_validates_runtime_and_keeps_generated_dashboard_and_job_state(self):
         self.configure("install")
         slot = self.slots / "local-jobs"

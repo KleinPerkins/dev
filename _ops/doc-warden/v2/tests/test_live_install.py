@@ -1918,6 +1918,121 @@ class HostProjectionTest(unittest.TestCase):
                 self.apply(operation)
         self.assertFalse((self.project / ".agents").exists())
 
+    def stale_device_projection(self):
+        identity = host_transaction._project_identity(self.project)
+        old = {"project_identity": identity, "home": str(self.home), "data_home": str(self.data),
+               "host_digest": "sha256:" + "a" * 64, **self.binding}
+        self.binding = old
+        self.apply(self.preview(old))
+        root = self.root / "state/doc-warden"
+        path = root / host_transaction._state_relative(self.project)
+        state = host_transaction._read_state(root, self.project)
+        previous_identity = {**identity, "device": identity["device"] + 1}
+        state["active"]["owner"]["project_identity"] = previous_identity
+        state["active"]["binding"]["project_identity"] = previous_identity
+        path.write_bytes(canonical_json(state))
+        self.binding = {**old, "source_root": str(self.root / "fresh-release")}
+        return path, state
+
+    def recovery_preview(self):
+        return host_transaction.prepare_host_change(
+            self.project, home=self.home, data_home=self.data, authority=self.authority,
+            binding=self.binding, verify=self.verify, recover_device=True,
+        )
+
+    def apply_recovery(self, operation, *, discover, consent=None):
+        if consent is None:
+            consent = consent_for(SimpleNamespace(**operation), consequence_class="external")
+        return host_transaction.apply_host_change(
+            operation["operation_id"], operation["action_digest"], consent,
+            verify=self.verify, revalidate=self.verify, verify_projection=discover,
+        )
+
+    def test_device_recovery_requires_explicit_preview_and_verified_current_discovery(self):
+        path, old_state = self.stale_device_projection()
+        old_bytes = path.read_bytes()
+        old_images = host_projection.observe_descriptors(self.project)
+        for binding in (self.binding, None):
+            with self.assertRaisesRegex(ValueError, "projection_destination_changed"):
+                self.preview(binding)
+        with self.assertRaisesRegex(ValueError, "projection_destination_changed"):
+            self.installed()
+        preview = self.recovery_preview()
+        self.assertEqual(preview["consequence"], host_transaction.DEVICE_RECOVERY)
+        self.assertEqual(preview["previous_owner"], old_state["active"]["owner"])
+        self.assertNotIn("previous_projection", preview)
+        self.assertEqual(path.read_bytes(), old_bytes)
+        self.assertEqual(host_projection.observe_descriptors(self.project), old_images)
+        with self.assertRaisesRegex(ValueError, "projection_device_recovery_unavailable"):
+            self.apply(preview)
+        with self.assertRaisesRegex(ValueError, "fresh_exact_consent_required"):
+            host_transaction.apply_host_change(
+                preview["operation_id"], preview["action_digest"], None,
+                verify=self.verify, revalidate=self.verify, verify_projection=mock.Mock(),
+            )
+        self.assertEqual(path.read_bytes(), old_bytes)
+
+        def discover(binding):
+            self.assertEqual(binding, self.binding)
+            self.assertEqual(host_projection.observe_descriptors(self.project), preview["after"])
+            self.assertEqual(host_transaction._read_state(self.root / "state/doc-warden", self.project)["pending"],
+                             preview["action_digest"])
+
+        discovered = mock.Mock(side_effect=discover)
+        result = self.apply_recovery(preview, discover=discovered)
+        self.assertEqual(result["status"], "installed")
+        self.assertEqual(self.installed(), self.binding)
+        self.assertEqual(self.apply_recovery(preview, discover=discovered), result)
+        discovered.assert_called_once_with(self.binding)
+        retained = host_transaction._regular_private(host_transaction.operation_path(preview["operation_id"]))
+        self.assertEqual(retained["previous_projection"], old_state["active"])
+
+    def test_device_recovery_refuses_changed_inode_host_or_foreign_descriptor(self):
+        path, state = self.stale_device_projection()
+        original = path.read_bytes()
+        for field in ("inode", "path"):
+            with self.subTest(field=field):
+                old = state["active"]["owner"]["project_identity"].copy()
+                changed = {**old, field: old[field] + (1 if field == "inode" else "-other")}
+                state["active"]["owner"]["project_identity"] = changed
+                state["active"]["binding"]["project_identity"] = changed
+                path.write_bytes(canonical_json(state))
+                with self.assertRaisesRegex(ValueError, "projection_device_recovery_unavailable"):
+                    self.recovery_preview()
+                state = parse_json_object(original)
+                path.write_bytes(original)
+        self.binding["host_digest"] = "sha256:" + "b" * 64
+        with self.assertRaisesRegex(ValueError, "projection_device_recovery_unavailable"):
+            self.recovery_preview()
+        self.binding["host_digest"] = state["active"]["binding"]["host_digest"]
+        descriptor = self.project / host_projection.PROJECTION_PATHS[0]
+        descriptor.write_bytes(b"Owner edit, preserve it")
+        with self.assertRaisesRegex(ValueError, "projection_foreign"):
+            self.recovery_preview()
+        self.assertEqual(descriptor.read_bytes(), b"Owner edit, preserve it")
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_device_recovery_preserves_preimage_on_opt_out_or_interruption(self):
+        path, state = self.stale_device_projection()
+        preview = self.recovery_preview()
+        with mock.patch.object(host_transaction, "require_authoring_enabled", side_effect=ValueError("repository_write_disabled")):
+            with self.assertRaisesRegex(ValueError, "repository_write_disabled"):
+                self.apply_recovery(preview, discover=mock.Mock())
+        self.assertEqual(parse_json_object(path.read_bytes()), state)
+        before = host_projection.observe_descriptors(self.project)
+        undiscovered = mock.Mock(side_effect=ValueError("fixture discovery unavailable"))
+        with self.assertRaisesRegex(ValueError, "projection_recovery_required"):
+            self.apply_recovery(preview, discover=undiscovered)
+        pending = parse_json_object(path.read_bytes())
+        self.assertEqual(pending, {**state, "pending": preview["action_digest"]})
+        self.assertNotEqual(host_projection.observe_descriptors(self.project), before)
+        with self.assertRaisesRegex(ValueError, "projection_recovery_required"):
+            self.recovery_preview()
+        seen = mock.Mock()
+        self.assertEqual(self.apply_recovery(preview, discover=seen)["status"], "installed")
+        self.assertEqual(self.installed(), self.binding)
+        seen.assert_called_once()
+
     def test_existing_descriptor_never_becomes_owned_by_byte_equality(self):
         descriptor = self.project / host_projection.PROJECTION_PATHS[0]
         descriptor.parent.mkdir(parents=True)

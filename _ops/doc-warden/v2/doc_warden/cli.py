@@ -772,7 +772,7 @@ def build_parser() -> argparse.ArgumentParser:
     runtime.add_argument(
         "runtime_verb", choices=(
             "qualify-gsd", "install-gsd", "uninstall-gsd", "doctor-gsd",
-            "qualify-codex", "install-codex", "uninstall-codex", "doctor-codex", "author-codex",
+            "qualify-codex", "install-codex", "recover-codex", "uninstall-codex", "doctor-codex", "author-codex",
         )
     )
     runtime.add_argument("--repo", type=Path, default=Path.cwd())
@@ -1475,6 +1475,8 @@ def main(argv: list[str] | None = None) -> int:
         "live_uninstall_recovery_required": "inspect_retained_runtime_recovery_evidence",
         "live_install_rollback_incomplete": "inspect_retained_runtime_recovery_evidence",
         "native_authoring_projection_recovery_required": "retry_exact_codex_projection_operation",
+        "native_authoring_projection_destination_changed": "check_project_binding_before_native_recovery",
+        "native_authoring_projection_device_recovery_unavailable": "inspect_retained_projection_and_owner_binding",
     }
     next_action = CONTINUITY_NEXT_ACTION.get(code, runtime_next_action.get(code, "correct_input_and_retry"))
     print(

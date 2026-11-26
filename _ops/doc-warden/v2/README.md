@@ -226,6 +226,23 @@ If a write is interrupted, exact retry verifies the pending record and the
 current descriptor images. A later edit leaves the pending evidence available
 for recovery.
 
+If the existing projection refuses a changed filesystem device number, qualify
+the current client and selected project through the normal owner route. Use the
+following separate preview when only the recorded device differs.
+
+~~~bash
+doc-warden.sh runtime recover-codex --repo DEV --project PROJECT --preview
+~~~
+
+Confirm the current project and the previous and proposed device identities in
+the preview before authorizing the exact operation. Recovery requires matching
+path, directory inode, host, profile destinations and four previously owned
+descriptors. It uses the fresh qualification and keeps the previous projection
+record in private operation evidence. The normal apply verifies native skill
+discovery before it records the recovered projection. A different path or inode,
+foreign descriptor edits, a project opt-out or a competing pending operation
+requires separate owner resolution.
+
 Start from the Codex project and select `$gsd-new-project`,
 `$gsd-discuss-phase`, `$gsd-plan-phase` or `$gsd-validate-phase`. The skill
 passes the operator's decisions to `runtime author-codex` as a bounded private

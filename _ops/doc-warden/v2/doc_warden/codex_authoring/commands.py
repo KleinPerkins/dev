@@ -8,7 +8,9 @@ from ..operation_store import private_state_root
 from ..runtime_host import installation_context
 from .authoring_command import prepare_native_authoring
 from .host_assets import client_environment, qualify_host, read_qualification, verify_assets
-from .host_transaction import apply_host_change, prepare_host_change, read_installed_projection
+from .host_transaction import (
+    apply_host_change, prepare_host_change, read_installed_projection, require_authoring_enabled,
+)
 from .native_client import observe_skills
 
 
@@ -48,21 +50,23 @@ def run_codex_command(args):
     if verb != "author-codex" and any((args.skill, args.argument, args.operator_input, args.active_plan)):
         raise ValueError("native_authoring_options_require_author_codex")
     project, home, data = (path.expanduser().resolve() for path in (args.project, args.home, args.data_home))
+    if verb in {"qualify-codex", "install-codex", "recover-codex", "author-codex"}:
+        require_authoring_enabled(project)
     if verb == "qualify-codex":
         if args.preview or args.client is None:
             raise ValueError("native_authoring_qualification_needs_explicit_client")
         return qualify_host(args.repo, project, home=home, data=data, client=args.client)
-    if verb in {"install-codex", "uninstall-codex"}:
+    if verb in {"install-codex", "recover-codex", "uninstall-codex"}:
         if not args.preview:
             raise ValueError("runtime_apply_requires_generic_apply")
-        if verb == "install-codex":
+        if verb in {"install-codex", "recover-codex"}:
             authority, binding = read_qualification(args.repo, project, home=home, data=data)
         else:
             authority = installation_context(args.repo.resolve(strict=True), home, data)
             binding = None
         return prepare_host_change(
             project, home=home, data_home=data, authority=authority,
-            binding=binding, verify=verify_assets,
+            binding=binding, verify=verify_assets, recover_device=verb == "recover-codex",
         )
     if args.preview:
         raise ValueError("native_authoring_preview_is_default")
