@@ -11,7 +11,7 @@ import fcntl
 from hashlib import sha256
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 from secrets import token_hex
 import sqlite3
@@ -51,6 +51,14 @@ def lexical(path):
 def intersects(known, claimed):
     return any(left == right or left.startswith(right + "/") or right.startswith(left + "/")
                for left in known for right in claimed)
+
+
+def check_retirement_dependencies(retired, retained):
+    """Check checkout and Git paths in the bindings that will survive."""
+    removed = tuple(PurePosixPath(path) for path in retired)
+    locations = (PurePosixPath(location) for binding in retained for location in binding.locations())
+    if any(location.is_relative_to(path) for location in locations for path in removed):
+        raise Refused("another admitted checkout depends on a directory the plan would remove")
 
 
 @dataclass(frozen=True)
@@ -397,11 +405,15 @@ class Inventory:
     @staticmethod
     def _changed_bindings(rows, changes):
         updated = dict(rows)
+        retired = set()
         for path, binding in changes.items():
             if binding is None:
                 updated.pop(path)
+                retired.add(path)
             else:
                 updated[path] = binding
+        if retired:
+            check_retirement_dependencies(retired, (Binding(**record) for record in updated.values()))
         return updated
 
     @staticmethod
@@ -687,7 +699,15 @@ class Inventory:
                 db.execute("UPDATE lifecycle SET phase = 'superseded' WHERE operation = ?", (operation,))
                 commit()
                 raise Refused("Dev inventory changed before reservation; re-read and submit a new request")
-            state["pending"][operation] = json.loads(request)["locations"]
+            request = json.loads(request)
+            try:
+                self._changed_bindings(state["bindings"], request["changes"])
+            except Refused:
+                # An older queued retirement can no longer reserve an incomplete checkout family.
+                db.execute("UPDATE lifecycle SET phase = 'superseded' WHERE operation = ?", (operation,))
+                commit()
+                raise
+            state["pending"][operation] = request["locations"]
             state["generation"] += 1
             self._write(db, state)
             version = self._version(state)
