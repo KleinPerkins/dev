@@ -9,6 +9,7 @@ You are in **`~/dev`**, the `KleinPerkins/dev` operating-model source (successor
 ## Essentials
 
 - `affirm/src/` is authoritative work; `affirm/vendor/` is reference-only. Promote vendor clones before contributing.
+- New KleinPerkins personal products belong under `~/dev/personal/src/KleinPerkins/<repo>`.
 - The target personal/work layout is `<container>/<src-or-vendor>/<git-owner>/<repo>`. `capabilities/` holds reusable and ecosystem-maintenance repositories. Existing paths stay in place until their released migration; most subtrees are separate repositories and are not tracked here.
 - `affirm/src/card-platform-product` (`cpp`) is separately governed; read its own `AGENTS.md` and `_ops/POLICY.md` before working there.
 - Work/Affirm repos use the global `laurence.duggan@affirm.com` identity unless their own `_ops` says otherwise. Personal/KleinPerkins repos, capabilities, and this repo use local `KleinPerkins <49759187+KleinPerkins@users.noreply.github.com>`.

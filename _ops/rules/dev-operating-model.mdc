@@ -11,6 +11,7 @@ alwaysApply: true
 
 - `affirm/src/` is authoritative work: contribute, push, and open PRs there.
 - `affirm/vendor/` is read-mostly reference. Promote a clone to `src/` before active contribution.
+- New KleinPerkins personal products belong under `~/dev/personal/src/KleinPerkins/<repo>`.
 - Personal/work target paths are `<container>/<src-or-vendor>/<git-owner>/<repo>`; the work container is employer-specific, currently `affirm`. Existing paths remain until separately migrated. `capabilities/` contains reusable capabilities and ecosystem-maintenance repositories.
 - Most subtrees are their own repos and are not tracked by `KleinPerkins/dev`; this repo tracks the home operating model only.
 - Auth, secrets, client config, generated memories, and work/personal repo contents stay out of this repo.
@@ -51,11 +52,11 @@ See `OPERATING-MANUAL.md` §10 for the complete ecosystem model. Preserve these 
 - The authoring agent automatically initiates one fresh independent review from the PR-creation Codex account. Cloud is preferred; a qualified same-account local adapter is allowed. Never substitute the other account or a human reviewer. Re-review after a changed head, base or policy.
 - The qualified Chaos Scheduler App alone approves and performs native squash immediately when merge-ready, or enables native auto-merge when blocked. Agents maintain eligible PRs through verified merge, but never bypass protections or call merge/auto-merge APIs themselves. Sensitive CI/governance changes follow the same review/check gates.
 - Initial source admission, external settings and host installation require their concrete accepted administrative gates. Source tests, seed presence and copied receipts are not runtime qualification.
-- `chaos-scheduler` will converge on the shared framework while retaining its public release process. Its source/runtime changes remain outside this bounded Dev replacement preparation; preserve its held WIP.
+- `chaos-scheduler` is a permanent hard no-touch exclusion for general Dev operations. Its product owner handles separately approved work. Preserve its running services and held WIP.
 
 ## This Repo
 
-- `_ops/rules/agent-context.md` is the source for the generated Cursor `dev-operating-model.mdc` and managed Codex/Claude blocks. After editing it, run `_ops/bin/install-agent-rules.sh --gen-only` before source review. Run `make install-rules` only under the separately released host-installation step.
+- After editing `_ops/rules/agent-context.md`, run `_ops/bin/install-agent-rules.sh --gen-only` to refresh the tracked Cursor `dev-operating-model.mdc` before review. Codex and Claude blocks are generated into machine-local instruction files during installation. Run `make install-rules` only under the separately released host-installation step.
 - The installer mirrors always-apply Cursor behavioral rules plus conditional MCP-safety rules; global home rules are versioned in `_ops/rules/global/`, reusable global rules in `capabilities/skills/global/rules/`.
 - `.gitignore` is an allow-list so nested repos and secrets cannot be committed accidentally.
 - Search reliability: in linked Cursor worktrees, use the shell `rg` executable for task-critical searches and to confirm every absence claim. Positive native Grep/`rg` matches are usable, but an empty result is unverified because native search can return false-empty. Inside a repository/worktree, use plain shell `rg`. Only from the `~/dev` umbrella root, search the actual subrepository or add `--no-ignore`: its allow-list intentionally hides nested repositories. Do not misdiagnose the native-search bug as ignore behavior.
