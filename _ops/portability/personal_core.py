@@ -353,6 +353,17 @@ def recover_withdrawals(entry):
             finish_withdrawal(operation, entry.slot, entry.control / entry.slot.name, entry.release)
 
 
+def owns_parked_entry(control, anchor, release):
+    history = physical_path(control / "withdrawals")
+    # A parked entry can witness ownership after the live link was moved.
+    return any(
+        not operation.is_symlink()
+        and owns_slot(operation / "witness", anchor, release)
+        and owns_slot(operation / "entry", operation / "witness", release)
+        for operation in history.glob("withdraw-*")
+    )
+
+
 def change_entry(entry, action):
     slot, release, control = entry.slot, entry.release, entry.control
     label = entry.label
@@ -465,7 +476,18 @@ def configure_profile(home, codex_home, action):
             anchor = control / name
             prior = DevSkillRelease(name, home, anchor if os.path.lexists(anchor) else slot,
                                     release=bundle.previous)
-            previous[slot] = SkillEntry(slot, prior.skill, control, name, prior.prepare, prior.verify)
+            prior_control = control
+            versioned_control = physical_path(control / "releases" / prior.revision)
+            versioned_anchor = versioned_control / name
+            if os.path.lexists(versioned_anchor):
+                versioned = DevSkillRelease(name, home, versioned_anchor, release=bundle.previous)
+                if owns_slot(slot, versioned_anchor, versioned.skill) or (
+                    not os.path.lexists(slot)
+                    and owns_parked_entry(versioned_control, versioned_anchor, versioned.skill)
+                ):
+                    prior = versioned
+                    prior_control = versioned_control
+            previous[slot] = SkillEntry(slot, prior.skill, prior_control, name, prior.prepare, prior.verify)
             control = physical_path(control / "releases" / bundle.revision)
         entries.append(SkillEntry(slot, bundle.skill, control, name, bundle.prepare, bundle.verify))
     skills_checkout = home / "dev/capabilities/skills"
