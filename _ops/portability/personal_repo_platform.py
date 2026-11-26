@@ -24,7 +24,7 @@ from refresh_after_lifecycle import refresh_after_evidence_reissue
 from skills_inventory_projection import Projection, project_inventory, with_current_checkouts
 
 
-OWNER_SESSION_SCHEMA = "repo-platform/dev-owner-session/v1"
+OWNER_SESSION_SCHEMA = "repo-platform/dev-owner-session/v2"
 SKILLS_REVISION = RELEASE["revision"]
 
 
@@ -36,6 +36,7 @@ class OwnerSessionPlan:
     projection: Projection
     descriptor: bytes
     previous: bytes | None
+    physical: OwnerPhysicalBindings
 
     def claims(self):
         return {
@@ -188,17 +189,18 @@ def _checked_plan(root, codex_home, operation, settings, physical):
     projection = project_inventory(inventory, scope.current, settings, deadline=time.monotonic() + 2)
     paths = tuple(binding.checkout for binding in scope.bindings)
     roots = json_load(projection.config_bytes, INPUT_MAX)["roots"]
-    if not set(paths).issubset(root["path"] for root in roots):
-        raise Refused("the Skills projection does not cover all checkouts in the owner operation")
+    if set(paths) != {root["path"] for root in roots}:
+        raise Refused("the Skills projection must cover exactly the committed owner checkouts")
     proofs = owner_config_proofs(record, paths)
     descriptor = encode({
         "schema": OWNER_SESSION_SCHEMA, "operation": operation, "skills_revision": SKILLS_REVISION,
         "projection_digest": projection.manifest_digest(),
-        "physical_bindings": [asdict(binding) for binding in physical.entries],
+        "settings_digest": projection.settings_digest,
+        "physical_bindings": [asdict(binding) for binding in selected.entries],
     })
     if len(descriptor) > INPUT_MAX:
         raise Refused("the Dev owner session descriptor exceeds its byte limit")
-    plan = OwnerSessionPlan(root, codex_home, operation, projection, descriptor, previous)
+    plan = OwnerSessionPlan(root, codex_home, operation, projection, descriptor, previous, selected)
     return plan, inventory, scope, paths, proofs
 
 
@@ -213,16 +215,17 @@ def install_owner_session(home, codex_home, operation, *, settings, physical, ex
     with FileLock(root / "owner-session.lock"):
         plan, inventory, scope, paths, proofs = _checked_plan(root, codex_home, operation, settings, physical)
         receipt = _authorize_plan(plan, expected_digest)
-        return _install(plan, inventory, scope, paths, proofs, settings, physical, receipt)
+        return _install(plan, inventory, scope, paths, proofs, settings, receipt)
 
 
-def _install(plan, inventory, scope, paths, proofs, settings, physical, receipt):
+def _install(plan, inventory, scope, paths, proofs, settings, receipt):
     discovery = plan.root / "discovery"
     results = plan.root / "results"
     for path in (discovery, results):
         path.mkdir(mode=0o700, exist_ok=True)
         _private(path)
-    _publish_exact(discovery, "settings.json", settings)
+    _publish_exact(discovery, f"settings-{plan.projection.settings_digest}.json", settings)
+    snapshot = discovery / f"snapshot-{plan.projection.manifest_digest()}.json"
 
     def confirm():
         current = inventory.current_owner_evidence(plan.operation, deadline=time.monotonic() + 2)
@@ -231,8 +234,8 @@ def _install(plan, inventory, scope, paths, proofs, settings, physical, receipt)
 
     try:
         readback = refresh_after_evidence_reissue(
-            inventory, plan.operation, settings, SKILLS_REVISION, discovery, str(discovery / "snapshot.json"),
-            physical=physical, owner_record=scope.record, confirm_owner_evidence=confirm,
+            inventory, plan.operation, settings, SKILLS_REVISION, discovery, str(snapshot),
+            physical=plan.physical, owner_record=scope.record, confirm_owner_evidence=confirm,
         )
         age = (datetime.now(timezone.utc) - timestamp(readback.receipt["observed_at"])).total_seconds()
         if not 0 <= age <= 86400:
@@ -245,7 +248,7 @@ def _install(plan, inventory, scope, paths, proofs, settings, physical, receipt)
             return configure_entry(_entry(plan.root, plan.codex_home, descriptor=plan.descriptor), "install")
 
         with deadline(2):
-            return with_current_checkouts(inventory, scope.current, paths, frozenset(paths), physical,
+            return with_current_checkouts(inventory, scope.current, paths, frozenset(paths), plan.physical,
                                           expose, time.monotonic() + 2, owner_config_digests=proofs)
     except Refusal as error:
         raise Refused(f"the repo-platform owner-session preparation refused ({error.code})") from error
@@ -258,7 +261,9 @@ def installed_owner_root(home, codex_home):
     configure_entry(entry, "check")
     current = _current_descriptor(root)
     descriptor = json_load(current, INPUT_MAX) if current is not None else None
-    if not isinstance(descriptor, dict) or descriptor.get("schema") != OWNER_SESSION_SCHEMA:
+    if not isinstance(descriptor, dict) or descriptor.get("schema") not in {
+        "repo-platform/dev-owner-session/v1", OWNER_SESSION_SCHEMA,
+    }:
         raise Refused("the installed repo-platform owner descriptor is not recognized")
     return root
 
