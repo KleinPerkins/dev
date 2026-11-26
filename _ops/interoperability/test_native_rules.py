@@ -9,6 +9,7 @@ import sys
 import tempfile
 import subprocess
 import shutil
+import stat
 import unittest
 from unittest.mock import patch
 
@@ -194,6 +195,80 @@ class NativeOperations(unittest.TestCase):
         result = n.preview(self.args)
         self.args.approve = result['action_sha256']
         return result
+
+    def operating_model_fixture(self):
+        dev = self.args.dev_source
+        dev.mkdir()
+        subprocess.run(['git', 'init', '-q', '--template=', str(dev)], check=True)
+        command = ['git', '-C', str(dev), '-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid']
+        subprocess.run([*command, 'remote', 'add', 'origin', 'https://github.com/KleinPerkins/dev.git'], check=True)
+        source = dev / '_ops/rules/agent-context.md'
+        source.parent.mkdir(parents=True)
+        source.write_bytes((n.ROOT / '_ops/rules/agent-context.md').read_bytes())
+        subprocess.run([*command, 'add', '_ops/rules/agent-context.md'], check=True)
+        subprocess.run([*command, 'commit', '-qm', 'Fixture operating context'], check=True)
+        self.args.operating_model_only = True
+        self.args.qualification = None
+        self.args.host_build = None
+        return source
+
+    def test_operating_model_replaces_only_the_existing_dev_block(self):
+        source = self.operating_model_fixture()
+        before = (self.original + r.block(r.MARKERS[0], '# Historical instructions\n').encode()
+                  + r.block(r.MARKERS[1], '# Keep behavioral rule\n').encode()
+                  + r.block(r.MARKERS[2], '# Keep service rule\n').encode()
+                  + b'Trailing operator text  \n')
+        self.target.write_bytes(before)
+        plan = self.preview()
+        self.assertEqual(plan['delta'], [r.MARKERS[0]])
+        self.assertIsNone(plan['qualification'])
+        n.render.assert_not_called()
+        self.assertEqual(self.target.read_bytes(), before)
+        self.assertEqual(n.apply_operation(self.args)['status'], 'applied')
+        after = self.target.read_bytes()
+        for content in (source.read_bytes(), self.original, b'# Keep behavioral rule\n',
+                        b'# Keep service rule\n', b'Trailing operator text  \n'):
+            self.assertIn(content, after)
+        self.assertNotIn(b'# Historical instructions\n', after)
+        self.assertEqual(after[after.index(b'<!-- BEGIN cursor-rules-mirror'):],
+                         before[before.index(b'<!-- BEGIN cursor-rules-mirror'):])
+        self.assertEqual(n.apply_operation(self.args)['status'], 'already-applied')
+        self.target.write_bytes(after + b'New operator text\n')
+        with self.assertRaisesRegex(ValueError, 'postimage changed'):
+            n.apply_operation(self.args, rollback=True)
+        self.target.write_bytes(after)
+        self.assertEqual(n.apply_operation(self.args, rollback=True)['status'], 'rolled-back')
+        self.assertEqual(self.target.read_bytes(), before)
+        self.assertEqual(stat.S_IMODE(self.target.stat().st_mode), 0o640)
+
+    def test_operating_model_refuses_ambiguous_existing_block_and_dirty_source(self):
+        source = self.operating_model_fixture()
+        self.target.write_text(r.block(r.MARKERS[0], 'Old\n') * 2)
+        with self.assertRaisesRegex(ValueError, 'ambiguous existing managed blocks'):
+            self.preview()
+        self.assertFalse(self.args.operation_dir.exists())
+        self.target.write_bytes(self.original)
+        source.write_bytes(source.read_bytes() + b'Working tree edit\n')
+        with self.assertRaisesRegex(ValueError, 'operating model differs from its committed source'):
+            self.preview()
+        self.assertFalse(self.args.operation_dir.exists())
+        self.assertEqual(self.target.read_bytes(), self.original)
+
+    def test_operating_model_preserves_work_profile_and_checks_source_at_apply(self):
+        source = self.operating_model_fixture()
+        work = b'<!-- BEGIN codex-work-dispatch (managed by KleinPerkins/dev) -->\nActive Work rules\n'
+        self.target.write_bytes(work)
+        with self.assertRaisesRegex(ValueError, 'independent Codex instruction profile'):
+            self.preview()
+        self.assertFalse(self.args.operation_dir.exists())
+        self.assertEqual(self.target.read_bytes(), work)
+        self.target.write_bytes(self.original)
+        self.preview()
+        source.write_bytes(source.read_bytes() + b'Changed after preview\n')
+        with self.assertRaisesRegex(ValueError, 'operating model differs from its committed source'):
+            n.apply_operation(self.args)
+        self.assertEqual(self.target.read_bytes(), self.original)
+        self.assertEqual(n.apply_operation(self.args, rollback=True)['status'], 'already-rolled-back')
 
     def test_preview_apply_reapply_and_exact_rollback(self):
         plan = self.preview()
