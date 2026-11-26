@@ -119,7 +119,12 @@ The generated dashboard has one owner-writable file alongside the read-only
 source. Job definitions, history and launch agents retain their existing owners.
 Setup exposes the Codex skill without scheduling any jobs. Withdrawal preserves
 the private job state and an existing matching independent installation under
-`~/.local/share/local-jobs/releases`. [Local Jobs release manifest](personal-local-jobs.json).
+`~/.local/share/local-jobs/releases`. Setup verifies a new release before
+withdrawing a profile-owned predecessor. A verified independent predecessor
+stays on its original link, and the profile reports its revision and pending
+update. Its owner can then replace that link through a scoped update. The
+predecessor package, generated dashboard and private job state remain available
+for recovery. [Local Jobs release manifest](personal-local-jobs.json).
 
 `dev-doctor` uses the Dev release from PR 38. Its `inspect-created` command
 reads local Git state for a Dev-created Personal checkout selected by its exact
