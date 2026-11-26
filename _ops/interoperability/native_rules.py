@@ -24,6 +24,7 @@ PAYLOAD = '4cfb6f107e5a26dbea73c83bf35d4c918dbc73e0ba26498d2605de9ac71a5ba3'
 # The closed observation check binds this ABI separately from legacy MOD-03.
 PROFILE_CHECK = 'MOD-03-assessed-native-dispatch-collaboration'
 MARKER = 'native-entry-routing/v1'
+OPERATING_MODEL_PROFILE = 'codex-operating-model-only/v1'
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -103,27 +104,68 @@ def qualified(path, build):
     return sha(data)
 
 
-def expected(dev, skills, awa, target, *, work_source=None, build=None):
-    prepared = render(dev, skills, awa) if work_source is None else codex_work_rules.prepare(work_source, build)
+def render_operating_model(dev):
+    """Render only Dev's committed operating guidance from the selected source."""
+    if inventory.repository(dev) != ('KleinPerkins/dev', None):
+        raise ValueError('Dev operating model source identity is unavailable or mismatched')
+    if Path(os.fsdecode(git(dev, 'rev-parse', '--show-toplevel').rstrip(b'\n'))) != dev.resolve():
+        raise ValueError('Dev operating model requires its exact source root')
+    revision = git(dev, 'rev-parse', 'HEAD').decode().strip()
+    relative = '_ops/rules/agent-context.md'
+    data = regular(dev / relative)
+    if data != git(dev, 'show', revision + ':' + relative):
+        raise ValueError('Dev operating model differs from its committed source')
+    body = data.decode('utf-8')
+    marker = render_rules.MARKERS[0]
+    block = render_rules.block(marker, body).replace(
+        'prepared from owner sources; INT-007B activation required',
+        MARKER + '; generated from owner sources', 1)
+    return dict(blocks={marker: block}, source_revision=revision, payload_sha256=sha(data), resolver=None)
+
+
+def expected(dev, skills, awa, target, *, work_source=None, build=None, operating_model_only=False):
     before = regular(target, missing=True)
-    projector = render_rules.project if work_source is None else codex_work_rules.project
-    after = projector('' if before is None else before.decode('utf-8'), prepared['blocks']).encode()
+    existing = '' if before is None else before.decode('utf-8')
+    if operating_model_only:
+        if work_source is not None or 'codex-work-dispatch/v1' in existing or (
+                f'<!-- BEGIN {codex_work_rules.MARKER} ' in existing):
+            raise ValueError('operating model update requires an independent Codex instruction profile')
+        prepared = render_operating_model(dev)
+        projector = render_rules.project
+    elif work_source is not None:
+        prepared = codex_work_rules.prepare(work_source, build)
+        projector = codex_work_rules.project
+    else:
+        prepared = render(dev, skills, awa)
+        projector = render_rules.project
+    after = projector(existing, prepared['blocks']).encode()
     return prepared, before, after
 
 
 def preview(args):
     target = Path(os.path.abspath(args.home)) / '.codex/AGENTS.md'
     work_source = getattr(args, 'work_source', None)
+    operating_model_only = getattr(args, 'operating_model_only', False)
+    if operating_model_only and (args.qualification is not None or args.host_build is not None):
+        raise ValueError('operating-model-only updates bind the Dev guidance rather than a resolver qualification')
     prepared, before, after = expected(args.dev_source, args.skills_source, args.awa_source, target,
-                                       work_source=work_source, build=args.host_build)
-    qualifier = (qualified(args.qualification, args.host_build) if work_source is None else
-                 codex_work_rules.qualified(args.qualification, args.host_build, prepared, validator=qualification))
+                                       work_source=work_source, build=args.host_build,
+                                       operating_model_only=operating_model_only)
+    if operating_model_only:
+        qualifier = None
+        sources = (args.dev_source,)
+    elif work_source is not None:
+        qualifier = codex_work_rules.qualified(args.qualification, args.host_build, prepared, validator=qualification)
+        sources = (args.dev_source, args.skills_source, args.awa_source, work_source)
+    else:
+        qualifier = qualified(args.qualification, args.host_build)
+        sources = (args.dev_source, args.skills_source, args.awa_source)
     operation = Path(os.path.abspath(args.operation_dir))
     # Refuse reused operation directories; backups are private and outside the repo.
     for parent in [operation, *operation.parents]:
         if parent.is_symlink():
             raise ValueError('symlinked operation directory refused')
-    for source in (args.dev_source, args.skills_source, args.awa_source, *(() if work_source is None else (work_source,))):
+    for source in sources:
         if operation.is_relative_to(source.resolve()):
             raise ValueError('private operation storage must be outside source roots')
     ancestor = operation.parent
@@ -141,13 +183,16 @@ def preview(args):
                 awa_source=str(args.awa_source.resolve()),
                 source_sha256=sha(canonical(prepared)),
                 implementation_sha256=implementation_digest(),
-                qualification=str(args.qualification.resolve()), qualification_sha256=qualifier,
+                qualification=None if operating_model_only else str(args.qualification.resolve()),
+                qualification_sha256=qualifier,
                 host_build=args.host_build, resolver=prepared['resolver'],
                 affected_sessions='All Codex sessions reading this home instruction file; existing contexts may retain earlier instructions.',
                 delta=list(prepared['blocks']), rollback='Restore exact preimage only while the target matches this postimage.',
                 production_rollout=False)
     if work_source is not None:
         plan.update(work_profile='codex-work-dispatch/v1', work_source=str(work_source.absolute()))
+    if operating_model_only:
+        plan.update(operating_model_profile=OPERATING_MODEL_PROFILE, dev_revision=prepared['source_revision'])
     plan['action_sha256'] = sha(canonical(plan))
     for name, data in [('before', before or b''), ('after', after), ('operation.json', canonical(plan) + b'\n')]:
         with (operation / name).open('xb') as stream:
@@ -179,6 +224,13 @@ def load_operation(path):
                 not isinstance(plan.get('work_source'), str) or not Path(plan['work_source']).is_absolute() or
                 plan['delta'] != [codex_work_rules.MARKER] or 'economy_resolver' in plan):
             raise ValueError('work-dispatch operation profile changed')
+    if 'operating_model_profile' in plan or 'dev_revision' in plan:
+        if (plan.get('operating_model_profile') != OPERATING_MODEL_PROFILE
+                or not isinstance(plan.get('dev_revision'), str)
+                or plan['delta'] != [render_rules.MARKERS[0]]
+                or any(plan[key] is not None for key in ('host_build', 'qualification', 'qualification_sha256', 'resolver'))
+                or 'work_source' in plan or 'work_profile' in plan):
+            raise ValueError('operating-model-only operation profile changed')
     target = Path(plan['target'])
     if not target.is_absolute() or target.parts[-2:] != ('.codex', 'AGENTS.md'):
         raise ValueError('target outside owned Codex instruction interface')
@@ -231,7 +283,16 @@ def apply_operation(args, *, rollback=False):
         return dict(status='rolled-back', target=str(target))
     if implementation_digest() != plan['implementation_sha256']:
         raise ValueError('installer source changed')
-    if 'work_source' in plan:
+    if 'operating_model_profile' in plan:
+        prepared, _, expected_after = expected(Path(plan['dev_source']), None, None, target,
+                                               operating_model_only=True)
+        qualifier = None
+        if prepared['source_revision'] != plan['dev_revision']:
+            raise ValueError('Dev operating model revision changed')
+        if (actual in (plan['before_sha256'], plan['after_sha256'])
+                and sha(expected_after) != plan['after_sha256']):
+            raise ValueError('operating model postimage changed')
+    elif 'work_source' in plan:
         prepared = codex_work_rules.prepare(Path(plan['work_source']), plan['host_build'])
         qualifier = codex_work_rules.qualified(Path(plan['qualification']), plan['host_build'], prepared, validator=qualification)
     else:
@@ -258,21 +319,32 @@ def main():
     parser.add_argument('--qualification', type=Path)
     parser.add_argument('--host-build')
     parser.add_argument('--approve')
-    parser.add_argument('--work-source', type=Path,
-                        help='Opt-in accepted personal Codex work-dispatch export; never selects legacy mirroring')
+    scope = parser.add_mutually_exclusive_group()
+    scope.add_argument('--work-source', type=Path,
+                       help='Opt-in accepted personal Codex work-dispatch export; never selects legacy mirroring')
+    scope.add_argument('--operating-model-only', action='store_true',
+                       help='Preview or verify only the committed Dev operating-model block')
     args = parser.parse_args()
     try:
+        if args.operating_model_only and args.operation not in ('preview', 'verify'):
+            raise ValueError('apply and rollback read the operation scope from the exact preview')
+        if args.operating_model_only and (args.qualification is not None or args.host_build is not None):
+            raise ValueError('operating-model-only updates bind the Dev guidance rather than a resolver qualification')
         if args.operation == 'preview':
-            if not all((args.operation_dir, args.qualification, args.host_build)):
+            if not args.operation_dir or (not args.operating_model_only and not all((args.qualification, args.host_build))):
                 raise ValueError('preview requires operation directory, qualification and current host build')
             result = preview(args)
         elif args.operation == 'verify':
-            prepared, before, after = expected(args.dev_source, args.skills_source, args.awa_source, args.home / '.codex/AGENTS.md',
-                                              work_source=args.work_source, build=args.host_build)
-            if args.work_source is not None:
-                if not args.qualification:
-                    raise ValueError('work-dispatch verify requires exact qualification')
-                codex_work_rules.qualified(args.qualification, args.host_build, prepared, validator=qualification)
+            target = args.home / '.codex/AGENTS.md'
+            if args.operating_model_only:
+                _, before, after = expected(args.dev_source, None, None, target, operating_model_only=True)
+            else:
+                prepared, before, after = expected(args.dev_source, args.skills_source, args.awa_source, target,
+                                                   work_source=args.work_source, build=args.host_build)
+                if args.work_source is not None:
+                    if not args.qualification:
+                        raise ValueError('work-dispatch verify requires exact qualification')
+                    codex_work_rules.qualified(args.qualification, args.host_build, prepared, validator=qualification)
             if before != after:
                 raise ValueError('native instructions missing or stale')
             result = dict(status='current-source-projection', native_behavior='requires separate observation')

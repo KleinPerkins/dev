@@ -133,6 +133,8 @@ def prepare(dev, skills, awa, host, *, native_codex=False):
 
 def project(existing, blocks):
     """Pure managed-block preview; preserve every byte outside owned blocks."""
+    if not set(blocks) <= set(MARKERS):
+        raise ValueError('unknown managed block')
     intervals = []
     absent = []
     for name in MARKERS:
@@ -141,7 +143,8 @@ def project(existing, blocks):
         if existing.count(begin) != existing.count(end) or existing.count(begin) > 1:
             raise ValueError('ambiguous existing managed blocks')
         if begin not in existing:
-            absent.append(name)
+            if name in blocks:
+                absent.append(name)
             continue
         start, last = existing.index(begin), existing.index(end)
         if last < start:
@@ -155,7 +158,8 @@ def project(existing, blocks):
         raise ValueError('overlapping managed blocks')
     result = existing
     for start, stop, name in reversed(intervals):
-        result = result[:start] + blocks[name] + result[stop:]
+        if name in blocks:
+            result = result[:start] + blocks[name] + result[stop:]
     for name in absent:
         result += ('\n' if result and not result.endswith('\n') else '') + blocks[name]
 
