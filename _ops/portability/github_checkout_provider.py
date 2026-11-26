@@ -1,7 +1,9 @@
 """Read GitHub checkout authority by immutable repository ID."""
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
+from math import ceil
 import re
 import subprocess
 import time
@@ -15,12 +17,29 @@ READ_ROUTE = re.compile(r"/repositories/[1-9][0-9]*(?:/branches/([A-Za-z0-9_.~%-
 FORBIDDEN_REF_CHARACTERS = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]")
 TRANSPORT_RETRY_DELAYS = (2, 5)
 PUBLIC_REQUEST_TIMEOUT_SECONDS = 15
+PUBLIC_RESPONSE_FOOTER = (
+    "\n%{http_code}\n%header{x-ratelimit-remaining}\n%header{x-ratelimit-reset}\n%header{retry-after}"
+)
 # curl: DNS, connect, partial transfer, timeout, empty response, send, receive, and HTTP/2 stream errors.
 TRANSIENT_TRANSPORT_STATUSES = frozenset({6, 7, 18, 28, 52, 55, 56, 92})
 
 
 class TransientProviderRead(Refused):
     """The fixed endpoint could not complete a transport exchange."""
+
+
+class GitHubRateLimited(Refused):
+    """GitHub throttled an admitted repository read."""
+
+    def __init__(self, status, retry_at):
+        self.retry_at = retry_at
+        message = f"GitHub rate limit reached for this public repository read (HTTP {status})."
+        if retry_at is None:
+            message += " GitHub supplied no usable reset time."
+        else:
+            reset = datetime.fromtimestamp(retry_at, timezone.utc)
+            message += f" Retry after {reset:%Y-%m-%d %H:%M:%S UTC}."
+        super().__init__(message)
 
 
 @dataclass(frozen=True)
@@ -61,6 +80,34 @@ def validate_branch_name(value):
     return value
 
 
+def _public_response(output):
+    # curl appends four bounded fields after the response body, including on
+    # HTTP errors. Split from the end so formatted JSON stays intact.
+    fields = (output or b"").rsplit(b"\n", 4)
+    if len(fields) != 5 or re.fullmatch(rb"[0-9]{3}", fields[1]) is None:
+        return b"", b"", b"", b"", b""
+    return fields
+
+
+def _rate_limit(status, remaining, reset, retry_after):
+    if status not in {b"403", b"429"}:
+        return None
+    retry_seconds = int(retry_after) if re.fullmatch(rb"[0-9]{1,9}", retry_after) else None
+    exhausted = remaining == b"0"
+    if status != b"429" and not exhausted and retry_seconds is None:
+        return None
+    now = ceil(time.time())
+    times = []
+    if exhausted and re.fullmatch(rb"[0-9]{1,10}", reset) and int(reset) >= now:
+        times.append(int(reset))
+    if retry_seconds is not None:
+        times.append(now + retry_seconds)
+    if status == b"429" and not times and not exhausted:
+        # GitHub's minimum wait for throttling with no reported reset.
+        times.append(now + 60)
+    return GitHubRateLimited(status.decode("ascii"), max(times) if times else None)
+
+
 def public_github_get(path, *, deadline):
     """Use the fixed GitHub HTTPS endpoint without borrowing account credentials."""
     route = READ_ROUTE.fullmatch(path) if isinstance(path, str) else None
@@ -77,7 +124,7 @@ def public_github_get(path, *, deadline):
     command = [
         "/usr/bin/curl", "-q", "--silent", "--fail", "--noproxy", "*", "--proto", "=https",
         "--request", "GET", "--max-time", f"{max(0.001, timeout):.3f}",
-        "--max-filesize", str(MAX_RESPONSE_BYTES), "--write-out", "%{http_code}",
+        "--max-filesize", str(MAX_RESPONSE_BYTES), "--write-out", PUBLIC_RESPONSE_FOOTER,
         "--header", "Accept: application/vnd.github+json",
         "--header", "Cache-Control: no-cache",
         "--header", "X-GitHub-Api-Version: 2022-11-28",
@@ -87,14 +134,17 @@ def public_github_get(path, *, deadline):
     try:
         response = subprocess.run(command, env={"PATH": "/usr/bin:/bin"}, capture_output=True,
                                   timeout=timeout, check=True)
-        payload, status = response.stdout[:-3], response.stdout[-3:]
+        payload, status, _, _, _ = _public_response(response.stdout)
         if status != b"200" or len(payload) > MAX_RESPONSE_BYTES:
             raise ValueError("unaccepted GitHub response")
         return json.loads(payload, object_pairs_hook=_unique_object)
     except subprocess.TimeoutExpired as error:
         raise TransientProviderRead("the GitHub transport timed out during the repository read") from error
     except subprocess.CalledProcessError as error:
-        status = (error.stdout or b"")[-3:]
+        _, status, remaining, reset, retry_after = _public_response(error.stdout)
+        limited = _rate_limit(status, remaining, reset, retry_after)
+        if limited is not None:
+            raise limited from error
         if error.returncode in TRANSIENT_TRANSPORT_STATUSES and status in {b"", b"000", b"200"}:
             raise TransientProviderRead("the GitHub transport did not complete the repository read") from error
         if len(status) == 3 and status.isdigit() and status >= b"400":
@@ -130,8 +180,14 @@ def read_github_repository(repository_id, *, deadline, get=public_github_get):
     for delay in (*TRANSPORT_RETRY_DELAYS, None):
         try:
             return _read_repository_once(repository_id, deadline, get)
-        except TransientProviderRead:
-            if delay is None or delay >= deadline - time.monotonic():
+        except (TransientProviderRead, GitHubRateLimited) as error:
+            if delay is None:
+                raise
+            if isinstance(error, GitHubRateLimited):
+                if error.retry_at is None:
+                    raise
+                delay = max(delay, error.retry_at - time.time())
+            if delay >= deadline - time.monotonic():
                 raise
             time.sleep(delay)
 

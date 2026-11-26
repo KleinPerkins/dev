@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 from urllib.parse import quote
 
 from github_checkout_provider import (
-    Refused, TransientProviderRead, public_github_get, read_github_repository,
+    GitHubRateLimited, Refused, TransientProviderRead, public_github_get, read_github_repository,
 )
 
 
@@ -69,7 +69,7 @@ class GitHubProviderTests(unittest.TestCase):
             subprocess.run(["/usr/bin/git", "check-ref-format", "--allow-onelevel", "@"],
                            check=True, capture_output=True, timeout=5)
         with patch("github_checkout_provider.subprocess.run",
-                   return_value=SimpleNamespace(stdout=b'{"name":"@"}200')) as runner:
+                   return_value=SimpleNamespace(stdout=b'{"name":"@"}\n200\n\n\n')) as runner:
             self.assertEqual(public_github_get("/repositories/902/branches/%40", deadline=deadline()), {"name": "@"})
         self.assertEqual(runner.call_args.args[0][-1], "https://api.github.com/repositories/902/branches/%40")
 
@@ -84,7 +84,7 @@ class GitHubProviderTests(unittest.TestCase):
                 self.assertEqual(self.observation(backend).default_branch, name)
                 url_path = "/repositories/902/branches/" + quote(name, safe="")
                 self.assertEqual(backend.call_args_list[1].args[0], url_path)
-                response = SimpleNamespace(stdout=json.dumps(branch).encode() + b"200")
+                response = SimpleNamespace(stdout=json.dumps(branch).encode() + b"\n200\n\n\n")
                 with patch("github_checkout_provider.subprocess.run", return_value=response) as runner:
                     self.assertEqual(public_github_get(url_path, deadline=deadline()), branch)
                 self.assertEqual(runner.call_args.args[0][-1], "https://api.github.com" + url_path)
@@ -131,7 +131,7 @@ class GitHubProviderTests(unittest.TestCase):
         self.assertEqual(backend.call_count, 1)
 
     def test_public_transport_accepts_only_exact_HTTPS_GET(self):
-        response = SimpleNamespace(stdout=b'{"id":902}200')
+        response = SimpleNamespace(stdout=b'{"id":902}\n200\n\n\n')
         with patch("github_checkout_provider.subprocess.run", return_value=response) as runner:
             value = public_github_get("/repositories/902/branches/release%2Fnext", deadline=deadline())
         self.assertEqual(value, {"id": 902})
@@ -152,14 +152,14 @@ class GitHubProviderTests(unittest.TestCase):
             runner.assert_not_called()
 
     def test_public_transport_refuses_redirect_responses_and_ambiguous_JSON(self):
-        for content in (b'{"id":902}301', b'{"id":902,"id":903}200'):
+        for content in (b'{"id":902}\n301\n\n\n', b'{"id":902,"id":903}\n200\n\n\n'):
             with self.subTest(content=content), patch("github_checkout_provider.subprocess.run",
                  return_value=SimpleNamespace(stdout=content)), self.assertRaisesRegex(Refused, "unavailable"):
                 public_github_get("/repositories/902", deadline=deadline())
 
     def test_failed_final_transport_discards_first_tuple_and_reads_all_three_again(self):
         def response(value):
-            return SimpleNamespace(stdout=json.dumps(value).encode() + b"200")
+            return SimpleNamespace(stdout=json.dumps(value).encode() + b"\n200\n\n\n")
 
         lost_connection = subprocess.CalledProcessError(56, "/usr/bin/curl")
         later_branch = BRANCH | {"commit": {"sha": "c" * 40}}
@@ -193,7 +193,7 @@ class GitHubProviderTests(unittest.TestCase):
 
     def test_subprocess_timeout_leaves_time_to_retry_the_whole_repository_read(self):
         def response(value):
-            return SimpleNamespace(stdout=json.dumps(value).encode() + b"200")
+            return SimpleNamespace(stdout=json.dumps(value).encode() + b"\n200\n\n\n")
 
         def request(command, *, timeout, **_options):
             self.assertEqual(timeout, 15)
@@ -231,15 +231,75 @@ class GitHubProviderTests(unittest.TestCase):
         runner.assert_called_once()
         sleep.assert_not_called()
 
+    def test_public_quota_exhaustion_names_the_reset_without_retrying_over_budget(self):
+        # The footer is produced by curl from response headers. These values
+        # reproduce the public quota response observed on the Mini.
+        response = subprocess.CalledProcessError(22, "/usr/bin/curl", output=b"\n403\n0\n1795701457\n")
+        with (patch("github_checkout_provider.time.time", return_value=1795699000),
+              patch("github_checkout_provider.subprocess.run", side_effect=response) as runner,
+              patch("github_checkout_provider.time.sleep") as sleep,
+              self.assertRaisesRegex(GitHubRateLimited, "rate limit.*2026-11-26 13:57:37 UTC") as raised):
+            read_github_repository(902, deadline=deadline())
+        self.assertEqual(raised.exception.retry_at, 1795701457)
+        runner.assert_called_once()
+        sleep.assert_not_called()
+
+    def test_public_short_throttle_restarts_the_entire_identity_read_after_retry_after(self):
+        def response(value):
+            return SimpleNamespace(stdout=json.dumps(value).encode() + b"\n200\n15\n1795701457\n")
+
+        rate = subprocess.CalledProcessError(22, "/usr/bin/curl", output=b"\n429\n10\n1795701457\n4")
+        later_branch = BRANCH | {"commit": {"sha": "c" * 40}}
+        with (patch("github_checkout_provider.time.time", return_value=1795699000),
+              patch("github_checkout_provider.subprocess.run", side_effect=[
+                  response(REPO), rate, response(REPO), response(later_branch), response(REPO),
+              ]) as runner,
+              patch("github_checkout_provider.time.sleep") as sleep):
+            result = read_github_repository(902, deadline=deadline())
+        self.assertEqual(result.default_head, "c" * 40)
+        sleep.assert_called_once_with(4)
+        self.assertEqual([call.args[0][-1] for call in runner.call_args_list], [
+            "https://api.github.com/repositories/902", "https://api.github.com/repositories/902/branches/main",
+            "https://api.github.com/repositories/902", "https://api.github.com/repositories/902/branches/main",
+            "https://api.github.com/repositories/902",
+        ])
+
+    def test_public_exhausted_quota_with_an_invalid_reset_stays_a_refusal(self):
+        for reset in (b"", b"bad-header", b"1795698999"):
+            response = subprocess.CalledProcessError(
+                22, "/usr/bin/curl", output=b"\n403\n0\n" + reset + b"\n",
+            )
+            with (self.subTest(reset=reset),
+                  patch("github_checkout_provider.time.time", return_value=1795699000),
+                  patch("github_checkout_provider.subprocess.run", side_effect=response) as runner,
+                  patch("github_checkout_provider.time.sleep") as sleep,
+                  self.assertRaisesRegex(GitHubRateLimited, "no usable reset time") as raised):
+                read_github_repository(902, deadline=deadline())
+            self.assertIsNone(raised.exception.retry_at)
+            runner.assert_called_once()
+            sleep.assert_not_called()
+
+    def test_public_throttling_obeys_the_later_of_both_server_hints(self):
+        response = subprocess.CalledProcessError(22, "/usr/bin/curl", output=b"\n403\n0\n1795699020\n4")
+        with (patch("github_checkout_provider.time.time", return_value=1795699000),
+              patch("github_checkout_provider.subprocess.run", side_effect=response) as runner,
+              patch("github_checkout_provider.time.sleep") as sleep,
+              self.assertRaises(GitHubRateLimited) as raised):
+            read_github_repository(902, deadline=deadline())
+        self.assertEqual(raised.exception.retry_at, 1795699020)
+        runner.assert_called_once()
+        sleep.assert_not_called()
+
     def test_http_denial_and_changed_identity_stop_without_retry(self):
         for status, code in ((403, 22), (403, 56), (429, 56)):
-            http_refusal = subprocess.CalledProcessError(code, "/usr/bin/curl", output=str(status).encode())
+            http_refusal = subprocess.CalledProcessError(code, "/usr/bin/curl", output=f"\n{status}\n\n\n".encode())
             with (self.subTest(status=status, code=code),
                   patch("github_checkout_provider.subprocess.run", side_effect=http_refusal) as runner,
                   patch("github_checkout_provider.time.sleep") as sleep,
                   self.assertRaisesRegex(Refused, f"HTTP {status}") as raised):
                 read_github_repository(902, deadline=deadline())
             self.assertNotIsInstance(raised.exception, TransientProviderRead)
+            self.assertEqual(isinstance(raised.exception, GitHubRateLimited), status == 429)
             runner.assert_called_once()
             sleep.assert_not_called()
         backend = self.get(REPO, BRANCH, REPO | {"id": 903})
