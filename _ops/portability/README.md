@@ -124,6 +124,10 @@ the private job state and an existing matching independent installation under
 `dev-doctor` uses the Dev release from PR 38. Its `inspect-created` command
 reads local Git state for a Dev-created Personal checkout selected by its exact
 owner and repository name. `dev-new-repo` uses the sealed creator release from PR 31.
+`dev-remove-repo` uses the versioned Personal retirement view to report what needs
+preserving in one explicitly selected, Dev-created checkout. The Git inspection
+uses temporary scratch space. Canonical removal and recovery require a
+separately qualified Dev retirement operation.
 The [release manifest](personal-dev-skills.json) lists each Dev file’s Git
 mode, length and SHA-256. Setup stages only these runtime files in the working
 directory of each release. The creator keeps a read-only Git object store

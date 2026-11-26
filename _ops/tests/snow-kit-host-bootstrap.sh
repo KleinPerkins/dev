@@ -11,7 +11,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OB
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 SUT="$ROOT/capabilities/mcp-bootstrap.sh"
-TMP="$(mktemp -d)"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/snow-kit-host.XXXXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
 fail() { printf 'snow-kit-host-test: FAIL: %s\n' "$*" >&2; exit 1; }

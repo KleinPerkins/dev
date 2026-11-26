@@ -1,4 +1,4 @@
-"""Install and check the two published Dev runtimes used by Personal Codex."""
+"""Install and check the published Dev runtimes used by Personal Codex."""
 import hashlib
 import json
 import os
@@ -41,12 +41,13 @@ class DevSkillRelease:
             raise ValueError(f"{self.name} requires a physical release directory")
         # Inspect only the published files. Reject extra code in a runtime directory.
         directories = {parent for name in self.files for parent in Path(name).parents}
+        sealed = self.name in ("dev-new-repo", "dev-remove-repo")
         pending = [Path(".")]
         seen = set()
         while pending:
             relative = pending.pop()
-            if self.name == "dev-new-repo" and stat.S_IMODE((root / relative).stat().st_mode) != 0o500:
-                raise ValueError("dev-new-repo requires sealed runtime directories")
+            if sealed and stat.S_IMODE((root / relative).stat().st_mode) != 0o500:
+                raise ValueError(f"{self.name} requires sealed runtime directories")
             for path in (root / relative).iterdir():
                 entry = relative / path.name
                 info = path.lstat()
@@ -60,7 +61,7 @@ class DevSkillRelease:
                     raise ValueError(f"{self.name} contains an unexpected entry: {entry}")
                 mode, length, digest = record
                 expected_modes = (0o500, 0o700, 0o755) if mode == "100755" else (0o400, 0o600, 0o644)
-                if self.name == "dev-new-repo":
+                if sealed:
                     expected_modes = expected_modes[:1]
                 if (info.st_size != length or stat.S_IMODE(info.st_mode) not in expected_modes
                         or hashlib.sha256(path.read_bytes()).hexdigest() != digest):
