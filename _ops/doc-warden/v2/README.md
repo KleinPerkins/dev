@@ -220,12 +220,15 @@ updates the two client checks shown below. Both releases use GSD 1.11.0.
 +CLIENT_SHA256 = "e1c3d034b7fd295d160d6ab412357f9c54241c8ed7a2a861f4730b8a4dd88ddb"
 ~~~
 
-The paired Save-Game release at `b3c8c22e` checks ancestry in the selected
-checkout when a branch head has moved. Its observation reports `ADVANCED`
-for a proven descendant, `STALE` for divergent history, and `UNKNOWN` when
-local history cannot establish the relationship.
+Save-Game checks ancestry in the selected checkout when a branch head has
+moved. Its observation reports `ADVANCED` for a proven descendant, `STALE`
+for divergent history, and `UNKNOWN` when local history cannot establish the
+relationship. The paired release at `93f81eb0` also verifies the exact live
+Git workstream when privacy filtering redacts the branch label. It can read
+existing checkpoints from the predecessor without rewriting them.
 [Ancestry check](https://github.com/KleinPerkins/skills/pull/17/files) ·
-[Selected checkout](https://github.com/KleinPerkins/skills/pull/18/files).
+[Selected checkout](https://github.com/KleinPerkins/skills/pull/18/files) ·
+[Redacted branch handling](https://github.com/KleinPerkins/skills/pull/21/files).
 
 From the verified Dev release, qualify the explicit client and destination,
 then prepare the installation preview.

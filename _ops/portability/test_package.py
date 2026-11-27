@@ -643,7 +643,13 @@ class StandardDevSkillTests(unittest.TestCase):
         control = self.codex / "dev-personal-core/save-game"
         original = slot.lstat()
         original_target = slot.readlink()
-        changed = ("engine/identity.py", "engine/reconcile.py")
+        prior_files = previous["skills"]["save-game"]
+        current_files = current["skills"]["save-game"]
+        changed = sorted(
+            name for name in prior_files.keys() & current_files.keys()
+            if name.startswith("engine/") and prior_files[name][2] != current_files[name][2]
+        )
+        self.assertTrue(changed, "the fixture must exercise an actual engine byte change")
         original_bytes = {name: (slot / name).read_bytes() for name in changed}
         for name, content in original_bytes.items():
             self.assertEqual(hashlib.sha256(content).hexdigest(), previous["skills"]["save-game"][name][2])
