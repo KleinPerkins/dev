@@ -723,6 +723,9 @@ class DevRemoveRepoTests(unittest.TestCase):
                                 checkout.name, "--fixture-root", str(root)],
                                env=env, text=True, capture_output=True)
                 self.assertEqual(created.returncode, 0, created.stderr)
+            linked = root / "test-native-registration"
+            subprocess.run(["/usr/bin/git", "-C", str(target), "worktree", "add", "--detach", str(linked)],
+                           env=env, capture_output=True, check=True)
             slots = peer / ".agents/skills"
             slots.mkdir(parents=True)
             (slots / "whole").symlink_to(os.path.relpath(target / "catalog", slots))
@@ -736,6 +739,8 @@ class DevRemoveRepoTests(unittest.TestCase):
                             declared_root=declared_root, declared_root_source=source)
             jobs = dict(schema="local-jobs/configured-jobs/v1", scope="base-configured-instances", complete=True,
                         instances=[fetch("target", target.name), fetch("peer", str(peer)),
+                                   fetch("linked", linked.name, str(root)),
+                                   fetch("neighbor", str(linked) + "-old"),
                                    fetch("ambiguous", target.name, ".", "working-directory"),
                                    {"id": "other", "type": "custom-job"}])
             cmd = [str(SCRIPT), "view", "--personal-codex", "--fixture-root", str(root), "--json", str(target)]
@@ -750,6 +755,7 @@ class DevRemoveRepoTests(unittest.TestCase):
             self.assertFalse(observed["removal_ready"])
             self.assertEqual([(row["id"], row["relation"]) for row in observed["configured_jobs"]["instances"]],
                              [("target", "selected-path"), ("peer", "other-spelling"),
+                              ("linked", "registered-linked-path"), ("neighbor", "other-spelling"),
                               ("ambiguous", "unresolved"), ("other", "unresolved")])
             def links(data):
                 return {r["entry"]: r["relation"] for r in data["retained_scaffold_skills"][peer.name]["links"]}
