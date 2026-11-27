@@ -1,5 +1,5 @@
 {
-  "revision": "5a7bb23bbc066af2d57123431cf4a22d5ad912d4",
+  "revision": "f79c47474c4e6ada75d4dee78362ce21ea68156a",
   "skills": {
     "local-jobs": {
       ".github/workflows/conformance.yml": [
@@ -269,8 +269,8 @@
       ],
       "lib/store.py": [
         "100644",
-        12838,
-        "4b36c374f47c51832e13a4ebe4e6882da03cc6ba7dec3c951f319b9408688844"
+        12911,
+        "db4eb8b0fca3b5cb71363d1d04063aed58777ae404e8a16a85a71b0f3976257c"
       ],
       "lib/summarize.py": [
         "100755",
@@ -294,8 +294,8 @@
       ],
       "tests/test_configured.py": [
         "100644",
-        6428,
-        "f91b4731573ccd746a30de1d9ae044472a240b4ce1a798bc6c638210d389675d"
+        7392,
+        "70d56f89cfe10dc43c427d743e1ab21ef630d1de11bfb50e24b30e0f34535731"
       ],
       "tests/test_explanations.py": [
         "100644",
@@ -409,7 +409,7 @@
     }
   },
   "previous": {
-    "revision": "1afae724d8e7d42110d3d9670d85a467c436935c",
+    "revision": "5a7bb23bbc066af2d57123431cf4a22d5ad912d4",
     "skills": {
       "local-jobs": {
         ".github/workflows/conformance.yml": [
@@ -609,8 +609,8 @@
         ],
         "lib/explain_cache.py": [
           "100644",
-          2045,
-          "af39e2e3f6e4c0a484b9f8112151749ec6737b55b04cd720c33c8c97a6120041"
+          2288,
+          "090cfcea9820c8a851bd56fed4e9dc0f9ebed05fcd039f4d43704356bd5cacbc"
         ],
         "lib/explain_inspect.py": [
           "100644",
@@ -619,8 +619,8 @@
         ],
         "lib/explain_synthesize.py": [
           "100644",
-          9722,
-          "f0fa2864b0be1dddb96598b25e6bf221fd4bcef2299d6d6c0bae88947d844ee6"
+          9252,
+          "816e1ed5d2db376dcaf1934eeb5c132f581c7acfe711db2ad029c7bdd4446160"
         ],
         "lib/flock.py": [
           "100755",
@@ -706,6 +706,11 @@
           "100644",
           6428,
           "f91b4731573ccd746a30de1d9ae044472a240b4ce1a798bc6c638210d389675d"
+        ],
+        "tests/test_explanations.py": [
+          "100644",
+          3401,
+          "af3eca29e1ab0e71257aba42f66c01a4fa88ba450cda818f6612106d4429c142"
         ]
       }
     },
