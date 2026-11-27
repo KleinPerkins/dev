@@ -207,6 +207,26 @@ and Doc-Warden release stay in Doc-Warden's private runtime state. The target
 adds zero global hooks. The earlier GSD runtime commands retain their recovery
 contract for existing installations.
 
+The named planner and checker use the Skills owner's `named_authoring.py`. This
+release moves from `dc1c3749` to `f79deabb`. The complete change to that module
+updates the two client checks shown below. Both releases use GSD 1.11.0.
+[Skills PR #20](https://github.com/KleinPerkins/skills/pull/20/files) ·
+[Module at the pinned revision](https://github.com/KleinPerkins/skills/blob/f79deabba409b4ee7cd5483390f82eb4f4a18b7a/global/rules/subagent-orchestration/named_authoring.py).
+
+~~~diff
+-CLIENT_VERSION = "0.171.0-alpha.13"
+-CLIENT_SHA256 = "3b6d00deea5fabc50ad34be1872b8e4ead1638d23c68fabb7837edc07f0cf1e0"
++CLIENT_VERSION = "0.171.0-alpha.13.2"
++CLIENT_SHA256 = "e1c3d034b7fd295d160d6ab412357f9c54241c8ed7a2a861f4730b8a4dd88ddb"
+~~~
+
+The paired Save-Game release at `b3c8c22e` checks ancestry in the selected
+checkout when a branch head has moved. Its observation reports `ADVANCED`
+for a proven descendant, `STALE` for divergent history, and `UNKNOWN` when
+local history cannot establish the relationship.
+[Ancestry check](https://github.com/KleinPerkins/skills/pull/17/files) ·
+[Selected checkout](https://github.com/KleinPerkins/skills/pull/18/files).
+
 From the verified Dev release, qualify the explicit client and destination,
 then prepare the installation preview.
 
