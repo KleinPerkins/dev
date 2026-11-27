@@ -506,7 +506,7 @@ def configure_profile(home, codex_home, action):
             control = physical_path(control / "releases" / bundle.revision)
         entries.append(SkillEntry(slot, bundle.skill, control, name, bundle.prepare, bundle.verify))
     skills_checkout = home / "dev/capabilities/skills"
-    save_game_source = home / ".local/share/save-game/source" / SAVE_GAME_RELEASE["revision"]
+    save_game_source = home / ".local/share/save-game/source" / SAVE_GAME_RELEASE["revision"] / "global/skills"
     local_jobs_releases = home / ".local/share/local-jobs/releases"
     local_jobs_source = local_jobs_releases / LOCAL_JOBS_RELEASE["revision"]
     for release, existing_root in (
@@ -514,11 +514,27 @@ def configure_profile(home, codex_home, action):
         (AUTHORING_RELEASE, skills_checkout / "global/skills"),
         (PR_STEWARD_RELEASE, None),
         (ISOKIT_RELEASE, skills_checkout / "local/skills"),
-        (SAVE_GAME_RELEASE, save_game_source / "global/skills"),
+        (SAVE_GAME_RELEASE, save_game_source),
         (LOCAL_JOBS_RELEASE, local_jobs_source / "global/skills"),
     ):
         for name in release["skills"]:
             control = core.control / name
+            if name == "save-game" and "previous" in release:
+                # The predecessor used the unversioned control directory. Keep its
+                # original witness for retry and rollback, with a separate new witness.
+                prior = release["previous"]
+                if prior["revision"] == release["revision"]:
+                    raise ValueError("Save-Game predecessor and current release must differ")
+                prior_root = home / ".local/share/save-game/source" / prior["revision"] / "global/skills"
+                prior_entry = public_skill_entry(core, prior, name, prior_root, control)
+                previous[prior_entry.slot] = prior_entry
+                control = control / "releases" / release["revision"]
+                entry = public_skill_entry(core, release, name, existing_root, control)
+                if points_to(entry.slot, prior_entry.checkout):
+                    entry = replace(entry, checkout=prior_entry.checkout, verify_checkout=prior_entry.verify_checkout,
+                                    checkout_notice=f"verified independently installed save-game {prior['revision'][:12]} (update pending)")
+                entries.append(entry)
+                continue
             prior = release.get("previous") if name == "local-jobs" else None
             if prior is None:
                 entries.append(public_skill_entry(core, release, name, existing_root, control))

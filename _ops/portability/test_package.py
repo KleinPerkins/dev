@@ -253,20 +253,29 @@ class StandardDevSkillTests(unittest.TestCase):
         self.notice = published["notice"]["name"]
         responses = {public + self.notice: b"fixture notice"}
         notice = {"name": self.notice, "length": 14, "sha256": hashlib.sha256(b"fixture notice").hexdigest()}
+        def fixture_skills(release):
+            skills = {}
+            source = f"https://raw.githubusercontent.com/KleinPerkins/skills/{release['revision']}/global/"
+            for name, files in release["skills"].items():
+                skills[name] = {}
+                for relative, (mode, _, released_digest) in files.items():
+                    key = f"skills/{name}/{relative}"
+                    data = key.encode()
+                    if name == "save-game":
+                        data += b"\n" + released_digest.encode("ascii")
+                    responses[source + key] = data
+                    skills[name][relative] = [mode, len(data), hashlib.sha256(data).hexdigest()]
+            return skills
+
         for variable in ("DESIGN_RELEASE", "AUTHORING_RELEASE", "PR_STEWARD_RELEASE",
                          "SAVE_GAME_RELEASE", "LOCAL_JOBS_RELEASE"):
             release = dict(getattr(personal_core, variable))
             if "notice" in release:
                 release["notice"] = notice
-            skills = {}
-            source = f"https://raw.githubusercontent.com/KleinPerkins/skills/{release['revision']}/global/"
-            for name, files in release["skills"].items():
-                skills[name] = {}
-                for relative, (mode, _, _) in files.items():
-                    key = f"skills/{name}/{relative}"
-                    data = key.encode()
-                    responses[source + key] = data
-                    skills[name][relative] = [mode, len(data), hashlib.sha256(data).hexdigest()]
+            skills = fixture_skills(release)
+            if variable == "SAVE_GAME_RELEASE":
+                previous = release["previous"]
+                release["previous"] = dict(previous, skills=fixture_skills(previous))
             if variable == "LOCAL_JOBS_RELEASE":
                 runtime = {"yaml/__init__.py": b'__version__ = "6.0.3"\ndef safe_load(s): return {"active": True}\n',
                            "PyYAML-LICENSE.txt": b"fixture license"}
@@ -620,6 +629,116 @@ class StandardDevSkillTests(unittest.TestCase):
         self.assertTrue(os.path.samestat(independent, slot.lstat()))
         self.assertEqual(engine.read_bytes(), b"independent edit")
         self.assertEqual(checkpoint.read_bytes(), b"private saved state")
+
+    def configure_save_game_predecessor(self):
+        current = personal_core.SAVE_GAME_RELEASE
+        previous = current["previous"]
+        with patch.object(personal_core, "SAVE_GAME_RELEASE", previous):
+            self.configure("install")
+        return previous, current
+
+    def test_save_game_owned_upgrade_recovers_after_withdrawal_and_rolls_back(self):
+        previous, current = self.configure_save_game_predecessor()
+        slot = self.slots / "save-game"
+        control = self.codex / "dev-personal-core/save-game"
+        original = slot.lstat()
+        original_target = slot.readlink()
+        changed = ("engine/identity.py", "engine/reconcile.py")
+        original_bytes = {name: (slot / name).read_bytes() for name in changed}
+        for name, content in original_bytes.items():
+            self.assertEqual(hashlib.sha256(content).hexdigest(), previous["skills"]["save-game"][name][2])
+        neighbors = {p: p.lstat().st_ino for p in self.slots.iterdir() if p != slot}
+        checkpoint = self.home / ".local/state/save-game/checkpoint.json"
+        checkpoint.parent.mkdir(parents=True)
+        checkpoint.write_bytes(b"saved work in the prior release")
+        apply = personal_core.change_entry
+
+        def interrupt(entry, action):
+            if entry.slot == slot and action == "install":
+                raise OSError("Save-Game publication interrupted")
+            return apply(entry, action)
+
+        with patch.object(personal_core, "SAVE_GAME_RELEASE", current):
+            with patch.object(personal_core, "read_url", side_effect=OSError("download interrupted")):
+                with self.assertRaisesRegex(OSError, "download interrupted"):
+                    self.configure("install")
+            self.assertTrue(os.path.samestat(original, slot.lstat()))
+            with patch.object(personal_core, "change_entry", side_effect=interrupt):
+                with self.assertRaisesRegex(OSError, "Save-Game publication interrupted"):
+                    self.configure("install")
+            self.assertFalse(os.path.lexists(slot))
+            parked, = (control / "withdrawals").glob("withdraw-*/entry")
+            self.assertTrue(os.path.samestat(original, parked.lstat()))
+            slot.symlink_to(original_target)
+            foreign = slot.lstat()
+            with self.assertRaisesRegex(ValueError, "independently installed earlier save-game"):
+                self.configure("install")
+            self.assertTrue(os.path.samestat(foreign, slot.lstat()))
+            self.assertTrue(os.path.samestat(original, parked.lstat()))
+            slot.unlink()
+            self.configure("install")
+            self.configure("check")
+            for name, prior_bytes in original_bytes.items():
+                updated = (slot / name).read_bytes()
+                self.assertNotEqual(updated, prior_bytes)
+                self.assertEqual(hashlib.sha256(updated).hexdigest(), current["skills"]["save-game"][name][2])
+            successor_witness = control / "releases" / current["revision"] / "save-game"
+            self.assertTrue(personal_core.owns_slot(slot, successor_witness, slot.readlink()))
+            installed = slot.lstat()
+            self.configure("install")
+            self.assertTrue(os.path.samestat(installed, slot.lstat()))
+            self.assertEqual(neighbors, {p: p.lstat().st_ino for p in self.slots.iterdir() if p != slot})
+            self.configure("withdraw")
+        with patch.object(personal_core, "SAVE_GAME_RELEASE", previous):
+            self.configure("install")
+            self.configure("check")
+        self.assertEqual(slot.readlink(), original_target)
+        self.assertTrue(os.path.samestat(original, slot.lstat()))
+        self.assertEqual({name: (slot / name).read_bytes() for name in changed}, original_bytes)
+        self.assertEqual(checkpoint.read_bytes(), b"saved work in the prior release")
+
+    def test_save_game_verifies_its_separately_installed_predecessor_until_owner_upgrade(self):
+        previous, current = self.configure_save_game_predecessor()
+        slot = self.slots / "save-game"
+        source = self.home / ".local/share/save-game/source" / previous["revision"] / "global/skills/save-game"
+        source.parent.mkdir(parents=True)
+        shutil.copytree(slot.resolve(), source)
+        # The Mini was installed by the package owner before the Dev profile enrolled it.
+        slot.unlink()
+        anchor = self.codex / "dev-personal-core/save-game/save-game"
+        anchor.unlink()
+        slot.symlink_to(source)
+        original = slot.lstat()
+        checkpoint = self.home / ".local/state/save-game/v1/checkpoints/private.json"
+        checkpoint.parent.mkdir(parents=True)
+        checkpoint.write_bytes(b"the last good checkpoint")
+        self.design_read.side_effect = AssertionError("independent Save-Game inspection attempted to download")
+        notice = f"verified independently installed save-game {previous['revision'][:12]} (update pending)"
+        with patch.object(personal_core, "SAVE_GAME_RELEASE", current):
+            self.assertIn(notice, self.configure("check"))
+            self.assertIn(notice, self.configure("install"))
+            self.assertTrue(os.path.samestat(original, slot.lstat()))
+            engine = source / "engine/index.py"
+            engine.chmod(0o600)
+            engine.write_bytes(b"changed by someone else")
+            with self.assertRaisesRegex(ValueError, "index.py"):
+                self.configure("check")
+            self.configure("withdraw")
+        self.assertTrue(os.path.samestat(original, slot.lstat()))
+        self.assertEqual(checkpoint.read_bytes(), b"the last good checkpoint")
+
+    def test_save_game_refuses_an_independent_predecessor_with_the_same_target(self):
+        _, current = self.configure_save_game_predecessor()
+        slot = self.slots / "save-game"
+        target = slot.readlink()
+        slot.unlink()
+        slot.symlink_to(target)
+        substituted = slot.lstat()
+        with patch.object(personal_core, "SAVE_GAME_RELEASE", current):
+            with self.assertRaisesRegex(ValueError, "independently installed earlier save-game"):
+                self.configure("install")
+        self.assertTrue(os.path.samestat(substituted, slot.lstat()))
+        self.assertEqual(slot.readlink(), target)
 
     def test_local_jobs_validates_runtime_and_keeps_generated_dashboard_and_job_state(self):
         self.configure("install")

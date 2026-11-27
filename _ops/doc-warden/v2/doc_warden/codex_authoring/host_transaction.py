@@ -14,6 +14,7 @@ from ..artifacts import validate_consent
 from ..canonical import atomic_write, canonical_json, contained_path, digest_ref, parse_json_object
 from ..live_install import _runtime_writer
 from ..operation_store import operation_path, private_state_root
+from ..validators import read_repository_config
 from .host_projection import (
     PROJECTION_PATHS,
     apply_descriptors,
@@ -27,6 +28,7 @@ OPERATION_SCHEMA = "doc-warden/codex-projection-operation/v1"
 STATE_SCHEMA = "doc-warden/codex-projection-state/v1"
 SOURCE_ENTRY = "_ops/bin/doc-warden.sh"
 MAX_RECORD_BYTES = 256 * 1024
+DEVICE_RECOVERY = "recover_codex_authoring_device"
 VerifyInstallation = Callable[[dict], None]
 
 
@@ -106,20 +108,53 @@ def _operation_digest(operation: dict) -> str:
     })
 
 
+def require_authoring_enabled(project: Path) -> None:
+    profile = read_repository_config(project)
+    if profile is not None and not profile["enabled"]:
+        raise ValueError("repository_write_disabled")
+
+
+def _previous_projection_for_device_recovery(state: dict, owner: dict, binding: dict | None) -> dict:
+    """Select an owned, device-only preimage for a fresh, explicit recovery."""
+    active = state["active"]
+    unavailable = "native_authoring_projection_device_recovery_unavailable"
+    if not isinstance(active, dict) or not isinstance(binding, dict):
+        raise ValueError(unavailable)
+    previous = active.get("owner")
+    previous_binding = active.get("binding")
+    if not isinstance(previous, dict) or not isinstance(previous_binding, dict):
+        raise ValueError(unavailable)
+    old_identity = previous.get("project_identity")
+    identity = owner["project_identity"]
+    if (not isinstance(old_identity, dict) or type(old_identity.get("device")) is not int
+            or old_identity["device"] == identity["device"]
+            or previous != {**owner, "project_identity": {**identity, "device": old_identity["device"]}}
+            or any(previous_binding.get(key) != value for key, value in previous.items())
+            or any(binding.get(key) != value for key, value in owner.items())
+            or not binding.get("host_digest") or previous_binding.get("host_digest") != binding["host_digest"]
+            or not all(_owned_images(state).values())):
+        raise ValueError(unavailable)
+    return active
+
+
 def prepare_host_change(
     project: Path, *, home: Path, data_home: Path, authority: dict,
-    binding: dict | None, verify: VerifyInstallation,
+    binding: dict | None, verify: VerifyInstallation, recover_device: bool = False,
 ) -> dict:
     """Write private preview metadata. The project and client are observed only."""
     identity = _project_identity(project)
     project = Path(identity["path"])
+    if binding is not None:
+        require_authoring_enabled(project)
     state_root = private_state_root()
     state = _read_state(state_root, project)
     if state["pending"] is not None:
         raise ValueError("native_authoring_projection_recovery_required")
-    if state["active"] is not None and state["active"]["owner"] != {
-        "project_identity": identity, "home": str(home.resolve()), "data_home": str(data_home.resolve())
-    }:
+    owner = {"project_identity": identity, "home": str(home.resolve()), "data_home": str(data_home.resolve())}
+    previous_projection = None
+    if recover_device:
+        previous_projection = _previous_projection_for_device_recovery(state, owner, binding)
+    elif state["active"] is not None and state["active"]["owner"] != owner:
         raise ValueError("native_authoring_projection_destination_changed")
     before = observe_descriptors(project)
     if before != _owned_images(state):
@@ -135,10 +170,8 @@ def prepare_host_change(
         "operation_id": str(uuid4()),
         "target": "codex",
         "consequence": "install_codex_authoring" if binding is not None else "remove_codex_authoring",
-        "project_identity": identity,
+        **owner,
         "project_revision": _git(project, "rev-parse", "HEAD"),
-        "home": str(home.resolve()),
-        "data_home": str(data_home.resolve()),
         "canonical_root": authority["canonical_root"],
         "repository_key": authority["repository_key"],
         "source_revision": authority["source_revision"],
@@ -149,10 +182,19 @@ def prepare_host_change(
         "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
         "global_hooks": [],
     }
+    if previous_projection is not None:
+        operation["consequence"] = DEVICE_RECOVERY
+        operation["previous_projection"] = previous_projection
     operation["action_digest"] = _operation_digest(operation)
+    raw = canonical_json(operation)
+    if len(raw) > MAX_RECORD_BYTES:
+        raise ValueError("native_authoring_projection_record_invalid")
     target = operation_path(operation["operation_id"])
-    atomic_write(target.parent, target.name, canonical_json(operation))
-    return operation | {"consent_required": True}
+    atomic_write(target.parent, target.name, raw)
+    preview = {key: value for key, value in operation.items() if key != "previous_projection"}
+    if previous_projection is not None:
+        preview["previous_owner"] = previous_projection["owner"]
+    return preview | {"consent_required": True}
 
 
 def _is_expired(expires_at: str) -> bool:
@@ -183,6 +225,12 @@ def apply_host_change(
         raise ValueError("native_authoring_projection_destination_changed")
     state_root = private_state_root()
     relative = _state_relative(project)
+    binding = operation["binding"]
+    recovering_device = operation["consequence"] == DEVICE_RECOVERY
+    owner = {key: operation[key] for key in ("project_identity", "home", "data_home")}
+    active = None if binding is None else {"owner": owner, "binding": binding, "images": operation["after"]}
+    if recovering_device and (binding is None or revalidate is None or verify_projection is None):
+        raise ValueError("native_authoring_projection_device_recovery_unavailable")
     result = {
         "schema": "doc-warden/codex-projection-result/v1",
         "operation_id": operation_id,
@@ -199,7 +247,8 @@ def apply_host_change(
     with _runtime_writer(home, data_home, project=project):
         state = _read_state(state_root, project)
         if state["last"] == result:
-            if observe_descriptors(project) != operation["after"]:
+            if (observe_descriptors(project) != operation["after"]
+                    or (recovering_device and state["active"] != active)):
                 raise ValueError("native_authoring_projection_changed")
             return result
         recovering = state["pending"] == digest
@@ -214,8 +263,13 @@ def apply_host_change(
                 raise ValueError("native_authoring_projection_changed")
         if _git(project, "rev-parse", "HEAD") != operation["project_revision"]:
             raise ValueError("native_authoring_projection_project_changed")
-        binding = operation["binding"]
+        if recovering_device:
+            previous = _previous_projection_for_device_recovery(state, owner, binding)
+            if (previous != operation.get("previous_projection")
+                    or _state_digest(state | {"pending": None}) != operation["ownership_preimage"]):
+                raise ValueError("native_authoring_projection_ownership_changed")
         if binding is not None:
+            require_authoring_enabled(project)
             if not recovering and revalidate is not None:
                 revalidate(binding)
             else:
@@ -223,6 +277,8 @@ def apply_host_change(
         descriptors = _new_projection(binding)
         if descriptor_images(descriptors) != operation["after"]:
             raise ValueError("native_authoring_projection_specification_changed")
+        if binding is not None:
+            require_authoring_enabled(project)
         if not recovering:
             atomic_write(state_root, relative, canonical_json(state | {"pending": digest}))
         apply_descriptors(project, before=operation["before"], descriptors=descriptors)
@@ -231,11 +287,6 @@ def apply_host_change(
                 verify_projection(binding)
             except (OSError, ValueError, subprocess.SubprocessError) as error:
                 raise ValueError("native_authoring_projection_recovery_required") from error
-        active = None if binding is None else {
-            "owner": {key: operation[key] for key in ("project_identity", "home", "data_home")},
-            "binding": binding,
-            "images": operation["after"],
-        }
         atomic_write(state_root, relative, canonical_json(state | {"pending": None, "active": active, "last": result}))
     return result
 

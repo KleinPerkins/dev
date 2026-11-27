@@ -11,8 +11,8 @@ from .host_projection import PROJECTION_PATHS, SKILL_PURPOSE
 from .native_authoring_transport import NativeAuthoringChannel
 
 
-CLIENT_BUILD = "0.171.0-alpha.13"
-CLIENT_DIGEST = "sha256:3b6d00deea5fabc50ad34be1872b8e4ead1638d23c68fabb7837edc07f0cf1e0"
+CLIENT_BUILD = "0.171.0-alpha.13.2"
+CLIENT_DIGEST = "sha256:e1c3d034b7fd295d160d6ab412357f9c54241c8ed7a2a861f4730b8a4dd88ddb"
 
 
 def client_identity(binary: Path, *, cwd: Path, environment: dict[str, str]) -> dict:

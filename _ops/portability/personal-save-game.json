@@ -1,5 +1,5 @@
 {
-  "revision": "8f2aead2d6757830be6811f244cb169fa3350ed0",
+  "revision": "b3c8c22e14763b1d04592f8f798e4027a7e672fc",
   "skills": {
     "save-game": {
       "EVIDENCE.md": [
@@ -69,8 +69,8 @@
       ],
       "engine/identity.py": [
         "100644",
-        8307,
-        "130e6ff65c8c69b98625812d05a23950f358188ecdc76bb60b5a6440c8cab586"
+        9831,
+        "505be7c6f0c68ec07748bc247b3d5ccdda3300e046b4d369f676cee77c518953"
       ],
       "engine/ids.py": [
         "100644",
@@ -109,8 +109,8 @@
       ],
       "engine/reconcile.py": [
         "100644",
-        7327,
-        "0bbdb5b049c02fc8ce4530f73f0b38bbba254eaf3146ae92034d36593f5705e7"
+        7489,
+        "6334a10629f7f1a5eeb8261055152e8f61fb98d0d82a391112bbb06d90c4c387"
       ],
       "engine/schemas.py": [
         "100644",
@@ -439,8 +439,8 @@
       ],
       "tests/test_identity.py": [
         "100644",
-        13621,
-        "04224f292f41afd8b252134ac6c4f796ae06ddf1264bd707db8a127c3ea999c5"
+        14483,
+        "52cc6a7640aaf8ea94f81cd21ec90613342ff24bbaa6b7b0236b792f8e84391c"
       ],
       "tests/test_ids.py": [
         "100644",
@@ -479,8 +479,8 @@
       ],
       "tests/test_reconcile.py": [
         "100644",
-        9133,
-        "f1ec6d4b78089d0cee2ff301f6210cd9224c0ab3c94f2ece648b18bc6d910730"
+        11312,
+        "ca93efbce7c6e682eb53e6b2459ea1287c2e5200437af3c26fa418465224359e"
       ],
       "tests/test_schemas.py": [
         "100644",
@@ -507,6 +507,518 @@
         3234,
         "71654036d92e0008939cad8f172ca802768466e187a8738cf85833b358384e15"
       ]
+    }
+  },
+  "previous": {
+    "revision": "8f2aead2d6757830be6811f244cb169fa3350ed0",
+    "skills": {
+      "save-game": {
+        "EVIDENCE.md": [
+          "100644",
+          11526,
+          "69e7dc61de703b2febee16dbb5a72c5893f12ec7dad2df2733dcc0f47bd15969"
+        ],
+        "Makefile": [
+          "100644",
+          752,
+          "97495b099352378f0ed870bdf22e223a259251fe1978ab97c42245b084e4bffc"
+        ],
+        "SKILL.md": [
+          "100644",
+          10119,
+          "da8bb0b332927a6f4c6b461a139098ed1f69c03acc57bc2c2c52c6b68db82433"
+        ],
+        "engine/__init__.py": [
+          "100644",
+          0,
+          "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        ],
+        "engine/adapters.py": [
+          "100644",
+          3820,
+          "f003fa6eee347a6f06900fc7ef98f7f9e58ae183a6f95cf69f0fdd13c363684a"
+        ],
+        "engine/behavior.py": [
+          "100644",
+          33671,
+          "8e6e0d4b97fedd89016b5ff60c9b296fe840f2b79977b79e04dfaaa0f6dd6077"
+        ],
+        "engine/canonical.py": [
+          "100644",
+          2054,
+          "d755ffdcb3c62f6380961107438412b353836a0ca11c08dc43bbf3fafe129e6a"
+        ],
+        "engine/cli.py": [
+          "100644",
+          22210,
+          "e3ab8e2af821531049a0e8107716cb78488e07ab0d6bfc77b0e301c22a098831"
+        ],
+        "engine/compact_decision.py": [
+          "100644",
+          6664,
+          "aa45a59079d0be0857a55bb3b62d1627671d3f5fded8b10f91cad61597477c12"
+        ],
+        "engine/curation.py": [
+          "100644",
+          4177,
+          "008510812793ef3731b919fb25682e1281f4d2aeb7bee58e59630bc29d49c8d4"
+        ],
+        "engine/doctor.py": [
+          "100644",
+          14700,
+          "2aab3d6aa89e92444e90a34c192d336e4001249c50284f63e4e35d229c1811ae"
+        ],
+        "engine/durability.py": [
+          "100644",
+          12625,
+          "16b356df02f320b4d8485adde08c020b4513f369f565526ece1395d6f7334fe6"
+        ],
+        "engine/flush.py": [
+          "100644",
+          7377,
+          "bdd2774478cab925e2ad5b5d1a0c45f01776b2ea79a9c4a798623f4a97e92f13"
+        ],
+        "engine/identity.py": [
+          "100644",
+          8307,
+          "130e6ff65c8c69b98625812d05a23950f358188ecdc76bb60b5a6440c8cab586"
+        ],
+        "engine/ids.py": [
+          "100644",
+          1030,
+          "dfd7d5ad7bb62fd56a0abd0efdcd215c2dadb5dcd2af29fac32af5008c9bcdc2"
+        ],
+        "engine/index.py": [
+          "100644",
+          12775,
+          "c976738faf4eea8c3a43c85898a22d8de67e4aa86ec661e0c637272f743a27f3"
+        ],
+        "engine/lifecycle.py": [
+          "100644",
+          44911,
+          "fef8d94f14f490ba104f2f7a48652292b646ffb5bf30ecc8c009d44a019aa932"
+        ],
+        "engine/lock.py": [
+          "100644",
+          3121,
+          "c27d3de1ec3466952b2d9ea66261f16fbab8b9f10cbfadc7f1e578bd2cf92d09"
+        ],
+        "engine/observation.py": [
+          "100644",
+          5142,
+          "f5218bec93b831142e369bd7f8e63a1854fcd52fb710ca747b0b4d67d9d92178"
+        ],
+        "engine/paths.py": [
+          "100644",
+          4298,
+          "4a6fac7e2f0ceb7d232a7b95853f12eea0750c6c8cbb80ef338662b03c0ef9dc"
+        ],
+        "engine/privacy.py": [
+          "100644",
+          11044,
+          "76c24f4c5b6ae8a1332132e99b5cf1a440ce77cd5d5003e2a0dc73618ba16e0c"
+        ],
+        "engine/reconcile.py": [
+          "100644",
+          7327,
+          "0bbdb5b049c02fc8ce4530f73f0b38bbba254eaf3146ae92034d36593f5705e7"
+        ],
+        "engine/schemas.py": [
+          "100644",
+          989,
+          "1ede40acb47d6fc31a48781df2bcca93d0f66c58232b4207d9345edd742beeaa"
+        ],
+        "engine/schemas/archive-manifest.v1.schema.json": [
+          "100644",
+          1465,
+          "796c879ea404ab7903daa55a55a0ff11df444ec205783bdedf71b6c7cdf5bbd6"
+        ],
+        "engine/schemas/checkpoint.v1.schema.json": [
+          "100644",
+          4564,
+          "79da506e33934273a464c1b299178b0fc8c091e5668821bcabce5ee82039e608"
+        ],
+        "engine/schemas/current.v1.schema.json": [
+          "100644",
+          13728,
+          "ea66c299152ef692ae05c463360b81aed3fdd041036cc8f3ba96fd2e450849a5"
+        ],
+        "engine/schemas/flush-receipt.v1.schema.json": [
+          "100644",
+          2038,
+          "44aff848faa9cfcdc63a2cedf92730d112cb19a5ed16f68b28eaddc3b056c90f"
+        ],
+        "engine/schemas/journal-aborted.v1.schema.json": [
+          "100644",
+          1238,
+          "a6699849a517dfc84b1a5b762991c650399e6b13bbd740e02abbe5a2a62e68f0"
+        ],
+        "engine/schemas/journal-finalized.v1.schema.json": [
+          "100644",
+          1266,
+          "a7f92cefbaa3ce2b5997ff8ba3e4f3336de77f29584322a113312cdcfe91c825"
+        ],
+        "engine/schemas/journal-prepared.v1.schema.json": [
+          "100644",
+          1995,
+          "d22403aee318dc41e72e0db10eef9dbacd96d256bf5f41e3fb660314d591bc6d"
+        ],
+        "engine/schemas/promotion-candidate.v1.schema.json": [
+          "100644",
+          3194,
+          "54f7be74df8802b1408030938439eb93323c64ef4b2d5cc01419d389c01279fb"
+        ],
+        "engine/schemas/reconcile-observation.v1.schema.json": [
+          "100644",
+          1567,
+          "598077b340f2ddb319ad6a0a1a99d05e345644a0ea3844e753df24a8cdcad72e"
+        ],
+        "engine/schemas/reconcile-receipt.v1.schema.json": [
+          "100644",
+          5059,
+          "82498b2a44df1d9b250767593edcaaeca62515d457da64d9bde79c8edd30267f"
+        ],
+        "engine/schemas/registration.v1.schema.json": [
+          "100644",
+          2120,
+          "cc4ac39a1e4d58ba81b38d579d068be2511be99e12a4f0e6c75b1be137dbd51c"
+        ],
+        "engine/schemas/tombstone.v1.schema.json": [
+          "100644",
+          1289,
+          "63218fec102effde482e6ebc61a844e755b87aa7cf7a28f64e0ee8160c362e43"
+        ],
+        "engine/schemas_validate.py": [
+          "100644",
+          4625,
+          "045c13252465d3f5526c236b12f537c1e350f33a79cfe36e06bb62480655e173"
+        ],
+        "engine/snapshot.py": [
+          "100644",
+          2214,
+          "dc0ede4ebd470db2ee67206bb8c08b99ef3effb9709062de3a95964316b9d0e0"
+        ],
+        "engine/transaction.py": [
+          "100644",
+          23260,
+          "4c90a133f39b088d457be94c062fd8947dd4cbc0a9034f302c58e9cc81da8d3f"
+        ],
+        "install.sh": [
+          "100755",
+          1896,
+          "693d387e8075eaab37e9b146ec1c42ccc81ce14f6e5e22959b2f1110c4b2a4b3"
+        ],
+        "meta.yml": [
+          "100644",
+          159,
+          "e342d1858674ef28451cf36692ec3b0672756f1c34c2c3d1ae0350f86f870138"
+        ],
+        "references/clients.md": [
+          "100644",
+          5589,
+          "83ae214b30e4f584a13c53c7e1d005d710eb6d8dec2690c21fc3f2cd0e7de2bb"
+        ],
+        "scripts/save-game.sh": [
+          "100755",
+          699,
+          "0ff110663ff282dd7e3edd6ad88eb8a4f7340e305f88276c4273c9274a5a8466"
+        ],
+        "tests/_support.py": [
+          "100644",
+          2397,
+          "54b4082f84ff052e2ae109cf57d9403b922fee0fb6d679efb6dade5075ec47bc"
+        ],
+        "tests/fixtures/archive-manifest.v1/invalid.json": [
+          "100644",
+          474,
+          "ee80152ed5f820198b4ea723b15f28195c72f94d722832691c73f59929c79e9b"
+        ],
+        "tests/fixtures/archive-manifest.v1/valid.json": [
+          "100644",
+          500,
+          "a109e607515a01dab69caa326a17f7168a4836e8f67b2f8e4a756d03fab6153e"
+        ],
+        "tests/fixtures/checkpoint.v1/invalid.json": [
+          "100644",
+          1342,
+          "b1d1c433a3406119d9b040f505c4b8eb01dc62039b56f2f7a6658892274a6c9a"
+        ],
+        "tests/fixtures/checkpoint.v1/valid.json": [
+          "100644",
+          1460,
+          "d6f5f00da93f6fa04494ab334df98818aa2772f182c8e1d9544a30777f0b62de"
+        ],
+        "tests/fixtures/current.v1/adversarial-extra-key.json": [
+          "100644",
+          4033,
+          "b29c1e2d8986e2386e6228086ecc5721520feb6e739d7bc9318ad17a5943ccca"
+        ],
+        "tests/fixtures/current.v1/adversarial-malformed-digest.json": [
+          "100644",
+          3913,
+          "af7a22a5d1384375f0d9296872ae633060da2e2de0b33e7e1cf94d53c263d6d0"
+        ],
+        "tests/fixtures/current.v1/adversarial-oversized-field.json": [
+          "100644",
+          4402,
+          "366092728048c414a8eb08d89cccdc0cf40f8ab4904eb1f5caa7a63b4ab62682"
+        ],
+        "tests/fixtures/current.v1/invalid.json": [
+          "100644",
+          3940,
+          "12a5d1999ff8ff0510fd5f155dac857fbe6321c97532f74f933dd94447cb3395"
+        ],
+        "tests/fixtures/current.v1/valid.json": [
+          "100644",
+          3962,
+          "ef8567e82993147722808fc7ceb3a90dc3836171344eb30d1f1bd78bc22d680a"
+        ],
+        "tests/fixtures/flush-receipt.v1/invalid.json": [
+          "100644",
+          456,
+          "655f5e16e027a997b4fca7d09b99098ae5ec7ba3c722e2c148a198db8540ffc5"
+        ],
+        "tests/fixtures/flush-receipt.v1/valid.json": [
+          "100644",
+          656,
+          "b43e622b7b18e61f1694d24289af24ec19368bab264332b4856d3d75c91e990f"
+        ],
+        "tests/fixtures/journal-aborted.v1/invalid.json": [
+          "100644",
+          418,
+          "1e56c1711afc10cd663e853528db04675c82f5050df484d409fdcc37db19f3cf"
+        ],
+        "tests/fixtures/journal-aborted.v1/valid.json": [
+          "100644",
+          426,
+          "965e203dabeb368449f1d514533706287df6f3b35c9a3cb8047fbfc094ffb42e"
+        ],
+        "tests/fixtures/journal-finalized.v1/invalid.json": [
+          "100644",
+          374,
+          "9038bd256639be8c7609f0c365dd4536c3b5c1bcc1a7e50830dcbb80b9404e4c"
+        ],
+        "tests/fixtures/journal-finalized.v1/valid.json": [
+          "100644",
+          405,
+          "1d1ea1dfe4afba73c2654fc15032c1e3f511f7ddef5b1648a8651b839a22f75f"
+        ],
+        "tests/fixtures/journal-prepared.v1/invalid.json": [
+          "100644",
+          656,
+          "099dfea2438c8d08db4046470688ce0b6167e5f41bb96f51e93242d45300e999"
+        ],
+        "tests/fixtures/journal-prepared.v1/valid.json": [
+          "100644",
+          708,
+          "7d110d6fa17dc25319588ac8742eff97c985de702f9611624b39fb95d6942c28"
+        ],
+        "tests/fixtures/privacy/adversarial-confidentiality-marker.json": [
+          "100644",
+          87,
+          "165ce761f89c7b2cbabd4a8cbc49c4129aa4edbcf793bddfc41c31c9420930dd"
+        ],
+        "tests/fixtures/privacy/adversarial-email-phone.json": [
+          "100644",
+          126,
+          "588abe5b99d8cd5cea0d8a83b8f51be11c9ebc864ad0cf1e685d9319c5286238"
+        ],
+        "tests/fixtures/privacy/adversarial-pan.json": [
+          "100644",
+          94,
+          "a2037c2b9b8a7de17fcf92022bdd8010da3998c585f1d21b0cdac46df23c5f4d"
+        ],
+        "tests/fixtures/privacy/adversarial-secret-marker.json": [
+          "100644",
+          90,
+          "39e93a2da19c2f34e36862b57f3bc3c2e75885c1a511979a7cb95a004610cfbc"
+        ],
+        "tests/fixtures/privacy/clean.json": [
+          "100644",
+          217,
+          "bb018de782542a1913bbfbed8d1298f56dcd621ce4eb3c87bad000a90ab427bf"
+        ],
+        "tests/fixtures/promotion-candidate.v1/invalid.json": [
+          "100644",
+          1020,
+          "123c2926cd53020572af151defe7cbca9c719411e0040800a49646cb2f11c0ad"
+        ],
+        "tests/fixtures/promotion-candidate.v1/valid.json": [
+          "100644",
+          1022,
+          "639a7d4ef1e565536d2af2daba88c8fec1f4456bfed37523400204ff594ff7c1"
+        ],
+        "tests/fixtures/reconcile-observation.v1/invalid.json": [
+          "100644",
+          531,
+          "131b23aa798c103ee5637e3e115c2b9138b0a6d5a5f10bfb93b8b4b4cce8bafd"
+        ],
+        "tests/fixtures/reconcile-observation.v1/valid.json": [
+          "100644",
+          485,
+          "ef7d89b22c513c19f3c4426ad03ee5489bca04d356933fe484d6c6a51d2b8cda"
+        ],
+        "tests/fixtures/reconcile-receipt.v1/invalid.json": [
+          "100644",
+          1364,
+          "5aa5f06cbdfbabc3206048c523d6011b44fee871a6f7f6fe49623c15fec8c38e"
+        ],
+        "tests/fixtures/reconcile-receipt.v1/valid.json": [
+          "100644",
+          1454,
+          "a685eb68e79bb54d662327aee4b890feec08b4a79aec961d7ecab4520485df45"
+        ],
+        "tests/fixtures/registration.v1/invalid.json": [
+          "100644",
+          761,
+          "a40afc0e9d110d4020dca89c195139bfab236c1b883029a35c5b7de4c9dccb82"
+        ],
+        "tests/fixtures/registration.v1/valid.json": [
+          "100644",
+          780,
+          "e4f2a2dca74f4fcf50f287c674d0253037c3b5ece8266fe41d3ae79a437e50e1"
+        ],
+        "tests/fixtures/tombstone.v1/invalid.json": [
+          "100644",
+          389,
+          "dc91df4b78fa5c8d9606ac0e5500f5a2fd1fa6fe5ab4b1b7436e4025f4b88482"
+        ],
+        "tests/fixtures/tombstone.v1/valid.json": [
+          "100644",
+          385,
+          "601259d3ec4038eac5e3620fcdc0dec16c6987003643ddaebd877e40cafd59b4"
+        ],
+        "tests/test_adapters.py": [
+          "100644",
+          3326,
+          "3ebfc76f9716aa41cd83e61ca8c1ff32cd1ec5dbf5126aaac51e007e43e30dd5"
+        ],
+        "tests/test_behavior.py": [
+          "100644",
+          25281,
+          "196794b1efd6f293086af332097822445ead2abcb1e9c26bfbbdf4597a52c6cc"
+        ],
+        "tests/test_behavior_evals.py": [
+          "100644",
+          13525,
+          "fcbde49d93f764ad1921cf951ff7858a4f57aad03010a4b9dd7516a5087ef344"
+        ],
+        "tests/test_canonical.py": [
+          "100644",
+          3098,
+          "a8a7d12c79192213468f8edf291ddd0d67264e602e331544421bb287edf653e0"
+        ],
+        "tests/test_cli.py": [
+          "100644",
+          17867,
+          "e79621a0b4270d903eae1c2f8a47006b8a85009e2afbdfeb19141a12b9dc26a8"
+        ],
+        "tests/test_compact_decision.py": [
+          "100644",
+          11781,
+          "e8806ff86fa3719570845b263784863d916c4b0ef38d7a9d3bc3d43ffeb4bdea"
+        ],
+        "tests/test_curation.py": [
+          "100644",
+          8642,
+          "0613c274996aa85e1ed7578e3fbe3aadd4b5a46aaa3c6ac7ff0192ee61edf176"
+        ],
+        "tests/test_doctor.py": [
+          "100644",
+          4763,
+          "0c842446ca21a7fbda83c4e8580587debdea67b28b32e9731fc4ca8e316c7bed"
+        ],
+        "tests/test_durability.py": [
+          "100644",
+          6388,
+          "4cc45c5918b872c713b816342960a21a6da867276d2fd36bd028945976283425"
+        ],
+        "tests/test_end_to_end.py": [
+          "100644",
+          7571,
+          "efad400e967a81e7fe756d6fac33df291e58936d5354385824676368502c89af"
+        ],
+        "tests/test_flush.py": [
+          "100644",
+          9668,
+          "95d6a47f8d9e355b8c947065b736e282343daab08c4d6d9e16e624a56802d304"
+        ],
+        "tests/test_full_lifecycle_end_to_end.py": [
+          "100644",
+          11331,
+          "c39b0775edeea6bd8d541693f87943f9ef19e9763e13fcb77c21d9218ae0c4a0"
+        ],
+        "tests/test_identity.py": [
+          "100644",
+          13621,
+          "04224f292f41afd8b252134ac6c4f796ae06ddf1264bd707db8a127c3ea999c5"
+        ],
+        "tests/test_ids.py": [
+          "100644",
+          1221,
+          "61e5164783bc87f1ccc56fe77600de7449535347142b53bd02227761cf052e2b"
+        ],
+        "tests/test_index.py": [
+          "100644",
+          12458,
+          "87285716abbbe95ae63f2137c08ef415eb269277030a33988381f2914d9a971d"
+        ],
+        "tests/test_lifecycle.py": [
+          "100644",
+          31451,
+          "2aae32060d49231d4c583a78986ffcc150dcefc7589ed95e1ef46fe18786cd39"
+        ],
+        "tests/test_lock.py": [
+          "100644",
+          1814,
+          "b5b14ddf4fd160182b44af827965beae200edb6907f86a0613800290b3be8a5c"
+        ],
+        "tests/test_observation.py": [
+          "100644",
+          12286,
+          "b9c795394404eb4bdc7cacc52e465ff76ea63b4f2a25e8e26cbfd76c6d762578"
+        ],
+        "tests/test_paths.py": [
+          "100644",
+          2373,
+          "d1b000dfbe837aaeba77d3b5379062783f817e3b30d3440aaaa72b4b3bdd695a"
+        ],
+        "tests/test_privacy.py": [
+          "100644",
+          16136,
+          "7faa3670dd11836a1276d1a32c70d91a1c6219e3e90fb397e1f1f8b1990f3ad0"
+        ],
+        "tests/test_reconcile.py": [
+          "100644",
+          9133,
+          "f1ec6d4b78089d0cee2ff301f6210cd9224c0ab3c94f2ece648b18bc6d910730"
+        ],
+        "tests/test_schemas.py": [
+          "100644",
+          3882,
+          "114ace500932bad654f2da4ad52e49e72484c68781fc44c1ab9c0abf88888470"
+        ],
+        "tests/test_schemas_validate.py": [
+          "100644",
+          3746,
+          "a44cde06722826802abff22262352666918a4b9499d1b259f9ecbb4b82b36c3f"
+        ],
+        "tests/test_snapshot.py": [
+          "100644",
+          2293,
+          "2028ff14e14d13a8460bc01144b8774b8c1c639f931e06927573072be8652563"
+        ],
+        "tests/test_transaction.py": [
+          "100644",
+          25346,
+          "995f3e180ecd41f428d53be1bfc511380d878989e867846bddb8c526d753dde1"
+        ],
+        "tests/test_zero_link.py": [
+          "100644",
+          3234,
+          "71654036d92e0008939cad8f172ca802768466e187a8738cf85833b358384e15"
+        ]
+      }
     }
   }
 }
