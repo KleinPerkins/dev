@@ -253,20 +253,29 @@ class StandardDevSkillTests(unittest.TestCase):
         self.notice = published["notice"]["name"]
         responses = {public + self.notice: b"fixture notice"}
         notice = {"name": self.notice, "length": 14, "sha256": hashlib.sha256(b"fixture notice").hexdigest()}
+        def fixture_skills(release):
+            skills = {}
+            source = f"https://raw.githubusercontent.com/KleinPerkins/skills/{release['revision']}/global/"
+            for name, files in release["skills"].items():
+                skills[name] = {}
+                for relative, (mode, _, released_digest) in files.items():
+                    key = f"skills/{name}/{relative}"
+                    data = key.encode()
+                    if name == "save-game":
+                        data += b"\n" + released_digest.encode("ascii")
+                    responses[source + key] = data
+                    skills[name][relative] = [mode, len(data), hashlib.sha256(data).hexdigest()]
+            return skills
+
         for variable in ("DESIGN_RELEASE", "AUTHORING_RELEASE", "PR_STEWARD_RELEASE",
                          "SAVE_GAME_RELEASE", "LOCAL_JOBS_RELEASE"):
             release = dict(getattr(personal_core, variable))
             if "notice" in release:
                 release["notice"] = notice
-            skills = {}
-            source = f"https://raw.githubusercontent.com/KleinPerkins/skills/{release['revision']}/global/"
-            for name, files in release["skills"].items():
-                skills[name] = {}
-                for relative, (mode, _, _) in files.items():
-                    key = f"skills/{name}/{relative}"
-                    data = key.encode()
-                    responses[source + key] = data
-                    skills[name][relative] = [mode, len(data), hashlib.sha256(data).hexdigest()]
+            skills = fixture_skills(release)
+            if variable == "SAVE_GAME_RELEASE":
+                previous = release["previous"]
+                release["previous"] = dict(previous, skills=fixture_skills(previous))
             if variable == "LOCAL_JOBS_RELEASE":
                 runtime = {"yaml/__init__.py": b'__version__ = "6.0.3"\ndef safe_load(s): return {"active": True}\n',
                            "PyYAML-LICENSE.txt": b"fixture license"}
@@ -623,13 +632,10 @@ class StandardDevSkillTests(unittest.TestCase):
 
     def configure_save_game_predecessor(self):
         current = personal_core.SAVE_GAME_RELEASE
-        previous = dict(current["previous"], skills=current["skills"])
-        read = self.design_read.side_effect
-        self.design_read.side_effect = lambda url, length: read(
-            url.replace(previous["revision"], current["revision"]), length)
+        previous = current["previous"]
         with patch.object(personal_core, "SAVE_GAME_RELEASE", previous):
             self.configure("install")
-        return previous, dict(current, previous=previous)
+        return previous, current
 
     def test_save_game_owned_upgrade_recovers_after_withdrawal_and_rolls_back(self):
         previous, current = self.configure_save_game_predecessor()
@@ -637,6 +643,10 @@ class StandardDevSkillTests(unittest.TestCase):
         control = self.codex / "dev-personal-core/save-game"
         original = slot.lstat()
         original_target = slot.readlink()
+        changed = ("engine/identity.py", "engine/reconcile.py")
+        original_bytes = {name: (slot / name).read_bytes() for name in changed}
+        for name, content in original_bytes.items():
+            self.assertEqual(hashlib.sha256(content).hexdigest(), previous["skills"]["save-game"][name][2])
         neighbors = {p: p.lstat().st_ino for p in self.slots.iterdir() if p != slot}
         checkpoint = self.home / ".local/state/save-game/checkpoint.json"
         checkpoint.parent.mkdir(parents=True)
@@ -668,6 +678,10 @@ class StandardDevSkillTests(unittest.TestCase):
             slot.unlink()
             self.configure("install")
             self.configure("check")
+            for name, prior_bytes in original_bytes.items():
+                updated = (slot / name).read_bytes()
+                self.assertNotEqual(updated, prior_bytes)
+                self.assertEqual(hashlib.sha256(updated).hexdigest(), current["skills"]["save-game"][name][2])
             successor_witness = control / "releases" / current["revision"] / "save-game"
             self.assertTrue(personal_core.owns_slot(slot, successor_witness, slot.readlink()))
             installed = slot.lstat()
@@ -680,6 +694,7 @@ class StandardDevSkillTests(unittest.TestCase):
             self.configure("check")
         self.assertEqual(slot.readlink(), original_target)
         self.assertTrue(os.path.samestat(original, slot.lstat()))
+        self.assertEqual({name: (slot / name).read_bytes() for name in changed}, original_bytes)
         self.assertEqual(checkpoint.read_bytes(), b"saved work in the prior release")
 
     def test_save_game_verifies_its_separately_installed_predecessor_until_owner_upgrade(self):
