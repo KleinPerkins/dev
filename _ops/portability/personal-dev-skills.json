@@ -378,58 +378,33 @@
     }
   },
   "dev-remove-repo": {
-    "revision": "4f12ff013d115923ae389a5a8d465207e2628e98",
+    "revision": "56626d5548e1efae7b38f4763e5c961f20012e9e",
     "files": {
-      "_ops/baseline/delivery-policy.json": [
-        "100644",
-        3059,
-        "4497b913d1069dbdfb82f96a59b8e0779969c2b9133b82e69e64924736dd6f40"
-      ],
-      "_ops/baseline/delivery-policy.py": [
-        "100644",
-        6406,
-        "cfe515e421899e5ac33fcba8405a05315d6ad6a6db3afb55615b6c346fa69a93"
-      ],
-      "_ops/bin/dev-remove-repo.sh": [
-        "100755",
-        231190,
-        "fa7d059a962083d1a0335a1a7e32e6564b30ce3cb263f8b785cc975a41f43eaf"
-      ],
-      "_ops/portability/personal_checkout_open_files.py": [
-        "100644",
-        6556,
-        "f8ce1be365f72387fb71f3fa19d2ffc799b86787584d77ba72ce734da2f2fc89"
-      ],
-      "_ops/portability/personal_created_doctor.py": [
-        "100644",
-        6929,
-        "7cd861f5a90355d09faa23460c3e40bca7ee0265bf189c610f4d097e57f33033"
-      ],
-      "_ops/portability/personal_git.py": [
-        "100644",
-        32554,
-        "eb6eba70b21e0c8c0650b0e940a6290cb500e9bfdb2b638a8e9203f7ceef1d58"
-      ],
-      "_ops/portability/personal_scaffold.py": [
-        "100644",
-        14275,
-        "9311b3fdd9af4c9fc3cb7a42ccbf7a7bbf8100cee5d03e1a0bec219e94c18889"
-      ],
-      "_ops/portability/personal_scope.py": [
-        "100644",
-        12402,
-        "f00252220fbeb4ff1784af22407354a0e5a60aa645427b8c27eb1412098f1c69"
-      ],
-      "_ops/portability/personal_worktree.py": [
-        "100644",
-        19538,
-        "c1c7dc8e0be221e9cbc492d4359377e0141931ea90bd26bc4a12bad34069d00f"
-      ],
-      "_ops/skills/personal/dev-remove-repo/SKILL.md": [
-        "100644",
-        1274,
-        "1feb6693e9ad29146c265af81175f87fab0e704b47ad4eed83c0ad896358c3f6"
-      ]
+      "_ops/baseline/delivery-policy.json": ["100644", 3059, "4497b913d1069dbdfb82f96a59b8e0779969c2b9133b82e69e64924736dd6f40"],
+      "_ops/baseline/delivery-policy.py": ["100644", 6406, "cfe515e421899e5ac33fcba8405a05315d6ad6a6db3afb55615b6c346fa69a93"],
+      "_ops/bin/dev-remove-repo.sh": ["100755", 231573, "2cd89e82ace891a1660d416b330a3555b2d7267cc68814bc92dd4b345aac96c5"],
+      "_ops/portability/personal_checkout_open_files.py": ["100644", 6556, "f8ce1be365f72387fb71f3fa19d2ffc799b86787584d77ba72ce734da2f2fc89"],
+      "_ops/portability/personal_created_doctor.py": ["100644", 6929, "7cd861f5a90355d09faa23460c3e40bca7ee0265bf189c610f4d097e57f33033"],
+      "_ops/portability/personal_git.py": ["100644", 32554, "eb6eba70b21e0c8c0650b0e940a6290cb500e9bfdb2b638a8e9203f7ceef1d58"],
+      "_ops/portability/personal_scaffold.py": ["100644", 14275, "9311b3fdd9af4c9fc3cb7a42ccbf7a7bbf8100cee5d03e1a0bec219e94c18889"],
+      "_ops/portability/personal_scope.py": ["100644", 12402, "f00252220fbeb4ff1784af22407354a0e5a60aa645427b8c27eb1412098f1c69"],
+      "_ops/portability/personal_worktree.py": ["100644", 19538, "c1c7dc8e0be221e9cbc492d4359377e0141931ea90bd26bc4a12bad34069d00f"],
+      "_ops/skills/personal/dev-remove-repo/SKILL.md": ["100644", 1274, "1feb6693e9ad29146c265af81175f87fab0e704b47ad4eed83c0ad896358c3f6"]
+    },
+    "previous": {
+      "revision": "4f12ff013d115923ae389a5a8d465207e2628e98",
+      "files": {
+        "_ops/baseline/delivery-policy.json": ["100644", 3059, "4497b913d1069dbdfb82f96a59b8e0779969c2b9133b82e69e64924736dd6f40"],
+        "_ops/baseline/delivery-policy.py": ["100644", 6406, "cfe515e421899e5ac33fcba8405a05315d6ad6a6db3afb55615b6c346fa69a93"],
+        "_ops/bin/dev-remove-repo.sh": ["100755", 231190, "fa7d059a962083d1a0335a1a7e32e6564b30ce3cb263f8b785cc975a41f43eaf"],
+        "_ops/portability/personal_checkout_open_files.py": ["100644", 6556, "f8ce1be365f72387fb71f3fa19d2ffc799b86787584d77ba72ce734da2f2fc89"],
+        "_ops/portability/personal_created_doctor.py": ["100644", 6929, "7cd861f5a90355d09faa23460c3e40bca7ee0265bf189c610f4d097e57f33033"],
+        "_ops/portability/personal_git.py": ["100644", 32554, "eb6eba70b21e0c8c0650b0e940a6290cb500e9bfdb2b638a8e9203f7ceef1d58"],
+        "_ops/portability/personal_scaffold.py": ["100644", 14275, "9311b3fdd9af4c9fc3cb7a42ccbf7a7bbf8100cee5d03e1a0bec219e94c18889"],
+        "_ops/portability/personal_scope.py": ["100644", 12402, "f00252220fbeb4ff1784af22407354a0e5a60aa645427b8c27eb1412098f1c69"],
+        "_ops/portability/personal_worktree.py": ["100644", 19538, "c1c7dc8e0be221e9cbc492d4359377e0141931ea90bd26bc4a12bad34069d00f"],
+        "_ops/skills/personal/dev-remove-repo/SKILL.md": ["100644", 1274, "1feb6693e9ad29146c265af81175f87fab0e704b47ad4eed83c0ad896358c3f6"]
+      }
     }
   }
 }
