@@ -89,7 +89,10 @@ identifies the specific report supplied, which can become stale.
 
 `selected-path` flags a spelling equal to or beneath the selected checkout after
 component normalization and case folding. Investigate it before retirement.
-`other-spelling` can still refer to the checkout through another alias.
+`registered-linked-path` flags a spelling equal to or beneath a path recorded
+in the selected primary's Git worktree registrations. The view compares the
+stored paths lexically. Confirm the linked checkout and its jobs before
+retirement. `other-spelling` can still refer to the checkout through another alias.
 `unresolved` identifies declarations the view cannot place. The report covers
 only the named peers' skill links and the supplied base job configuration.
 It does not establish use by other clients, historical snapshots, active jobs or

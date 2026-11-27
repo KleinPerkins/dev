@@ -1360,8 +1360,9 @@ def retained_skill_links(peer, fd, checkout):
     return sorted(rows, key=lambda row: row["entry"])
 
 
-def configured_job_relations(checkout):
-    """Consume the operator's Local Jobs report. Never open paths declared by a job."""
+def configured_job_relations(checkout, registrations):
+    """Compare job paths with stored registration spellings without opening targets."""
+    linked = registration_paths(registrations, checkout / ".git/worktrees")
     if os.isatty(3):
         raise Refusal("pipe the Local Jobs configuration-only JSON report to --jobs-stdin", EXIT_USAGE)
     limit = 1024 * 1024
@@ -1408,11 +1409,17 @@ def configured_job_relations(checkout):
             source = job.get("declared_root_source")
             if not all(isinstance(s, str) and s and s.isprintable() for s in (path, root, source)):
                 raise Refusal("missing fetch checkout declaration")
+            resolved = None
             if os.path.isabs(path):
-                relation = checkout_spelling(path, checkout)
+                resolved = path
             elif (source in ("global.dev_root", "LOCAL_JOBS_IGF_DEV_ROOT") and os.path.isabs(root)
                   and not path.startswith("~")):
-                relation = checkout_spelling(os.path.join(root, path), checkout)
+                resolved = os.path.join(root, path)
+            if resolved is not None:
+                relation = checkout_spelling(resolved, checkout)
+                if relation == "other-spelling" and any(
+                        checkout_spelling(resolved, path) == "selected-path" for path in linked):
+                    relation = "registered-linked-path"
         rows.append({"id": name, "type": kind, "relation": relation})
     return {"scope": report["scope"], "report_sha256": sha256_hex(bytes(raw)), "instances": rows}
 
@@ -1482,7 +1489,7 @@ def personal_scaffold_view(args):
                     links = retained_skill_links(peer_path, fd, checkout)
                     peer_skills[peer] = {"creation_record_sha256": sha256_hex(peer_saved), "links": links}
             if args.jobs_stdin:
-                jobs = configured_job_relations(checkout)
+                jobs = configured_job_relations(checkout, records)
     except (OSError, ValueError, RecursionError, subprocess.SubprocessError):
         raise Refusal("could not read a stable personal scaffold at the selected path") from None
     data = {"ok": True, "scope": "personal-scaffold", "path": str(checkout), "repository": slug,
