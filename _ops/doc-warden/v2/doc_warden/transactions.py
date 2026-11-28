@@ -185,7 +185,7 @@ def _validate_repository_identity(
         raise ValueError("repository_identity_invalid")
     observed = observe_repository_identity(repo)
     if (
-        observed.binding() != expected
+        not observed.matches_binding(expected)
         or observed.github_repository_id != github_repository_id
     ):
         raise ValueError("repository_identity_mismatch")

@@ -349,7 +349,10 @@ class DeliveryContractTests(unittest.TestCase):
             self.assertEqual(
                 receipt["bindings"]["repository_identity"],
                 {
-                    "github_repository": "KleinPerkins/remote-identity-fixture",
+                    "github_repository_digest": digest_ref(canonical_json({
+                        "github_repository": "KleinPerkins/remote-identity-fixture",
+                        "github_repository_id": 123456789,
+                    })),
                     "github_repository_id": 123456789,
                 },
             )

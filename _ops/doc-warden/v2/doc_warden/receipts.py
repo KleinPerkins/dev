@@ -5,19 +5,21 @@ from __future__ import annotations
 import re
 import subprocess
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote
 
 from .artifacts import _bindings
-from .canonical import atomic_write, canonical_json, digest_ref, parse_json_object
+from .canonical import atomic_write, canonical_json, contained_path, digest_ref, parse_json_object
 from .scm import RepositoryIdentity, _github_slug, _origin_url
 from .transactions import (
     MutationAction,
     MutationRequest,
     ObservedInput,
     TransactionPreview,
+    _event_for,
+    _event_path,
     preview_transaction,
 )
 from .validators import read_repository_config, require_valid, validate_egress
@@ -162,54 +164,61 @@ def prepare_remote_identity_observation(
     pin = (runtime / "gsd-core-pin.json").resolve(strict=True)
     interface = (runtime / "runtime-interface.v1.json").resolve(strict=True)
     bindings["gsd_interface_digest"] = digest_ref(interface.read_bytes())
-    bindings["repository_identity"] = identity.binding()
+    bindings["repository_identity"] = identity.receipt_binding()
 
+    receipt_path = repo / "_ops/doc-warden/state/v2/receipts" / f"{operation_id}.json"
     recovery_preimages = None
     if config["github_repository_id"] == github_repository_id:
         prior = dict(config)
         prior["github_repository_id"] = None
         recovery_preimages = {relative: digest_ref(canonical_json(prior))}
-        receipt_path = (
-            repo
-            / "_ops/doc-warden/state/v2/receipts"
-            / f"{operation_id}.json"
-        )
         if receipt_path.is_file():
             existing = parse_json_object(receipt_path.read_bytes())
             require_valid("receipt", existing)
             if (
                 existing["repository_key"] != config["repository_key"]
                 or existing["github_repository_id"] != github_repository_id
-                or existing["bindings"].get("repository_identity")
-                != identity.binding()
+                or not identity.matches_binding(existing["bindings"].get("repository_identity"))
             ):
                 raise ValueError("remote_identity_receipt_mismatch")
+            bindings["repository_identity"] = existing["bindings"]["repository_identity"]
             recovery_preimages = {
                 relative: existing["preimages"].get(relative)
             }
-    return preview_transaction(
-        MutationRequest(
-            repo=repo,
-            repository_key=config["repository_key"],
-            github_repository_id=github_repository_id,
-            transition="projection_update",
-            actions=(
-                MutationAction(
-                    relative,
-                    canonical_json(updated),
-                    "replace",
-                ),
-            ),
-            bindings=bindings,
-            operation_id=operation_id,
-            observed_inputs=(
-                ObservedInput(str(pin), digest_ref(pin.read_bytes())),
-                ObservedInput(str(interface), digest_ref(interface.read_bytes())),
-            ),
-            require_write_enabled=True,
+    request = MutationRequest(
+        repo=repo,
+        repository_key=config["repository_key"],
+        github_repository_id=github_repository_id,
+        transition="projection_update",
+        actions=(MutationAction(relative, canonical_json(updated), "replace"),),
+        bindings=bindings,
+        operation_id=operation_id,
+        observed_inputs=(
+            ObservedInput(str(pin), digest_ref(pin.read_bytes())),
+            ObservedInput(str(interface), digest_ref(interface.read_bytes())),
         ),
-        recovery_preimages=recovery_preimages,
+        require_write_enabled=True,
     )
+    preview = preview_transaction(request, recovery_preimages=recovery_preimages)
+    event_path = contained_path(repo, _event_path(preview))
+    if receipt_path.is_file() or not event_path.exists():
+        return preview
+
+    if recovery_preimages is None:
+        raise ValueError("partial_operation_event_mismatch")
+    persisted_event = event_path.read_bytes()
+    if persisted_event == canonical_json(_event_for(preview)):
+        return preview
+
+    # Replay the raw-name receipt only when the existing event binds
+    # every original action, preimage, input and authority exactly.
+    legacy_request = replace(
+        request, bindings={**bindings, "repository_identity": identity.binding()}
+    )
+    legacy = preview_transaction(legacy_request, recovery_preimages=recovery_preimages)
+    if persisted_event != canonical_json(_event_for(legacy)):
+        raise ValueError("partial_operation_event_mismatch")
+    return legacy
 
 
 def _git(repo: Path, *arguments: str) -> str:
