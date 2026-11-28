@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
+from .canonical import canonical_json, digest_ref
+
 
 @dataclass(frozen=True)
 class RepositoryIdentity:
@@ -22,6 +24,18 @@ class RepositoryIdentity:
             "github_repository": self.repository,
             "github_repository_id": self.github_repository_id,
         }
+
+    def receipt_binding(self) -> dict[str, object]:
+        """Bind the provider-observed name without emitting it as receipt text."""
+        return {
+            "github_repository_digest": digest_ref(canonical_json(self.binding())),
+            "github_repository_id": self.github_repository_id,
+        }
+
+    def matches_binding(self, expected: object) -> bool:
+        if not isinstance(expected, dict) or type(expected.get("github_repository_id")) is not int:
+            return False
+        return expected == self.receipt_binding() or expected == self.binding()
 
 
 def _origin_url(repo: Path) -> str:

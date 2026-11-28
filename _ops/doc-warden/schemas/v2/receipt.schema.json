@@ -50,7 +50,7 @@
           "required": ["automation_digest", "branch", "canonical_url", "ci_check_id", "merge_commit", "repository_id", "review_receipt_digest", "reviewed_commit", "reviewer_bot_id"],
           "type": "object"
         },
-        "repository_identity": {"additionalProperties": false, "properties": {"github_repository": {"pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "type": "string"}, "github_repository_id": {"minimum": 1, "type": "integer"}}, "required": ["github_repository", "github_repository_id"], "type": "object"},
+        "repository_identity": {"anyOf": [{"additionalProperties":false,"properties":{"github_repository":{"pattern":"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$","type":"string"},"github_repository_id":{"minimum":1,"type":"integer"}},"required":["github_repository","github_repository_id"],"type":"object"}, {"additionalProperties":false,"properties":{"github_repository_digest":{"pattern":"^sha256:[0-9a-f]{64}$","type":"string"},"github_repository_id":{"minimum":1,"type":"integer"}},"required":["github_repository_digest","github_repository_id"],"type":"object"}]},
         "schema_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
         "template_digests": {"additionalProperties": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}, "type": "object"},
         "trigger_catalog_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}

@@ -7,7 +7,7 @@ import unittest
 import uuid
 from pathlib import Path
 
-from doc_warden.canonical import digest_ref, parse_artifact
+from doc_warden.canonical import canonical_json, digest_ref, parse_artifact
 from fixture_factory import ROOT
 
 
@@ -480,7 +480,7 @@ class NewRepositoryEndToEndTests(unittest.TestCase):
     def test_remote_observation_is_second_guarded_commit_and_resume_is_idempotent(self):
         with tempfile.TemporaryDirectory(prefix="doc-warden-m4-remote-") as directory:
             root = Path(directory)
-            name = "born-v2-remote"
+            name = "born-v2-long-remote-identity-receipt"
             repository_id = 24681012
             result = self.run_scaffold(
                 root,
@@ -516,7 +516,10 @@ class NewRepositoryEndToEndTests(unittest.TestCase):
             self.assertEqual(
                 remote_receipts[0]["bindings"]["repository_identity"],
                 {
-                    "github_repository": f"KleinPerkins/{name}",
+                    "github_repository_digest": digest_ref(canonical_json({
+                        "github_repository": f"KleinPerkins/{name}",
+                        "github_repository_id": repository_id,
+                    })),
                     "github_repository_id": repository_id,
                 },
             )
