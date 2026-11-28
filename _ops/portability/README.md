@@ -183,6 +183,46 @@ capability retains its existing `dev-personal-core/withdrawals` history. Once
 the operator has preserved the new occupant and vacated the slot, another
 `configure --withdraw` restores the displaced entry.
 
+### Enter repo-platform
+
+When a Dev release pins a repo-platform runtime, the Personal configure command
+installs and verifies its profile-owned runtime link alongside the Skills index.
+The runtime link stays outside the Codex skill picker. The Dev owner publishes
+the selected checkout authority separately.
+
+Use the native CLI catalog's project ID and an explicit checkout path. Supply the
+native thread ID for a linked checkout.
+
+```sh
+bash ~/dev/bootstrap.sh --profile personal-codex repo-platform adopt "$checkout" --project-id "$project_id"
+```
+
+The launcher verifies the installed package, its profile-owned link, and the
+qualified native client on each call. It runs from a private verified copy of
+the client's executable and the signed companion files for macOS app bundles.
+It reads public GitHub identity without credentials and resolves Dev's delivery
+classification for the selected checkout. Private checkout adoption requires
+a separately qualified provider binding.
+
+Use `configure --repo-platform-only --check` for the installed launcher and
+`configure --repo-platform-only --withdraw` to park that owned launcher. To
+restore it, select the Dev release that pins the intended runtime and run
+`configure --repo-platform-only`. The profile preserves other entries and
+keeps the pinned runtime and its withdrawal record for offline recovery.
+
+The Desktop caller uses `run_desktop` with live native project and chat readers.
+It uses the same installed Personal package and checkout authority. The
+standalone bootstrap command continues to use the CLI catalog.
+
+The normal Personal configure withdrawal saves the runtime pointer and leaves the
+cached release and separately installed owner session available for recovery.
+Run configure again with the same Dev release to restore the verified runtime
+from the local cache. When a successor pin names a previously installed release,
+setup verifies the successor before withdrawing the profile-owned predecessor.
+A replacement managed by another installer is preserved and refused. Repeat
+configure after an interruption. To restore the predecessor, withdraw from the
+successor source and configure from the earlier Dev release.
+
 ### Reconstruct sources
 
 From a curated package, run `python3 engine.py --help`. From a safe development checkout, use:

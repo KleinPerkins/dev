@@ -304,14 +304,22 @@ def index_runtime_entry(home, codex_home):
                       partial(personal_index_package.verify, release), requires_ownership=True)
 
 
-def bind_personal_index(home, codex_home):
+def repo_platform_runtime_entry(home, codex_home, release):
+    control = physical_path(codex_home / "dev-personal-core" / "repo-platform")
+    slot = physical_path(control / "runtime") / "repo-platform"
+    return SkillEntry(slot, release.directory(home), physical_path(control / "releases" / release.revision),
+                      "repo-platform runtime", partial(release.prepare, home),
+                      partial(release.open, home), requires_ownership=True)
+
+
+def bind_personal_index(home, codex_home, *, reuse=False):
     """Load the configured runtime in an isolated worker without starting a refresh."""
     from skills_index_runtime import bind_index_runtime
 
     entry = index_runtime_entry(home, codex_home)
     configure_entry(entry, "check")
     bind_index_runtime(entry.release, personal_index_package.index_digests(),
-                       parser_digests=personal_index_package.parser_digests())
+                       parser_digests=personal_index_package.parser_digests(), reuse=reuse)
 
 
 def configure(home, codex_home, action):
@@ -477,10 +485,47 @@ def public_skill_entry(core, release, name, existing_root, control):
                       partial(verify, folder), checkout, verify_checkout)
 
 
-def configure_profile(home, codex_home, action):
+def configure_entries(core, entries, previous, action):
+    if action == "check":
+        return [configure_entry(entry, "check") for entry in entries]
+    if action == "install":
+        change_profile = install_profile_entries
+    elif action == "withdraw":
+        change_profile = withdraw_profile_entries
+    else:
+        raise ValueError(f"unknown Personal configuration action: {action}")
+
+    if action == "withdraw" and not core.control.exists():
+        for entry in entries:
+            if (os.path.lexists(entry.slot) and not points_to(entry.slot, entry.release)
+                    and not checkout_installation(entry, action)
+                    and not (entry.slot in previous and points_to(entry.slot, previous[entry.slot].release))):
+                raise ValueError(f"unrecognized entry preserved at {entry.slot}")
+        return ["no profile-owned entries to withdraw"]
+
+    core.control.mkdir(parents=True, exist_ok=True)
+    with FileLock(core.control / "profile.lock"):
+        return change_profile(entries, previous)
+
+
+def configure_profile(home, codex_home, action, *, repo_platform_only=False):
+    from personal_repo_platform_launch import profile_release
+
     core = core_entry(home, codex_home)
-    entries = [core, index_runtime_entry(home, codex_home)]
+    entries = [] if repo_platform_only else [core, index_runtime_entry(home, codex_home)]
     previous = {}
+    platform = profile_release()
+    if platform is not None:
+        release = platform[0]
+        entry = repo_platform_runtime_entry(home, codex_home, release)
+        entries.append(entry)
+        if release.previous is not None:
+            previous[entry.slot] = repo_platform_runtime_entry(home, codex_home, release.previous)
+    if repo_platform_only:
+        if platform is None:
+            raise ValueError("the Dev owner has not pinned a repo-platform runtime release")
+        return configure_entries(core, entries, previous, action)
+
     for name in ("dev-doctor", "dev-new-repo", "dev-remove-repo"):
         slot = core.slot.with_name(name)
         bundle = DevSkillRelease(name, home, slot)
@@ -555,26 +600,7 @@ def configure_profile(home, codex_home, action):
             entries.append(entry)
 
 
-    if action == "check":
-        return [configure_entry(entry, "check") for entry in entries]
-    if action == "install":
-        change_profile = install_profile_entries
-    elif action == "withdraw":
-        change_profile = withdraw_profile_entries
-    else:
-        raise ValueError(f"unknown Personal configuration action: {action}")
-
-    if action == "withdraw" and not core.control.exists():
-        for entry in entries:
-            if (os.path.lexists(entry.slot) and not points_to(entry.slot, entry.release)
-                    and not checkout_installation(entry, action)
-                    and not (entry.slot in previous and points_to(entry.slot, previous[entry.slot].release))):
-                raise ValueError(f"unrecognized entry preserved at {entry.slot}")
-        return ["no profile-owned entries to withdraw"]
-
-    core.control.mkdir(parents=True, exist_ok=True)
-    with FileLock(core.control / "profile.lock"):
-        return change_profile(entries, previous)
+    return configure_entries(core, entries, previous, action)
 
 
 def main():
@@ -582,13 +608,16 @@ def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--check", action="store_const", const="check", dest="action")
     group.add_argument("--withdraw", action="store_const", const="withdraw", dest="action")
+    parser.add_argument("--repo-platform-only", action="store_true",
+                        help="configure or withdraw only the profile-owned repo-platform runtime")
     parser.set_defaults(action="install")
     args = parser.parse_args()
     os.umask(0o077)
     home = Path.home()
     codex_home = Path(os.environ.get("CODEX_HOME") or home / ".codex")
     try:
-        print(*configure_profile(home, codex_home, args.action), sep="\n")
+        print(*configure_profile(home, codex_home, args.action,
+                                 repo_platform_only=args.repo_platform_only), sep="\n")
     except (OSError, ValueError, PortabilityError) as error:
         sys.exit(f"personal configuration: {error}")
 
