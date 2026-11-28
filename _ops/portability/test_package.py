@@ -216,10 +216,12 @@ class StandardDevSkillTests(unittest.TestCase):
     def setUp(self):
         import subprocess
         import personal_dev_skills as dev
+        import personal_repo_platform_launch as platform
 
         self.home_context = tempfile.TemporaryDirectory()
         self.addCleanup(self.home_context.cleanup)
         self.home = Path(self.home_context.name).resolve()
+        self.enterContext(patch.object(platform, "__file__", str(self.home / "fixture-launch.py")))
         self.codex = self.home / "selected-codex"
         self.source = self.home / "source"
         self.source.mkdir()
@@ -341,8 +343,9 @@ class StandardDevSkillTests(unittest.TestCase):
         self.bundles = {name: dev.DevSkillRelease(name, self.home) for name in releases}
         self.slots = self.codex / "skills"
 
-    def configure(self, action):
-        return personal_core.configure_profile(self.home, self.codex, action)
+    def configure(self, action, *, repo_platform_only=False):
+        return personal_core.configure_profile(self.home, self.codex, action,
+                                               repo_platform_only=repo_platform_only)
 
     def test_retirement_inspection_keeps_a_sealed_release(self):
         self.configure("install")
@@ -380,6 +383,244 @@ class StandardDevSkillTests(unittest.TestCase):
         self.configure("install")
         self.configure("check")
         self.assertTrue(personal_core.owns_slot(entry.slot, entry.control / entry.slot.name, entry.release))
+
+    def select_repo_platform_runtime(self, revision="0" * 40, previous=None):
+        import personal_repo_platform_launch as platform
+
+        payloads = {f"repo_platform/{name}.py": f"# fixture {name}\n".encode()
+                    for name in ("command", "host", "recovery")}
+        files = {name: ("100644", len(data), hashlib.sha256(data).hexdigest())
+                 for name, data in payloads.items()}
+        release = platform.RepoPlatformRelease(revision, files, previous)
+        selection = patch.object(platform, "profile_release", return_value=(release, None))
+        selection.start()
+        self.addCleanup(selection.stop)
+        old = self.design_read.side_effect
+        prefix = f"https://raw.githubusercontent.com/KleinPerkins/repo-platform/{release.revision}/"
+
+        def read(url, length):
+            if url.startswith(prefix):
+                return payloads[url.removeprefix(prefix)]
+            return old(url, length)
+
+        self.design_read.side_effect = read
+        return personal_core.repo_platform_runtime_entry(self.home, self.codex, release)
+
+    def test_repo_platform_requires_its_owned_runtime_slot_and_restores_offline(self):
+        self.configure("install")
+        entry = self.select_repo_platform_runtime()
+        previous = {path.name: path.lstat().st_ino for path in self.slots.iterdir()}
+        self.assertIn("configured repo-platform runtime for Personal Codex", self.configure("install"))
+        self.assertIn("verified repo-platform runtime files and Codex entry", self.configure("check"))
+        witness = entry.control / entry.slot.name
+        self.assertTrue(personal_core.owns_slot(entry.slot, witness, entry.release))
+        self.assertEqual(previous, {path.name: path.lstat().st_ino for path in self.slots.iterdir()})
+        self.assertNotIn("repo-platform", previous)
+
+        entry.slot.unlink()
+        entry.slot.symlink_to(entry.release)
+        foreign = entry.slot.lstat()
+        for action in ("check", "install"):
+            with self.assertRaisesRegex(ValueError, "belongs to another installer"):
+                self.configure(action)
+        self.assertTrue(os.path.samestat(foreign, entry.slot.lstat()))
+        self.assertEqual(previous, {path.name: path.lstat().st_ino for path in self.slots.iterdir()})
+
+        entry.slot.unlink()
+        os.link(witness, entry.slot, follow_symlinks=False)
+        self.configure("withdraw")
+        self.assertFalse(os.path.lexists(entry.slot))
+        self.assertTrue(entry.release.is_dir())
+        self.design_read.side_effect = AssertionError("offline restore attempted to download")
+        self.configure("install")
+        self.configure("check")
+        self.assertTrue(personal_core.owns_slot(entry.slot, witness, entry.release))
+        self.assertEqual(previous, {path.name: path.lstat().st_ino for path in self.slots.iterdir()})
+
+    def test_repo_platform_profile_retry_reuses_a_prepared_release(self):
+        entry = self.select_repo_platform_runtime()
+        apply = personal_core.change_entry
+
+        def interrupted(item, action):
+            if item.slot == entry.slot and action == "install":
+                raise OSError("launcher publication interrupted")
+            return apply(item, action)
+
+        with patch.object(personal_core, "change_entry", side_effect=interrupted):
+            with self.assertRaisesRegex(OSError, "launcher publication interrupted"):
+                self.configure("install", repo_platform_only=True)
+        self.assertTrue(entry.release.is_dir())
+        self.assertFalse(os.path.lexists(entry.slot))
+        self.design_read.side_effect = AssertionError("retry attempted to download")
+        self.configure("install", repo_platform_only=True)
+        self.assertEqual(self.configure("check", repo_platform_only=True),
+                         ["verified repo-platform runtime files and Codex entry"])
+        self.assertIn("repo-platform runtime files and Codex entry already present",
+                      self.configure("install", repo_platform_only=True))
+        self.assertFalse(self.slots.exists())
+
+    def test_repo_platform_loads_each_release_in_the_same_process(self):
+        import personal_repo_platform_launch as platform
+
+        prior = importlib.util.module_from_spec(importlib.util.spec_from_loader("repo_platform", loader=None))
+        with patch.dict(sys.modules, {"repo_platform": prior}):
+            for revision in ("first", "successor"):
+                release = self.home / revision
+                namespace = release / "repo_platform"
+                namespace.mkdir(parents=True)
+                (namespace / "marker.py").write_text(f"VALUE = {revision!r}\n")
+                (namespace / "command.py").write_text("from repo_platform.marker import VALUE\n")
+                with platform._runtime_imports(release):
+                    module = importlib.import_module("repo_platform.command")
+                    self.assertEqual(module.VALUE, revision)
+                    self.assertEqual(Path(module.__file__).parent, namespace)
+                self.assertIs(sys.modules["repo_platform"], prior)
+                self.assertNotIn("repo_platform.command", sys.modules)
+                self.assertNotIn("repo_platform.marker", sys.modules)
+                self.assertNotIn(str(release), sys.path)
+
+    def test_repo_platform_reuses_only_the_verified_skills_index_binding(self):
+        script = """
+import hashlib
+import importlib
+from pathlib import Path
+import sys
+from types import ModuleType
+
+sys.path.insert(0, sys.argv[1])
+from skills_index_runtime import bind_index_runtime, INDEX_MODULE_FILES
+
+root = Path(sys.argv[2])
+runtime = root / "lib"
+runtime.mkdir(parents=True)
+payload = b"VALUE = 'verified'\\n"
+digests = {name: hashlib.sha256(payload).hexdigest() for name in INDEX_MODULE_FILES}
+for name in digests:
+    (runtime / name).write_bytes(payload)
+
+def refused(pin, **options):
+    try:
+        bind_index_runtime(root, pin, **options)
+    except ValueError as error:
+        assert "namespace is already in use" in str(error)
+    else:
+        raise AssertionError("the worker accepted an incompatible Skills binding")
+
+bind_index_runtime(root, digests)
+original = importlib.import_module("lib.contracts")
+refused(digests)
+bind_index_runtime(root, digests, reuse=True)
+assert importlib.import_module("lib.contracts") is original
+refused(dict(digests, **{"contracts.py": "0" * 64}), reuse=True)
+sys.modules["lib.contracts"] = ModuleType("lib.contracts")
+refused(digests, reuse=True)
+"""
+        subprocess.run([sys.executable, "-I", "-B", "-c", script,
+                        str(Path(__file__).resolve().parent), str(self.home / "index")],
+                       check=True, timeout=20)
+
+    def test_repo_platform_successor_preserves_predecessor_and_retries(self):
+        import personal_repo_platform_launch as platform
+
+        predecessor = self.select_repo_platform_runtime()
+        old_release = platform.profile_release()[0]
+        self.configure("install")
+        slot = predecessor.slot
+        old_inode = slot.lstat()
+        old_target = slot.readlink()
+        neighbors = {item.name: item.lstat().st_ino for item in self.slots.iterdir()}
+        successor = self.select_repo_platform_runtime("1" * 40, previous=old_release)
+        action = personal_core.change_entry
+
+        def interrupted(entry, verb):
+            if entry.slot == slot and verb == "install":
+                raise OSError("repo-platform successor publication interrupted")
+            return action(entry, verb)
+
+        with patch.object(personal_core, "read_url", side_effect=OSError("successor could not download")):
+            with self.assertRaisesRegex(OSError, "successor could not download"):
+                self.configure("install")
+        self.assertTrue(os.path.samestat(old_inode, slot.lstat()))
+
+        with patch.object(personal_core, "change_entry", side_effect=interrupted):
+            with self.assertRaisesRegex(OSError, "repo-platform successor publication interrupted"):
+                self.configure("install")
+        self.assertFalse(os.path.lexists(slot))
+        parked, = (predecessor.control / "withdrawals").glob("withdraw-*/entry")
+        self.assertTrue(os.path.samestat(old_inode, parked.lstat()))
+        slot.symlink_to(old_target)
+        substituted = slot.lstat()
+        with self.assertRaisesRegex(ValueError, "independently installed earlier repo-platform runtime"):
+            self.configure("install")
+        self.assertTrue(os.path.samestat(substituted, slot.lstat()))
+        slot.unlink()
+
+        self.design_read.side_effect = AssertionError("cached upgrade requested public bytes")
+        self.configure("install")
+        self.configure("check")
+        self.assertTrue(personal_core.owns_slot(slot, successor.control / slot.name, successor.release))
+        active = slot.lstat()
+        self.configure("install")
+        self.assertTrue(os.path.samestat(active, slot.lstat()))
+        self.assertEqual(neighbors, {item.name: item.lstat().st_ino for item in self.slots.iterdir()})
+        self.configure("withdraw")
+        with patch.object(platform, "profile_release", return_value=(old_release, None)):
+            self.configure("install")
+            self.configure("check")
+        self.assertTrue(os.path.samestat(old_inode, slot.lstat()))
+        self.assertEqual(old_target, slot.readlink())
+        self.assertEqual(neighbors, {item.name: item.lstat().st_ino for item in self.slots.iterdir()})
+
+    def test_repo_platform_runtime_pin_refuses_a_duplicate_or_unclosed_predecessor(self):
+        import personal_repo_platform_launch as platform
+
+        pin = self.home / "personal-repo-platform-runtime.json"
+        files = {f"repo_platform/{name}.py": ["100644", 1, "a" * 64]
+                 for name in ("command", "host", "recovery")}
+        current = {"schema": "dev-repo-platform-runtime/v1", "repository_id": 1472074383,
+                   "revision": "1" * 40, "files": files,
+                   "codex": {"binary": "/fixture/codex", "length": 1, "sha256": "b" * 64}}
+        with patch.object(platform, "__file__", str(self.home / "fixture-launch.py")):
+            for prior in ({"revision": "1" * 40, "files": files},
+                          {"revision": "2" * 40, "files": files, "codex": current["codex"]}):
+                pin.write_text(json.dumps(dict(current, previous=prior)))
+                with self.assertRaisesRegex(ValueError, "invalid Dev repo-platform predecessor pin"):
+                    platform.profile_release()
+            pin.write_text(json.dumps(dict(current, previous={"revision": "2" * 40, "files": files})))
+            release, _ = platform.profile_release()
+            self.assertEqual(release.previous.revision, "2" * 40)
+            self.assertIsNone(release.previous.previous)
+
+    def test_repo_platform_macos_native_pin_requires_the_signed_bundle_files(self):
+        import personal_repo_platform_launch as platform
+
+        client = {"binary": "/fixture/CodexCLI.app/Contents/MacOS/codex",
+                  "length": 1, "sha256": "a" * 64}
+        files = {name: [1, "b" * 64] for name in (
+            "Contents/Info.plist", "Contents/CodeResources", "Contents/_CodeSignature/CodeResources",
+            "Contents/embedded.provisionprofile",
+        )}
+        with self.assertRaisesRegex(ValueError, "invalid Dev repo-platform Codex bundle pin"):
+            platform._codex_client_pin(client)
+        with self.assertRaisesRegex(ValueError, "invalid Dev repo-platform Codex bundle pin"):
+            platform._codex_client_pin(dict(client, bundle_files=dict(files, **{"unexpected": [1, "b" * 64]})))
+        native = platform._codex_client_pin(dict(client, bundle_files=files))
+        self.assertEqual(native.bundle_files, {name: tuple(row) for name, row in files.items()})
+
+    def test_repo_platform_private_checkout_refuses_before_provider_read(self):
+        import personal_repo_platform_launch as platform
+        from personal_checkout_inventory import Refused
+
+        policy_path = Path(__file__).resolve().parents[1] / "baseline/delivery-policy.json"
+        policy = json.loads(policy_path.read_bytes())
+        private = next(row for row in policy["repositories"] if row["disposition"] == "private-no-ci")
+        source = Path(__file__).resolve().with_name("personal_repo_platform_launch.py")
+        with (patch.object(platform, "__file__", str(source)),
+              patch("github_checkout_provider.read_github_repository") as public_read):
+            read, _ = platform._owner_readers()
+            with self.assertRaisesRegex(Refused, "qualified private checkout adoption"):
+                read(private["repository_id"], deadline=float("inf"))
+        public_read.assert_not_called()
 
     def select_new_doctor(self):
         import personal_dev_skills as dev

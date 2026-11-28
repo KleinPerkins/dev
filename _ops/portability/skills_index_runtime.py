@@ -24,9 +24,10 @@ INDEX_MODULE_FILES = (
 
 
 class _IndexModuleLoader(MetaPathFinder, Loader):
-    def __init__(self, code, roots):
+    def __init__(self, code, roots, release):
         self.code = code
         self.roots = roots
+        self.release = release
 
     def find_spec(self, fullname, path=None, target=None):
         if fullname.partition(".")[0] not in self.roots:
@@ -58,12 +59,13 @@ def _pinned_modules(root, directory, expected_digests, package):
 
 
 def bind_index_runtime(package_root: Path, expected_digests: dict[str, str], *,
-                       parser_digests: dict[str, str] | None = None) -> None:
-    """Bind one Skills runtime before imports in a fresh, isolated Dev worker.
+                       parser_digests: dict[str, str] | None = None, reuse=False) -> None:
+    """Bind one verified Skills runtime before importing its modules.
 
     The released Dev profile supplies the installed path and the digest table
     from its qualified Skills release. Install media never supplies its own
-    expected digests to this helper.
+    expected digests to this helper. A long-lived worker may reuse the same
+    verified release and its own loaded modules.
     """
     if not sys.flags.isolated:
         raise ValueError("the paired Skills index needs an isolated Python worker")
@@ -79,8 +81,16 @@ def bind_index_runtime(package_root: Path, expected_digests: dict[str, str], *,
                        for name, digest in parser_digests.items())):
             raise ValueError("the paired Skills index needs a valid parser release pin")
         packages.add("yaml")
-    if (any(name.partition(".")[0] in packages for name in sys.modules)
-            or any(isinstance(finder, _IndexModuleLoader) for finder in sys.meta_path)):
+    release = (package_root, frozenset(expected_digests.items()),
+               frozenset(parser_digests.items()) if parser_digests is not None else None)
+    loaded = {name: module for name, module in tuple(sys.modules.items())
+              if name.partition(".")[0] in packages}
+    bound = [finder for finder in sys.meta_path if isinstance(finder, _IndexModuleLoader)]
+    if loaded or bound:
+        if (reuse and len(bound) == 1 and bound[0].release == release
+                and all(name in bound[0].code and getattr(module, "__loader__", None) is bound[0]
+                        for name, module in loaded.items())):
+            return
         raise ValueError("the Skills index namespace is already in use")
 
     root = absolute_directory(package_root)
@@ -90,4 +100,4 @@ def bind_index_runtime(package_root: Path, expected_digests: dict[str, str], *,
             code.update(_pinned_modules(root, ("vendor", "yaml"), parser_digests, "yaml"))
     finally:
         os.close(root)
-    sys.meta_path.insert(0, _IndexModuleLoader(code, packages))
+    sys.meta_path.insert(0, _IndexModuleLoader(code, packages, release))

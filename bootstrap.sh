@@ -24,10 +24,16 @@ if [ "${1:-}" = "--profile" ]; then
   case "${2:-}" in
     personal|personal-codex)
       shift 2
-      if [ "${1:-}" = configure ]; then
-        shift
-        exec python3 -I -B "$ROOT/_ops/portability/personal_core.py" "$@"
-      fi
+      case "${1:-}" in
+        configure)
+          shift
+          exec python3 -I -B "$ROOT/_ops/portability/personal_core.py" "$@"
+          ;;
+        repo-platform)
+          shift
+          exec python3 -I -B "$ROOT/_ops/portability/personal_repo_platform_launch.py" "$@"
+          ;;
+      esac
       exec env PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/_ops/portability/engine.py" "$@"
       ;;
     *)

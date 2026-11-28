@@ -1,0 +1,70 @@
+{
+  "codex": {
+    "binary": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+    "bundle_files": {
+      "Contents/CodeResources": [
+        1653,
+        "b05a440d482d8e600fd86e141524871ba19bf3261618f56018acea0a0481b764"
+      ],
+      "Contents/Info.plist": [
+        525,
+        "c40b0e6b87b94ef5a232ab8312678c5db2156428f57c3f3d6c32525373be7f59"
+      ],
+      "Contents/_CodeSignature/CodeResources": [
+        2355,
+        "a768efff8337bb3aa892c1ae2527cca49ef878abdba59ad6674e685ab3c4a288"
+      ],
+      "Contents/embedded.provisionprofile": [
+        12329,
+        "3e61e790c2b949afab19c726a6b6291adfe6518df678fd2eb28e88269a19ecac"
+      ]
+    },
+    "length": 298503808,
+    "sha256": "e1c3d034b7fd295d160d6ab412357f9c54241c8ed7a2a861f4730b8a4dd88ddb"
+  },
+  "files": {
+    "repo_platform/adoption.py": [
+      "100644",
+      11971,
+      "b47435eb5caee5f4a0db75d31a5bd55f78e0896ea1f424b799c77e91a222568a"
+    ],
+    "repo_platform/adoption_results.py": [
+      "100644",
+      5103,
+      "7ec96fadb9957d527b061fe202282856b1f51784f57de97429b3eb2a6167d6fe"
+    ],
+    "repo_platform/command.py": [
+      "100644",
+      5590,
+      "a777940d3f03422177d6eb80a4730e9d09e992c8b5cef35491406ff522b29e44"
+    ],
+    "repo_platform/desktop.py": [
+      "100644",
+      2036,
+      "378c8185dcc4228a909c22e13d2d38c7de096b82f98b4470355ffb8a07381526"
+    ],
+    "repo_platform/discovery.py": [
+      "100644",
+      15331,
+      "a7e2c4670e9ca3dcea7b11cf72027a09f6f45dca31f5907cd14ec4786f37d040"
+    ],
+    "repo_platform/host.py": [
+      "100644",
+      6236,
+      "dab7c4e63d5f0a6569ca6e1cfee35ff4c2477c478195c377db1d73a9fc22ee7f"
+    ],
+    "repo_platform/recovery.py": [
+      "100644",
+      13784,
+      "c7d00fce4de7fff2bcc19239cd046627da8564adc27d57a150ae6fe6aa8db357"
+    ],
+    "repo_platform/skills_repair.py": [
+      "100644",
+      3982,
+      "70ea893ff656dd39f8a7b88096cba0ebafad26750ee77d4a9062e6c7523c297c"
+    ]
+  },
+  "repository_id": 1472074383,
+  "revision": "9de51bcb6d34f5696869c206c84856de25b6c26c",
+  "schema": "dev-repo-platform-runtime/v1"
+}
